@@ -165,14 +165,14 @@ export function Sidebar() {
                   return (
                     <div
                       key={chat.id}
-                      className={`group flex items-center justify-between p-2 text-sm rounded-sm transition-all duration-200 ${isActive
+                      className={`group flex w-full items-center justify-between p-2 text-sm rounded-sm transition-all duration-200 overflow-hidden ${isActive
                         ? "bg-primary/5 border border-border/80"
                         : "hover:bg-muted border border-transparent"
                         } ${isDeleting ? "opacity-50 scale-95" : ""}`}
                     >
                       <Link
                         href={`/chat/${chat.id}`}
-                        className="flex-1 flex items-center gap-2 overflow-hidden mr-2"
+                        className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden mr-2"
                       >
                         <MessageSquare
                           className={`w-3.5 h-3.5 shrink-0 transition-colors ${isActive ? "text-[#00C4A0]" : "text-muted-foreground"
@@ -282,10 +282,10 @@ export function Sidebar() {
                   return (
                     <div
                       key={file.id}
-                      className={`group flex items-center justify-between p-2 text-sm rounded-sm hover:bg-muted transition-all border border-transparent ${isDeleting ? "opacity-50 scale-95" : ""
+                      className={`group flex w-full items-center justify-between p-2 text-sm rounded-sm hover:bg-muted transition-all border border-transparent overflow-hidden ${isDeleting ? "opacity-50 scale-95" : ""
                         }`}
                     >
-                      <div className="flex items-center gap-2 overflow-hidden flex-1 mr-2">
+                      <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden mr-2">
                         <span className="text-muted-foreground shrink-0">
                           {getFileIcon(file.type, file.name)}
                         </span>
