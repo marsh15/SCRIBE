@@ -94,13 +94,16 @@ export async function POST(req: Request) {
                         assistantParts.push({ type: "text", text });
                     }
 
-                    // Add tool invocation parts
-                    if (toolCalls) {
-                        toolCalls.forEach(tc => {
+                    // Add tool invocation parts from all multi-step iterations
+                    if (response && response.messages) {
+                        const allToolCalls = response.messages.flatMap((m: any) =>
+                            Array.isArray(m.content) ? m.content.filter((c: any) => c.type === 'tool-call') : []
+                        );
+                        allToolCalls.forEach((tc: any) => {
                             assistantParts.push({
                                 type: "tool-invocation",
                                 toolName: tc.toolName,
-                                args: (tc as any).args,
+                                args: tc.args,
                                 toolCallId: tc.toolCallId,
                             });
                         });

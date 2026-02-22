@@ -21,6 +21,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { UserButton, SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
+import { Group, Panel, Separator } from "react-resizable-panels";
 
 function getFileIcon(type: string, name: string) {
   const ext = name.split(".").pop()?.toLowerCase();
@@ -126,179 +127,189 @@ export function Sidebar() {
       </div>
 
       {/* Chat History Section */}
-      <div className="flex-1 flex flex-col min-h-0 px-4">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-            Recent Chats
-          </h2>
-          <span className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded-sm text-muted-foreground">
-            {chats.length}
-          </span>
-        </div>
-        <ScrollArea className="flex-1 -mx-2">
-          {loading ? (
-            <div className="p-2 space-y-2">
-              {[1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className="h-8 bg-muted/50 rounded-sm animate-pulse"
-                />
-              ))}
-            </div>
-          ) : chats.length === 0 ? (
-            <div className="p-4 text-center">
-              <MessageSquare className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
-              <p className="text-xs font-sans text-muted-foreground">
-                No conversations yet
-              </p>
-              <p className="text-[10px] font-mono text-muted-foreground/60 mt-1">
-                Start a new chat above
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-0.5 p-2">
-              {chats.map((chat) => {
-                const isActive = activeChatId === chat.id;
-                const isDeleting = deletingChatId === chat.id;
-                return (
-                  <div
-                    key={chat.id}
-                    className={`group flex items-center justify-between p-2 text-sm rounded-sm transition-all duration-200 ${isActive
-                      ? "bg-primary/5 border border-border/80"
-                      : "hover:bg-muted border border-transparent"
-                      } ${isDeleting ? "opacity-50 scale-95" : ""}`}
-                  >
-                    <Link
-                      href={`/chat/${chat.id}`}
-                      className="flex-1 flex items-center gap-2 overflow-hidden mr-2"
-                    >
-                      <MessageSquare
-                        className={`w-3.5 h-3.5 shrink-0 transition-colors ${isActive ? "text-[#00C4A0]" : "text-muted-foreground"
-                          }`}
-                      />
-                      <span
-                        className={`truncate font-sans text-sm ${isActive
-                          ? "text-foreground font-medium"
-                          : "text-foreground/80"
-                          }`}
-                      >
-                        {chat.title || "Untitled Chat"}
-                      </span>
-                    </Link>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-all hover:bg-destructive/10 shrink-0 rounded-sm"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleDeleteChat(chat.id);
-                      }}
-                      disabled={isDeleting}
-                    >
-                      <Trash2 className="h-3 w-3 text-destructive" />
-                    </Button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </ScrollArea>
-      </div>
-
-      {/* Knowledge Base Section */}
-      <div className="flex flex-col min-h-0 max-h-[40%] px-4 pb-4 pt-3 border-t border-border">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-            Knowledge Base
-          </h2>
-          <div className="flex items-center gap-1">
+      <Group orientation="vertical" id="sidebar-vertical-group" className="flex-1 w-full min-h-0">
+        <Panel defaultSize={60} id="sidebar-chats" className="flex flex-col px-4 min-h-0">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              Recent Chats
+            </h2>
             <span className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded-sm text-muted-foreground">
-              {files.length}
+              {chats.length}
             </span>
-            {files.length > 0 && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-5 w-5 rounded-sm opacity-50 hover:opacity-100 hover:bg-destructive/10 transition-all"
-                title="Clear all files"
-                onClick={async () => {
-                  if (
-                    !confirm(
-                      "Delete ALL files from your knowledge base? This cannot be undone.",
-                    )
-                  )
-                    return;
-                  for (const file of files) {
-                    await handleDeleteFile(file.id);
-                  }
-                }}
-              >
-                <Trash2 className="h-3 w-3 text-destructive" />
-              </Button>
-            )}
-            <Link href="/upload">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-5 w-5 rounded-sm opacity-50 hover:opacity-100 hover:text-[#00C4A0] transition-all"
-              >
-                <Plus className="h-3 w-3" />
-              </Button>
-            </Link>
           </div>
-        </div>
-
-        <ScrollArea className="flex-1 -mx-2">
-          {loading ? (
-            <div className="p-2 space-y-2">
-              {[1, 2].map((i) => (
-                <div
-                  key={i}
-                  className="h-8 bg-muted/50 rounded-sm animate-pulse"
-                />
-              ))}
-            </div>
-          ) : files.length === 0 ? (
-            <div className="p-3 text-center">
-              <p className="text-xs font-sans text-muted-foreground">
-                No documents indexed
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-0.5 p-2">
-              {files.map((file) => {
-                const isDeleting = deletingFileId === file.id;
-                return (
+          <ScrollArea className="flex-1 -mx-2">
+            {loading ? (
+              <div className="p-2 space-y-2">
+                {[1, 2, 3].map((i) => (
                   <div
-                    key={file.id}
-                    className={`group flex items-center justify-between p-2 text-sm rounded-sm hover:bg-muted transition-all border border-transparent ${isDeleting ? "opacity-50 scale-95" : ""
-                      }`}
-                  >
-                    <div className="flex items-center gap-2 overflow-hidden flex-1 mr-2">
-                      <span className="text-muted-foreground shrink-0">
-                        {getFileIcon(file.type, file.name)}
-                      </span>
-                      <span className="truncate font-sans text-foreground/80 text-sm">
-                        {file.name}
-                      </span>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 opacity-40 hover:opacity-100 transition-all hover:bg-destructive/10 shrink-0 rounded-sm"
-                      onClick={() => handleDeleteFile(file.id)}
-                      disabled={isDeleting}
+                    key={i}
+                    className="h-8 bg-muted/50 rounded-sm animate-pulse"
+                  />
+                ))}
+              </div>
+            ) : chats.length === 0 ? (
+              <div className="p-4 text-center">
+                <MessageSquare className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+                <p className="text-xs font-sans text-muted-foreground">
+                  No conversations yet
+                </p>
+                <p className="text-[10px] font-mono text-muted-foreground/60 mt-1">
+                  Start a new chat above
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-0.5 p-2">
+                {chats.map((chat) => {
+                  const isActive = activeChatId === chat.id;
+                  const isDeleting = deletingChatId === chat.id;
+                  return (
+                    <div
+                      key={chat.id}
+                      className={`group flex items-center justify-between p-2 text-sm rounded-sm transition-all duration-200 ${isActive
+                        ? "bg-primary/5 border border-border/80"
+                        : "hover:bg-muted border border-transparent"
+                        } ${isDeleting ? "opacity-50 scale-95" : ""}`}
                     >
-                      <Trash2 className="h-3 w-3 text-destructive" />
-                    </Button>
-                  </div>
-                );
-              })}
+                      <Link
+                        href={`/chat/${chat.id}`}
+                        className="flex-1 flex items-center gap-2 overflow-hidden mr-2"
+                      >
+                        <MessageSquare
+                          className={`w-3.5 h-3.5 shrink-0 transition-colors ${isActive ? "text-[#00C4A0]" : "text-muted-foreground"
+                            }`}
+                        />
+                        <span
+                          className={`truncate font-sans text-sm ${isActive
+                            ? "text-foreground font-medium"
+                            : "text-foreground/80"
+                            }`}
+                        >
+                          {chat.title || "Untitled Chat"}
+                        </span>
+                      </Link>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-all hover:bg-destructive/10 shrink-0 rounded-sm"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleDeleteChat(chat.id);
+                        }}
+                        disabled={isDeleting}
+                      >
+                        <Trash2 className="h-3 w-3 text-destructive" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </ScrollArea>
+        </Panel>
+
+        <Separator className="h-[3px] w-full bg-border hover:bg-[#00C4A0]/50 active:bg-[#00C4A0] transition-colors cursor-row-resize relative my-2">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 hover:opacity-100 transition-opacity flex gap-[2px]">
+            <div className="w-[3px] h-[3px] rounded-full bg-[#00C4A0]" />
+            <div className="w-[3px] h-[3px] rounded-full bg-[#00C4A0]" />
+            <div className="w-[3px] h-[3px] rounded-full bg-[#00C4A0]" />
+          </div>
+        </Separator>
+
+        {/* Knowledge Base Section */}
+        <Panel defaultSize={40} id="sidebar-kb" className="flex flex-col min-h-0 px-4 pb-2">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              Knowledge Base
+            </h2>
+            <div className="flex items-center gap-1">
+              <span className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded-sm text-muted-foreground">
+                {files.length}
+              </span>
+              {files.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5 rounded-sm opacity-50 hover:opacity-100 hover:bg-destructive/10 transition-all"
+                  title="Clear all files"
+                  onClick={async () => {
+                    if (
+                      !confirm(
+                        "Delete ALL files from your knowledge base? This cannot be undone.",
+                      )
+                    )
+                      return;
+                    for (const file of files) {
+                      await handleDeleteFile(file.id);
+                    }
+                  }}
+                >
+                  <Trash2 className="h-3 w-3 text-destructive" />
+                </Button>
+              )}
+              <Link href="/upload">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5 rounded-sm opacity-50 hover:opacity-100 hover:text-[#00C4A0] transition-all"
+                >
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </Link>
             </div>
-          )}
-        </ScrollArea>
-      </div>
+          </div>
+
+          <ScrollArea className="flex-1 -mx-2">
+            {loading ? (
+              <div className="p-2 space-y-2">
+                {[1, 2].map((i) => (
+                  <div
+                    key={i}
+                    className="h-8 bg-muted/50 rounded-sm animate-pulse"
+                  />
+                ))}
+              </div>
+            ) : files.length === 0 ? (
+              <div className="p-3 text-center">
+                <p className="text-xs font-sans text-muted-foreground">
+                  No documents indexed
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-0.5 p-2">
+                {files.map((file) => {
+                  const isDeleting = deletingFileId === file.id;
+                  return (
+                    <div
+                      key={file.id}
+                      className={`group flex items-center justify-between p-2 text-sm rounded-sm hover:bg-muted transition-all border border-transparent ${isDeleting ? "opacity-50 scale-95" : ""
+                        }`}
+                    >
+                      <div className="flex items-center gap-2 overflow-hidden flex-1 mr-2">
+                        <span className="text-muted-foreground shrink-0">
+                          {getFileIcon(file.type, file.name)}
+                        </span>
+                        <span className="truncate font-sans text-foreground/80 text-sm">
+                          {file.name}
+                        </span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 opacity-40 hover:opacity-100 transition-all hover:bg-destructive/10 shrink-0 rounded-sm"
+                        onClick={() => handleDeleteFile(file.id)}
+                        disabled={isDeleting}
+                      >
+                        <Trash2 className="h-3 w-3 text-destructive" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </ScrollArea>
+        </Panel>
+      </Group>
 
       {/* User Profile & Sign Out */}
       <div className="p-4 border-t border-border shrink-0">
