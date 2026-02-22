@@ -26,9 +26,9 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
   const lastToolInvocation = messages
     .flatMap(
       (m: UIMessage) =>
-        m.parts?.filter((p: UIPart) => p.type === "tool-invocation") || [],
+        (m as any).toolInvocations || m.parts?.filter((p: UIPart) => p.type === "tool-invocation") || [],
     )
-    .filter((t: UIPart) => t.toolName === "searchKnowledgeBase")
+    .filter((t: any) => t.toolName === "searchKnowledgeBase")
     .pop();
 
   // Ignore previous turn's tool call if we are just starting a new turn and it hasn't fired yet
@@ -72,7 +72,7 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
   const totalMessages = messages.length;
   const toolInvocations = messages.flatMap(
     (m: UIMessage) =>
-      m.parts?.filter((p: UIPart) => p.type === "tool-invocation") || [],
+      (m as any).toolInvocations || m.parts?.filter((p: UIPart) => p.type === "tool-invocation") || [],
   ).length;
 
   return (
@@ -170,13 +170,13 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
           </section>
 
           {/* Retrieved Chunks */}
-          {"result" in (lastToolInvocation || {}) && (
+          {!!lastToolInvocation && "result" in lastToolInvocation && (
             <section className="animate-in fade-in slide-in-from-bottom-2 duration-500">
               <h3 className="font-mono text-[10px] text-muted-foreground uppercase mb-3">
                 Retrieved Chunks
               </h3>
               <div className="space-y-3">
-                {String((lastToolInvocation as UIPart).result || "")
+                {String((lastToolInvocation as any).result || "")
                   .split("\n\n---\n\n")
                   .filter(Boolean)
                   .map((chunkStr, i) => {

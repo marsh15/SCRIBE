@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { getFiles, deleteFile } from "@/app/files/actions";
 import { getChats, deleteChat } from "@/app/chat/actions";
 import {
@@ -41,6 +41,12 @@ export function Sidebar() {
   const [deletingFileId, setDeletingFileId] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
+
+  // Resolve the active chat ID from the pathname
+  const activeChatId = pathname.startsWith("/chat/")
+    ? pathname.replace("/chat/", "")
+    : null;
 
   const fetchData = useCallback(async () => {
     try {
@@ -80,12 +86,10 @@ export function Sidebar() {
     await deleteChat(id);
     await fetchData();
     setDeletingChatId(null);
+    if (activeChatId === id) {
+      router.push("/chat");
+    }
   }
-
-  // Resolve the active chat ID from the pathname
-  const activeChatId = pathname.startsWith("/chat/")
-    ? pathname.replace("/chat/", "")
-    : null;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -159,27 +163,24 @@ export function Sidebar() {
                 return (
                   <div
                     key={chat.id}
-                    className={`group flex items-center justify-between p-2 text-sm rounded-sm transition-all duration-200 ${
-                      isActive
-                        ? "bg-primary/5 border border-border/80"
-                        : "hover:bg-muted border border-transparent"
-                    } ${isDeleting ? "opacity-50 scale-95" : ""}`}
+                    className={`group flex items-center justify-between p-2 text-sm rounded-sm transition-all duration-200 ${isActive
+                      ? "bg-primary/5 border border-border/80"
+                      : "hover:bg-muted border border-transparent"
+                      } ${isDeleting ? "opacity-50 scale-95" : ""}`}
                   >
                     <Link
                       href={`/chat/${chat.id}`}
                       className="flex-1 flex items-center gap-2 overflow-hidden mr-2"
                     >
                       <MessageSquare
-                        className={`w-3.5 h-3.5 shrink-0 transition-colors ${
-                          isActive ? "text-[#00C4A0]" : "text-muted-foreground"
-                        }`}
+                        className={`w-3.5 h-3.5 shrink-0 transition-colors ${isActive ? "text-[#00C4A0]" : "text-muted-foreground"
+                          }`}
                       />
                       <span
-                        className={`truncate font-sans text-sm ${
-                          isActive
-                            ? "text-foreground font-medium"
-                            : "text-foreground/80"
-                        }`}
+                        className={`truncate font-sans text-sm ${isActive
+                          ? "text-foreground font-medium"
+                          : "text-foreground/80"
+                          }`}
                       >
                         {chat.title || "Untitled Chat"}
                       </span>
@@ -188,7 +189,11 @@ export function Sidebar() {
                       variant="ghost"
                       size="icon"
                       className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-all hover:bg-destructive/10 shrink-0 rounded-sm"
-                      onClick={() => handleDeleteChat(chat.id)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleDeleteChat(chat.id);
+                      }}
                       disabled={isDeleting}
                     >
                       <Trash2 className="h-3 w-3 text-destructive" />
@@ -267,9 +272,8 @@ export function Sidebar() {
                 return (
                   <div
                     key={file.id}
-                    className={`group flex items-center justify-between p-2 text-sm rounded-sm hover:bg-muted transition-all border border-transparent ${
-                      isDeleting ? "opacity-50 scale-95" : ""
-                    }`}
+                    className={`group flex items-center justify-between p-2 text-sm rounded-sm hover:bg-muted transition-all border border-transparent ${isDeleting ? "opacity-50 scale-95" : ""
+                      }`}
                   >
                     <div className="flex items-center gap-2 overflow-hidden flex-1 mr-2">
                       <span className="text-muted-foreground shrink-0">
