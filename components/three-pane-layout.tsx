@@ -38,7 +38,7 @@ export function ThreePaneLayout({
     <div className="h-screen w-full bg-background text-foreground overflow-hidden">
       <Group orientation="horizontal" id="scribe-layout">
         {/* Left Sidebar */}
-        <Panel defaultSize="16%" minSize="10%" maxSize="25%" id="sidebar">
+        <Panel defaultSize={16} id="sidebar">
           <div className="h-full bg-card overflow-hidden">
             <Sidebar />
           </div>
@@ -47,7 +47,7 @@ export function ThreePaneLayout({
         <ResizeHandle />
 
         {/* Main Content (Chat) */}
-        <Panel defaultSize="58%" minSize="35%" id="main">
+        <Panel defaultSize={58} id="main">
           <div className="h-full flex flex-col min-w-0 bg-background overflow-hidden">
             {children}
           </div>
@@ -56,7 +56,7 @@ export function ThreePaneLayout({
         <ResizeHandle />
 
         {/* Right Inspector */}
-        <Panel defaultSize="26%" minSize="15%" maxSize="35%" id="inspector">
+        <Panel defaultSize={26} id="inspector">
           <div className="h-full bg-card overflow-hidden">
             <RAGInspector messages={messages} status={status} />
           </div>

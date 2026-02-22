@@ -24,10 +24,11 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
 
   // Find the most recent tool call that is a search
   const lastToolInvocation = messages
-    .flatMap(
-      (m: UIMessage) =>
-        (m as any).toolInvocations || m.parts?.filter((p: UIPart) => p.type === "tool-invocation") || [],
-    )
+    .flatMap((m: UIMessage) => {
+      const toolInvocs = (m as any).toolInvocations || [];
+      const partsInvocs = m.parts?.filter((p: UIPart) => p.type === "tool-invocation") || [];
+      return [...toolInvocs, ...partsInvocs];
+    })
     .filter((t: any) => t.toolName === "searchKnowledgeBase")
     .pop();
 
@@ -70,10 +71,11 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
 
   // Compute message stats
   const totalMessages = messages.length;
-  const toolInvocations = messages.flatMap(
-    (m: UIMessage) =>
-      (m as any).toolInvocations || m.parts?.filter((p: UIPart) => p.type === "tool-invocation") || [],
-  ).length;
+  const toolInvocations = messages.flatMap((m: UIMessage) => {
+    const toolInvocs = (m as any).toolInvocations || [];
+    const partsInvocs = m.parts?.filter((p: UIPart) => p.type === "tool-invocation") || [];
+    return [...toolInvocs, ...partsInvocs];
+  }).filter((t: any) => t.toolName === "searchKnowledgeBase").length;
 
   return (
     <div className="flex flex-col h-full bg-muted/30 overflow-hidden">
