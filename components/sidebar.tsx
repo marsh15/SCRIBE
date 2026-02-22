@@ -40,6 +40,7 @@ export function Sidebar() {
   const [loading, setLoading] = useState(true);
   const [deletingChatId, setDeletingChatId] = useState<string | null>(null);
   const [deletingFileId, setDeletingFileId] = useState<number | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
@@ -162,44 +163,71 @@ export function Sidebar() {
                 {chats.map((chat) => {
                   const isActive = activeChatId === chat.id;
                   const isDeleting = deletingChatId === chat.id;
+                  const isConfirming = confirmDeleteId === chat.id;
                   return (
                     <div
                       key={chat.id}
-                      className={`group flex w-full items-center justify-between p-2 text-sm rounded-sm transition-all duration-200 overflow-hidden ${isActive
+                      onDoubleClick={(e) => {
+                        e.preventDefault();
+                        setConfirmDeleteId(chat.id);
+                      }}
+                      onMouseLeave={() => {
+                        if (isConfirming) setConfirmDeleteId(null);
+                      }}
+                      className={`group flex w-full items-center justify-between p-2 text-sm rounded-sm transition-all duration-200 overflow-hidden ${isActive && !isConfirming
                         ? "bg-primary/5 border border-border/80"
                         : "hover:bg-muted border border-transparent"
                         } ${isDeleting ? "opacity-50 scale-95" : ""}`}
                     >
-                      <Link
-                        href={`/chat/${chat.id}`}
-                        className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden mr-2"
-                      >
-                        <MessageSquare
-                          className={`w-3.5 h-3.5 shrink-0 transition-colors ${isActive ? "text-[#00C4A0]" : "text-muted-foreground"
-                            }`}
-                        />
-                        <span
-                          className={`truncate font-sans text-sm ${isActive
-                            ? "text-foreground font-medium"
-                            : "text-foreground/80"
-                            }`}
+                      {isConfirming ? (
+                        <Button
+                          variant="ghost"
+                          className="w-full h-6 text-xs text-destructive hover:bg-destructive hover:text-destructive-foreground transition-all"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleDeleteChat(chat.id);
+                            setConfirmDeleteId(null);
+                          }}
+                          disabled={isDeleting}
                         >
-                          {chat.title || "Untitled Chat"}
-                        </span>
-                      </Link>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-all hover:bg-destructive/10 shrink-0 rounded-sm"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleDeleteChat(chat.id);
-                        }}
-                        disabled={isDeleting}
-                      >
-                        <Trash2 className="h-3 w-3 text-destructive" />
-                      </Button>
+                          <Trash2 className="h-3 w-3 mr-2 shrink-0" />
+                          Delete Chat
+                        </Button>
+                      ) : (
+                        <>
+                          <Link
+                            href={`/chat/${chat.id}`}
+                            className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden mr-2"
+                          >
+                            <MessageSquare
+                              className={`w-3.5 h-3.5 shrink-0 transition-colors ${isActive ? "text-[#00C4A0]" : "text-muted-foreground"
+                                }`}
+                            />
+                            <span
+                              className={`truncate font-sans text-sm ${isActive
+                                ? "text-foreground font-medium"
+                                : "text-foreground/80"
+                                }`}
+                            >
+                              {chat.title || "Untitled Chat"}
+                            </span>
+                          </Link>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-all hover:bg-destructive/10 shrink-0 rounded-sm"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleDeleteChat(chat.id);
+                            }}
+                            disabled={isDeleting}
+                          >
+                            <Trash2 className="h-3 w-3 text-destructive" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   );
                 })}
@@ -279,29 +307,56 @@ export function Sidebar() {
               <div className="space-y-0.5 p-2">
                 {files.map((file) => {
                   const isDeleting = deletingFileId === file.id;
+                  const isConfirming = confirmDeleteId === file.id;
                   return (
                     <div
                       key={file.id}
+                      onDoubleClick={(e) => {
+                        e.preventDefault();
+                        setConfirmDeleteId(file.id);
+                      }}
+                      onMouseLeave={() => {
+                        if (isConfirming) setConfirmDeleteId(null);
+                      }}
                       className={`group flex w-full items-center justify-between p-2 text-sm rounded-sm hover:bg-muted transition-all border border-transparent overflow-hidden ${isDeleting ? "opacity-50 scale-95" : ""
                         }`}
                     >
-                      <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden mr-2">
-                        <span className="text-muted-foreground shrink-0">
-                          {getFileIcon(file.type, file.name)}
-                        </span>
-                        <span className="truncate font-sans text-foreground/80 text-sm">
-                          {file.name}
-                        </span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 opacity-40 hover:opacity-100 transition-all hover:bg-destructive/10 shrink-0 rounded-sm"
-                        onClick={() => handleDeleteFile(file.id)}
-                        disabled={isDeleting}
-                      >
-                        <Trash2 className="h-3 w-3 text-destructive" />
-                      </Button>
+                      {isConfirming ? (
+                        <Button
+                          variant="ghost"
+                          className="w-full h-6 text-xs text-destructive hover:bg-destructive hover:text-destructive-foreground transition-all"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleDeleteFile(file.id);
+                            setConfirmDeleteId(null);
+                          }}
+                          disabled={isDeleting}
+                        >
+                          <Trash2 className="h-3 w-3 mr-2 shrink-0" />
+                          Delete File
+                        </Button>
+                      ) : (
+                        <>
+                          <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden mr-2">
+                            <span className="text-muted-foreground shrink-0">
+                              {getFileIcon(file.type, file.name)}
+                            </span>
+                            <span className="truncate font-sans text-foreground/80 text-sm">
+                              {file.name}
+                            </span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 opacity-40 hover:opacity-100 transition-all hover:bg-destructive/10 shrink-0 rounded-sm"
+                            onClick={() => handleDeleteFile(file.id)}
+                            disabled={isDeleting}
+                          >
+                            <Trash2 className="h-3 w-3 text-destructive" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   );
                 })}
