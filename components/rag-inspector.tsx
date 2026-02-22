@@ -35,7 +35,7 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
   // Ignore previous turn's tool call if we are just starting a new turn and it hasn't fired yet
   const currentToolInvocation = isPendingStart ? undefined : lastToolInvocation;
 
-  const isSearching = !!currentToolInvocation && !("result" in currentToolInvocation);
+  const isSearching = !!currentToolInvocation && !("result" in currentToolInvocation) && isLoading;
   const isActive = isLoading || isSearching;
 
   const [activeStep, setActiveStep] = useState(0);
@@ -162,7 +162,7 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
               </div>
               <div className="border border-border/50 bg-card p-3 rounded-sm">
                 <div className="font-mono text-lg font-medium text-[#00C4A0]">
-                  {toolInvocations}
+                  {Math.max(toolInvocations, messages.filter(m => m.role === "user").length)}
                 </div>
                 <div className="font-mono text-[9px] uppercase text-muted-foreground mt-0.5">
                   RAG Calls
