@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1771126720032,
+      "tag": "0000_exotic_radioactive_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1771127032088,
+      "tag": "0001_peaceful_tana_nile",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1771758091839,
+      "tag": "0002_ollama_embeddings_768",
+      "breakpoints": true
+    }
+  ]
+}

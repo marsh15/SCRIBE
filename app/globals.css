@@ -1,26 +1,138 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-dm-sans);
+  --font-mono: var(--font-dm-mono);
+  --font-serif: var(--font-dm-serif);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-rag: var(--rag);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  --radius: 0;
+
+  /* Alabaster ground */
+  --background: #F4F1EB;
+  /* Deep graphite text */
+  --foreground: #2A2826;
+
+  /* Deep graphite cards */
+  --card: #F4F1EB;
+  --card-foreground: #2A2826;
+
+  /* Graphite interactive elements */
+  --primary: #2A2826;
+  --primary-foreground: #F4F1EB;
+
+  /* Muted olive */
+  --muted: #EBE8E0;
+  --muted-foreground: #6B705C;
+
+  /* Burnt clay */
+  --accent: #B07D62;
+  --accent-foreground: #FFFFFF;
+
+  /* Destructive */
+  --destructive: #DC2626;
+
+  /* RAG / Vector special color */
+  --rag: #00C4A0;
+
+  /* 1px graphite, 20% opacity */
+  --border: rgba(42, 40, 38, 0.2);
+  --input: rgba(42, 40, 38, 0.2);
+  --ring: #2A2826;
+}
+
+.dark {
+  --background: #1A1A1A;
+  --foreground: #E8E6E1;
+
+  --card: #242424;
+  --card-foreground: #E8E6E1;
+
+  --primary: #E8E6E1;
+  --primary-foreground: #1A1A1A;
+
+  --muted: #2E2E2E;
+  --muted-foreground: #8B8B7A;
+
+  --accent: #B07D62;
+  --accent-foreground: #FFFFFF;
+
+  --destructive: #EF4444;
+
+  --rag: #00C4A0;
+
+  --border: rgba(232, 230, 225, 0.15);
+  --input: rgba(232, 230, 225, 0.15);
+  --ring: #E8E6E1;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Custom scrollbar styling */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Thin styled scrollbar for chat/panels */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
+/* Firefox thin scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }

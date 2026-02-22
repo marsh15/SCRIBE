@@ -1,36 +1,76 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SCRIBE
+> An AI-powered RAG (Retrieval-Augmented Generation) Knowledge Base and Chatbot
 
-## Getting Started
+## Overview
+SCRIBE is an intelligent document management and chatbot application that allows users to seamlessly ingest files (PDF, CSV, MD, TXT, DOCX), process them into chunks, and query them using Google's Gemini AI. It provides a premium, resizable triple-pane interface to navigate chats, visualize the RAG pipeline in real time, and manage the uploaded vector knowledge base.
 
-First, run the development server:
+## Tech Stack
+- **Frontend Framework**: Next.js 16 (App Router), React 19
+- **Styling**: Tailwind CSS v4, Radix UI primitives, Framer Motion
+- **Database & ORM**: Neon Postgres (Serverless), Drizzle ORM
+- **Authentication**: Clerk
+- **AI & ML**: Google Generative AI (Gemini 2.5 Flash & Embeddings), Vercel AI SDK, Supermemory 
+- **Document Processing**: pdf-parse, mammoth, csv-parse
+- **Layout**: react-resizable-panels
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Folder Structure
+- `app/` - Next.js App Router containing pages, API routes, and Server Actions.
+  - `app/api/` - API endpoints, including the main Gemini + Supermemory chat endpoint.
+  - `app/chat/` - Chat UI with resizable layout and history.
+  - `app/upload/` - Document ingestion and granular knowledge base management.
+- `components/` - React components, including the ThreePaneLayout, RAG Inspector, Sidebar, and UI library.
+- `lib/` - Shared utilities, database configurations, search, and chunking logic.
+  - `db-schema.ts` - Drizzle ORM tables (`files`, `documents`, `chats`, `chatMessages`).
+- `scripts/` - Database migration utilities (e.g., embeddings vector size migrations).
+- `middleware.ts` - Clerk authentication and route protection middleware.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Prerequisites
+- Node.js (v20+ recommended)
+- PostgreSQL database (Neon recommended for `vector` support)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Installation
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/marsh15/SCRIBE.git
+   cd SCRIBE
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   # or
+   bun install
+   ```
+3. Set up your environment variables (see below).
+4. Start the application:
+   ```bash
+   npm run dev
+   # or
+   bun run dev
+   ```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Environment Variables
+The application requires several API keys to fully function, defined in a `.env` or `.env.local` file.
 
-## Learn More
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `NEON_DATABASE_URL` | PostgreSQL connection string with pgvector extension | Yes |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | API Key for Gemini Chat and Embeddings models | Yes |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk Authentication publishable key | Yes |
+| `CLERK_SECRET_KEY` | Clerk Authentication secret key | Yes |
+| `SUPERMEMORY_API_KEY` | Supermemory AI tool for agentic user context | Yes |
 
-To learn more about Next.js, take a look at the following resources:
+## Running the Project
+- **Development**: `npm run dev` or `bun dev` (starts the Next.js dev server)
+- **Production Build**: `npm run build` or `bun run build`
+- **Start Production**: `npm start`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Available Scripts
+| Script | Command | Description |
+|--------|---------|-------------|
+| `dev` | `next dev --webpack` | Starts the application in development mode with Webpack |
+| `build` | `next build` | Creates an optimized production build (Turbopack + proxy client flags) |
+| `start` | `next start` | Starts the Next.js production server |
+| `lint` | `eslint` | Runs ESLint to catch code quality issues |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## License
+MIT License
