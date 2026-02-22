@@ -184,11 +184,10 @@ function ChatInterface({
                   <div
                     className={`
                                         max-w-[85%] rounded-sm p-4 font-sans text-sm leading-relaxed
-                                        ${
-                                          m.role === "user"
-                                            ? "bg-primary text-primary-foreground ml-12"
-                                            : "bg-card border border-border/50 text-foreground mr-12"
-                                        }
+                                        ${m.role === "user"
+                        ? "bg-primary text-primary-foreground ml-12"
+                        : "bg-card border border-border/50 text-foreground mr-12"
+                      }
                                     `}
                   >
                     {m.role === "assistant" && (
