@@ -17,7 +17,9 @@ interface RAGInspectorProps {
 }
 
 export function RAGInspector({ messages, status }: RAGInspectorProps) {
-  const isLoading = status === "submitted" || status === "streaming";
+  const isPendingStart = status === "submitted";
+  const isStreaming = status === "streaming";
+  const isLoading = isPendingStart || isStreaming;
 
   // Find the most recent tool call that is a search
   const lastToolInvocation = messages
@@ -28,9 +30,11 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
     .filter((t: UIPart) => t.toolName === "searchKnowledgeBase")
     .pop();
 
-  const isSearching = lastToolInvocation && !("result" in lastToolInvocation);
+  // Ignore previous turn's tool call if we are just starting a new turn and it hasn't fired yet
+  const currentToolInvocation = isPendingStart ? undefined : lastToolInvocation;
 
-  const isActive = isLoading || !!isSearching;
+  const isSearching = !!currentToolInvocation && !("result" in currentToolInvocation);
+  const isActive = isLoading || isSearching;
 
   // Compute message stats
   const totalMessages = messages.length;
@@ -43,25 +47,22 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
     <div className="flex flex-col h-full bg-muted/30 overflow-hidden">
       {/* Header with dynamic status */}
       <div
-        className={`p-4 border-b transition-all duration-500 ${
-          isActive ? "border-[#00C4A0]/30 bg-[#00C4A0]/5" : "border-border/50"
-        }`}
+        className={`p-4 border-b transition-all duration-500 ${isActive ? "border-[#00C4A0]/30 bg-[#00C4A0]/5" : "border-border/50"
+          }`}
       >
         <div className="flex items-center justify-between w-full">
           <span className="font-mono text-[10px] uppercase tracking-widest text-foreground/80">
             Vector Inspector
           </span>
           <div
-            className={`flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest transition-colors duration-300 ${
-              isActive ? "text-[#00C4A0]" : "text-muted-foreground"
-            }`}
+            className={`flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest transition-colors duration-300 ${isActive ? "text-[#00C4A0]" : "text-muted-foreground"
+              }`}
           >
             <div
-              className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                isActive
+              className={`w-2 h-2 rounded-full transition-all duration-300 ${isActive
                   ? "bg-[#00C4A0] animate-pulse shadow-[0_0_8px_rgba(0,196,160,0.5)]"
                   : "bg-border"
-              }`}
+                }`}
             />
             {isActive ? "Active" : "Standby"}
           </div>
@@ -80,31 +81,31 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
               <Step
                 label="Tokenize Query"
                 step={1}
-                active={!!isSearching}
-                done={!!lastToolInvocation}
+                active={isPendingStart || isSearching}
+                done={!isPendingStart && !isSearching && messages.length > 0}
               />
               <Step
                 label="Embed (gemini-embedding-001)"
                 step={2}
-                active={!!isSearching}
-                done={!!lastToolInvocation}
+                active={isPendingStart || isSearching}
+                done={!isPendingStart && !isSearching && messages.length > 0}
               />
               <Step
                 label="Vector Search (pgvector)"
                 step={3}
-                active={!!isSearching}
-                done={!!lastToolInvocation && "result" in lastToolInvocation}
+                active={isPendingStart || isSearching}
+                done={!isPendingStart && !isSearching && !!lastToolInvocation && "result" in lastToolInvocation}
               />
               <Step
                 label="Build Context"
                 step={4}
-                active={!isSearching && isLoading}
+                active={isStreaming && !isSearching}
                 done={!isLoading && messages.length > 0}
               />
               <Step
                 label="Stream LLM Response"
                 step={5}
-                active={!isSearching && isLoading}
+                active={isStreaming && !isSearching}
                 done={!isLoading && messages.length > 0}
               />
             </div>
@@ -233,13 +234,12 @@ function Step({
 }) {
   return (
     <div
-      className={`flex items-center gap-2.5 font-mono text-[10px] py-1 transition-all duration-300 ${
-        active
+      className={`flex items-center gap-2.5 font-mono text-[10px] py-1 transition-all duration-300 ${active
           ? "text-[#00C4A0]"
           : done
             ? "text-foreground/80"
             : "text-muted-foreground/60"
-      }`}
+        }`}
     >
       <div className="w-4 h-4 flex items-center justify-center shrink-0">
         {active ? (
