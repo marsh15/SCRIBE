@@ -53,13 +53,27 @@ export async function POST(req: Request) {
         const url = new URL(req.url);
         const chatId = url.searchParams.get("chatId") || undefined;
 
+        // Sanitize messages to strip tool calls from historical context.
+        // If we pass tool calls without tool results to the AI SDK, it throws AI_MissingToolResultsError.
+        // We only need the text content for the conversation history.
+        const sanitizedMessages = messages.map(m => {
+            const copy = { ...m };
+            if ((copy as any).toolInvocations) {
+                (copy as any).toolInvocations = [];
+            }
+            if (copy.parts) {
+                copy.parts = copy.parts.filter((p: any) => p.type === 'text');
+            }
+            return copy;
+        });
+
         // Wrap the standard model with the Supermemory SDK
         // This implicitly pulls from process.env.SUPERMEMORY_API_KEY
         const modelWithMemory = withSupermemory(google("gemini-2.5-flash"), "scribe_user_1");
 
         const result = streamText({
             model: modelWithMemory,
-            messages: await convertToModelMessages(messages),
+            messages: await convertToModelMessages(sanitizedMessages as ChatMessage[]),
             tools,
             system: `You are a helpful assistant with access to a knowledge base. 
           When users ask questions, search the knowledge base for relevant information.
