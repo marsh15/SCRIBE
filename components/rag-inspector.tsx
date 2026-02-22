@@ -3,6 +3,7 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, CheckCircle2, Circle, Zap, Brain } from "lucide-react";
+import { useState, useEffect } from "react";
 
 type UIPart = {
   type: string;
@@ -36,6 +37,37 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
   const isSearching = !!currentToolInvocation && !("result" in currentToolInvocation);
   const isActive = isLoading || isSearching;
 
+  const [activeStep, setActiveStep] = useState(0);
+
+  useEffect(() => {
+    if (isPendingStart || isSearching) {
+      setActiveStep(1); // Start Tokenize
+
+      const t1 = setTimeout(() => {
+        setActiveStep(2); // Start Embed
+      }, 400);
+
+      const t2 = setTimeout(() => {
+        setActiveStep(3); // Start Vector Search
+      }, 900);
+
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
+    } else if (isStreaming) {
+      setActiveStep(4); // Build Context
+
+      const t3 = setTimeout(() => {
+        setActiveStep(5); // Stream Response
+      }, 400);
+
+      return () => clearTimeout(t3);
+    } else {
+      setActiveStep(0);
+    }
+  }, [isPendingStart, isSearching, isStreaming]);
+
   // Compute message stats
   const totalMessages = messages.length;
   const toolInvocations = messages.flatMap(
@@ -60,8 +92,8 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
           >
             <div
               className={`w-2 h-2 rounded-full transition-all duration-300 ${isActive
-                  ? "bg-[#00C4A0] animate-pulse shadow-[0_0_8px_rgba(0,196,160,0.5)]"
-                  : "bg-border"
+                ? "bg-[#00C4A0] animate-pulse shadow-[0_0_8px_rgba(0,196,160,0.5)]"
+                : "bg-border"
                 }`}
             />
             {isActive ? "Active" : "Standby"}
@@ -81,31 +113,31 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
               <Step
                 label="Tokenize Query"
                 step={1}
-                active={isPendingStart || isSearching}
-                done={!isPendingStart && !isSearching && messages.length > 0}
+                active={activeStep === 1}
+                done={activeStep > 1 || (!isLoading && messages.length > 0)}
               />
               <Step
                 label="Embed (gemini-embedding-001)"
                 step={2}
-                active={isPendingStart || isSearching}
-                done={!isPendingStart && !isSearching && messages.length > 0}
+                active={activeStep === 2}
+                done={activeStep > 2 || (!isLoading && messages.length > 0)}
               />
               <Step
                 label="Vector Search (pgvector)"
                 step={3}
-                active={isPendingStart || isSearching}
-                done={!isPendingStart && !isSearching && !!lastToolInvocation && "result" in lastToolInvocation}
+                active={activeStep === 3}
+                done={activeStep > 3 || (!isLoading && messages.length > 0)}
               />
               <Step
                 label="Build Context"
                 step={4}
-                active={isStreaming && !isSearching}
-                done={!isLoading && messages.length > 0}
+                active={activeStep === 4}
+                done={activeStep > 4 || (!isLoading && messages.length > 0)}
               />
               <Step
                 label="Stream LLM Response"
                 step={5}
-                active={isStreaming && !isSearching}
+                active={activeStep === 5}
                 done={!isLoading && messages.length > 0}
               />
             </div>
@@ -235,10 +267,10 @@ function Step({
   return (
     <div
       className={`flex items-center gap-2.5 font-mono text-[10px] py-1 transition-all duration-300 ${active
-          ? "text-[#00C4A0]"
-          : done
-            ? "text-foreground/80"
-            : "text-muted-foreground/60"
+        ? "text-[#00C4A0]"
+        : done
+          ? "text-foreground/80"
+          : "text-muted-foreground/60"
         }`}
     >
       <div className="w-4 h-4 flex items-center justify-center shrink-0">
