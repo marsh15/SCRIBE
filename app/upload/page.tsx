@@ -179,11 +179,10 @@ export default function DocumentUpload() {
                 onClick={() => !isLoading && fileInputRef.current?.click()}
                 className={`
                                     relative border-2 border-dashed rounded-md p-10 text-center cursor-pointer transition-all duration-300
-                                    ${
-                                      isDragging
-                                        ? "border-[#00C4A0] bg-[#00C4A0]/5 scale-[1.01]"
-                                        : "border-border/60 hover:border-[#00C4A0]/40 hover:bg-muted/30"
-                                    }
+                                    ${isDragging
+                    ? "border-[#00C4A0] bg-[#00C4A0]/5 scale-[1.01]"
+                    : "border-border/60 hover:border-[#00C4A0]/40 hover:bg-muted/30"
+                  }
                                     ${isLoading ? "pointer-events-none opacity-60" : ""}
                                 `}
               >
@@ -192,6 +191,7 @@ export default function DocumentUpload() {
                   type="file"
                   accept=".pdf,.txt,.md,.csv,.docx"
                   onChange={handleFileUpload}
+                  onClick={(e) => e.stopPropagation()}
                   disabled={isLoading}
                   className="hidden"
                 />
@@ -306,11 +306,10 @@ export default function DocumentUpload() {
                         key={file.id}
                         className={`
                                                     group flex items-center gap-3 p-3.5 rounded-sm border transition-all
-                                                    ${
-                                                      isDeleting
-                                                        ? "opacity-40 scale-[0.98] border-border/30"
-                                                        : "border-border/50 bg-card hover:border-[#00C4A0]/20 hover:bg-card/80"
-                                                    }
+                                                    ${isDeleting
+                            ? "opacity-40 scale-[0.98] border-border/30"
+                            : "border-border/50 bg-card hover:border-[#00C4A0]/20 hover:bg-card/80"
+                          }
                                                 `}
                       >
                         {/* File Icon */}

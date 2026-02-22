@@ -7,8 +7,6 @@ const isPublicRoute = createRouteMatcher([
     "/sign-up(.*)",
 ]);
 
-const isAdminRoute = createRouteMatcher(["/upload(.*)"]);
-
 export default clerkMiddleware(async (auth, req) => {
     // Skip auth check for Next.js Server Action POST requests.
     // Server Actions are POST requests to page URLs — Clerk already
@@ -19,14 +17,6 @@ export default clerkMiddleware(async (auth, req) => {
         req.headers.get("next-action") !== null;
 
     if (isServerAction) return NextResponse.next();
-
-    const { sessionClaims } = await auth();
-    const isAdmin = (sessionClaims?.metadata as any)?.role === "admin";
-
-    if (isAdminRoute(req) && !isAdmin) {
-        const url = new URL("/", req.url);
-        return NextResponse.redirect(url);
-    }
 
     if (!isPublicRoute(req)) {
         await auth.protect();
