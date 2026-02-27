@@ -150,8 +150,8 @@ export default function FileViewer() {
                             <button
                                 onClick={() => setActiveTab("preview")}
                                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-sm font-mono text-[10px] uppercase tracking-wider transition-all ${activeTab === "preview"
-                                        ? "bg-background text-foreground shadow-sm"
-                                        : "text-muted-foreground hover:text-foreground"
+                                    ? "bg-background text-foreground shadow-sm"
+                                    : "text-muted-foreground hover:text-foreground"
                                     }`}
                             >
                                 <Eye className="w-3 h-3" />
@@ -161,8 +161,8 @@ export default function FileViewer() {
                         <button
                             onClick={() => setActiveTab("chunks")}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-sm font-mono text-[10px] uppercase tracking-wider transition-all ${activeTab === "chunks"
-                                    ? "bg-background text-foreground shadow-sm"
-                                    : "text-muted-foreground hover:text-foreground"
+                                ? "bg-background text-foreground shadow-sm"
+                                : "text-muted-foreground hover:text-foreground"
                                 }`}
                         >
                             <Layers className="w-3 h-3" />
@@ -220,12 +220,29 @@ export default function FileViewer() {
                         <div className="h-full px-6 sm:px-12 pb-4">
                             <div className="max-w-5xl mx-auto h-full">
                                 {isPdfFile(file.type, file.name) ? (
-                                    /* PDF Viewer */
-                                    <iframe
-                                        src={`/api/files/${fileId}/view`}
-                                        className="w-full h-full rounded-sm border border-border/50 bg-white"
-                                        title={`Preview: ${file.name}`}
-                                    />
+                                    /* PDF Viewer — with fallback if no stored data */
+                                    extractedText || chunks.length > 0 ? (
+                                        <div className="h-full flex flex-col">
+                                            <iframe
+                                                src={`/api/files/${fileId}/view`}
+                                                className="w-full flex-1 rounded-sm border border-border/50 bg-white"
+                                                title={`Preview: ${file.name}`}
+                                                onError={() => { }}
+                                            />
+                                            {/* Fallback text view in case iframe shows nothing */}
+                                            {!data.hasFileData && (
+                                                <div className="mt-3 p-4 rounded-sm border border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20">
+                                                    <p className="font-mono text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-2">
+                                                        ⚠ Original file not available — showing extracted text
+                                                    </p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        This file was uploaded before file preview was enabled. Re-upload to see the full PDF.
+                                                        You can still view all indexed chunks in the Chunks tab.
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : null
                                 ) : (
                                     /* Text Viewer */
                                     <div className="h-full overflow-y-auto rounded-sm border border-border/50 bg-card p-6">

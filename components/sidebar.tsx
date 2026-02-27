@@ -359,8 +359,12 @@ export function Sidebar() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6 opacity-40 hover:opacity-100 transition-all hover:bg-destructive/10 shrink-0 rounded-sm"
-                            onClick={() => handleDeleteFile(file.id)}
+                            className="h-6 w-6 opacity-70 hover:opacity-100 transition-all hover:bg-destructive/10 shrink-0 rounded-sm"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleDeleteFile(file.id);
+                            }}
                             disabled={isDeleting}
                           >
                             <Trash2 className="h-3 w-3 text-destructive" />
