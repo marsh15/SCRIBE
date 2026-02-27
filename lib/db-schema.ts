@@ -5,6 +5,7 @@ export const files = pgTable("files", {
   name: text("name").notNull(),
   type: text("type").notNull(),
   size: integer("size").notNull(),
+  userId: text("user_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -16,14 +17,15 @@ export const documents = pgTable(
       .references(() => files.id, { onDelete: "cascade" })
       .notNull(),
     content: text("content").notNull(),
-    metadata: jsonb("metadata"), // to store chunk index, page number, etc.
+    metadata: jsonb("metadata"),
     embeddings: vector("embeddings", { dimensions: 3072 }).notNull(),
   }
 );
 
 export const chats = pgTable("chats", {
-  id: text("id").primaryKey(), // Using text because we want to use the standard UUIDs or nanoids typical of AI chatbots
+  id: text("id").primaryKey(),
   title: text("title").notNull(),
+  userId: text("user_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -33,9 +35,9 @@ export const chatMessages = pgTable("chat_messages", {
   chatId: text("chat_id")
     .references(() => chats.id, { onDelete: "cascade" })
     .notNull(),
-  role: text("role").notNull(), // 'user', 'assistant', 'system', 'data'
+  role: text("role").notNull(),
   content: text("content").notNull(),
-  parts: jsonb("parts"), // To store tool invocations or complex 'parts' arrays
+  parts: jsonb("parts"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

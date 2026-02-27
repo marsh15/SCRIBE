@@ -1,14 +1,16 @@
 // lib/search.ts
-import { cosineDistance, desc, gt, sql, eq } from "drizzle-orm";
+import { cosineDistance, desc, gt, sql, eq, and } from "drizzle-orm";
 import { db } from "./db-config";
 import { documents, files } from "./db-schema";
 import { generateEmbedding } from "./embeddings";
 
 /**
- * Search for similar documents using Drizzle ORM with cosineDistance
+ * Search for similar documents using Drizzle ORM with cosineDistance.
+ * Scoped to the given user's documents only.
  */
 export async function searchDocuments(
     query: string,
+    userId: string,
     limit: number = 5,
     threshold: number = 0.5
 ) {
@@ -33,7 +35,7 @@ export async function searchDocuments(
         })
         .from(documents)
         .innerJoin(files, eq(documents.fileId, files.id))
-        .where(gt(similarity, threshold))
+        .where(and(gt(similarity, threshold), eq(files.userId, userId)))
         .orderBy(desc(similarity))
         .limit(limit);
 

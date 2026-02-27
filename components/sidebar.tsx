@@ -16,12 +16,14 @@ import {
   BookOpen,
   RefreshCw,
   LogOut,
+  Eye,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { UserButton, SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { Group, Panel, Separator } from "react-resizable-panels";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 function getFileIcon(type: string, name: string) {
   const ext = name.split(".").pop()?.toLowerCase();
@@ -45,7 +47,6 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
 
-  // Resolve the active chat ID from the pathname
   const activeChatId = pathname.startsWith("/chat/")
     ? pathname.replace("/chat/", "")
     : null;
@@ -65,7 +66,6 @@ export function Sidebar() {
     }
   }, []);
 
-  // Refresh data when the route changes (e.g. new chat created)
   useEffect(() => {
     fetchData();
   }, [pathname, fetchData]);
@@ -106,14 +106,17 @@ export function Sidebar() {
               Scribe
             </h1>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`h-7 w-7 rounded-sm opacity-50 hover:opacity-100 transition-all ${refreshing ? "animate-spin" : ""}`}
-            onClick={handleRefresh}
-          >
-            <RefreshCw className="h-3 w-3" />
-          </Button>
+          <div className="flex items-center gap-0.5">
+            <ThemeToggle />
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-7 w-7 rounded-sm opacity-50 hover:opacity-100 transition-all ${refreshing ? "animate-spin" : ""}`}
+              onClick={handleRefresh}
+            >
+              <RefreshCw className="h-3 w-3" />
+            </Button>
+          </div>
         </div>
 
         <Link href="/chat">
@@ -338,14 +341,19 @@ export function Sidebar() {
                         </Button>
                       ) : (
                         <>
-                          <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden mr-2">
-                            <span className="text-muted-foreground shrink-0">
+                          <Link
+                            href={`/files/${file.id}`}
+                            className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden mr-2 group/link"
+                            title="View document chunks"
+                          >
+                            <span className="text-muted-foreground shrink-0 group-hover/link:text-[#00C4A0] transition-colors">
                               {getFileIcon(file.type, file.name)}
                             </span>
-                            <span className="truncate font-sans text-foreground/80 text-sm">
+                            <span className="truncate font-sans text-foreground/80 text-sm group-hover/link:text-foreground transition-colors">
                               {file.name}
                             </span>
-                          </div>
+                            <Eye className="w-3 h-3 text-muted-foreground/0 group-hover/link:text-muted-foreground/60 transition-all shrink-0 ml-auto" />
+                          </Link>
                           <Button
                             variant="ghost"
                             size="icon"

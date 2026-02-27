@@ -2,13 +2,15 @@
 
 import { db } from "@/lib/db-config";
 import { chats, chatMessages } from "@/lib/db-schema";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { nanoid } from "nanoid";
+import { getUserId } from "@/lib/auth";
 
 export async function getChats() {
     try {
-        return await db.select().from(chats).orderBy(desc(chats.createdAt));
+        const userId = await getUserId();
+        return await db.select().from(chats).where(eq(chats.userId, userId)).orderBy(desc(chats.createdAt));
     } catch (err) {
         console.error("Failed to fetch chats:", err);
         return [];
@@ -30,12 +32,14 @@ export async function getChatMessages(chatId: string) {
 
 export async function createChat(title: string) {
     try {
+        const userId = await getUserId();
         const newChatId = nanoid();
         const newChat = await db
             .insert(chats)
             .values({
                 id: newChatId,
                 title,
+                userId,
             })
             .returning();
 
@@ -50,9 +54,10 @@ export async function createChat(title: string) {
 
 export async function deleteChat(id: string) {
     try {
-        // Delete associated messages first, then the chat
+        const userId = await getUserId();
+        // Only allow deleting own chats
         await db.delete(chatMessages).where(eq(chatMessages.chatId, id));
-        await db.delete(chats).where(eq(chats.id, id));
+        await db.delete(chats).where(and(eq(chats.id, id), eq(chats.userId, userId)));
         revalidatePath("/");
         revalidatePath("/chat");
         return true;
