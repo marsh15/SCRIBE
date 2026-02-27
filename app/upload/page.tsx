@@ -235,7 +235,7 @@ export default function DocumentUpload() {
                         or drag and drop
                       </p>
                       <p className="font-mono text-[10px] text-muted-foreground mt-1.5 uppercase tracking-wider">
-                        PDF • TXT • MD • CSV • DOCX — Up to 50MB
+                        PDF • TXT • MD • CSV • DOCX — Up to 10MB
                       </p>
                     </div>
                   </div>
