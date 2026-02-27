@@ -6,6 +6,8 @@ export const files = pgTable("files", {
   type: text("type").notNull(),
   size: integer("size").notNull(),
   userId: text("user_id"),
+  fileData: text("file_data"), // base64-encoded original file for viewing
+  extractedText: text("extracted_text"), // full extracted text
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

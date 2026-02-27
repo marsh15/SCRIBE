@@ -58,15 +58,23 @@ export async function POST(req: Request) {
                 execute: async ({ query }) => {
                     try {
                         console.log(`[RAG] Searching for: "${query}" (user: ${userId})`);
-                        const results = await searchDocuments(query, userId, 5, 0.3);
-                        console.log(`[RAG] Found ${results.length} results`);
+                        const results = await searchDocuments(query, userId, 10, 0.3);
+                        console.log(`[RAG] Found ${results.length} results from ${new Set(results.map(r => r.file.id)).size} document(s)`);
 
                         if (results.length === 0) {
                             return "No relevant information found in the knowledge base. The knowledge base may be empty — please upload documents first.";
                         }
 
                         const formattedResults = results
-                            .map((r, i) => `[Citation ${i + 1}] Source: [${r.file.name}](/files/${r.file.id}) (File ID: ${r.file.id})\nContent: ${r.content}`)
+                            .map((r, i) => {
+                                const meta = r.metadata as any;
+                                const location = [
+                                    meta?.estimatedPage ? `Page ~${meta.estimatedPage}${meta.totalPages ? `/${meta.totalPages}` : ''}` : null,
+                                    meta?.chunkIndex !== undefined ? `Chunk ${meta.chunkIndex + 1}/${meta.totalChunks}` : null,
+                                    meta?.section ? `Section ${meta.section}` : null,
+                                ].filter(Boolean).join(', ');
+                                return `[Citation ${i + 1}] Source: [${r.file.name}](/files/${r.file.id}) | ${location}\nContent: ${r.content}`;
+                            })
                             .join("\n\n---\n\n");
 
                         return formattedResults;
@@ -82,14 +90,18 @@ export async function POST(req: Request) {
             model: modelWithMemory,
             messages: await convertToModelMessages(sanitizedMessages as ChatMessage[]),
             tools: userTools,
-            system: `You are a helpful assistant with access to a knowledge base. 
-          When users ask questions, search the knowledge base for relevant information.
-          Always search before answering if the question might relate to uploaded documents.
-          Base your answers on the search results when available. Give concise answers that correctly answer what the user is asking for. Do not flood them with all the information from the search results.
-          
-          IMPORTANT: Always cite your sources at the end of your response. Format citations as clickable markdown links like this:
-          **Sources:** [filename](/files/ID)
-          Use the exact file names and /files/ID paths provided in the search results. Users can click these links to view the original document.`,
+            system: `You are a helpful assistant with access to a knowledge base of uploaded documents.
+When users ask questions, ALWAYS search the knowledge base for relevant information first.
+You can search multiple times with different queries to find information across different documents.
+Base your answers on the search results when available. Give concise, accurate answers.
+
+IMPORTANT CITATION RULES:
+- Always cite your sources at the end of your response in a "Sources" section.
+- Format each source as: **Sources:** [filename — Page X, Chunk Y](/files/ID)
+- Use the EXACT file names, page numbers, chunk numbers, and /files/ID paths from the search results.
+- If information comes from MULTIPLE documents, cite ALL of them.
+- Users can click source links to view the original document.
+- Include the specific chunk/page location so users know exactly where to find the information.`,
             stopWhen: stepCountIs(2),
             onFinish: async ({ response, text }) => {
                 if (!chatId) return;

@@ -10,6 +10,15 @@ export async function getFileWithChunks(fileId: number) {
 
     const file = await db.query.files.findFirst({
         where: and(eq(files.id, fileId), eq(files.userId, userId)),
+        columns: {
+            id: true,
+            name: true,
+            type: true,
+            size: true,
+            extractedText: true,
+            createdAt: true,
+            // NOT fileData — too large for server action payload
+        },
     });
 
     if (!file) return null;
@@ -24,5 +33,5 @@ export async function getFileWithChunks(fileId: number) {
         .where(eq(documents.fileId, fileId))
         .orderBy(documents.id);
 
-    return { file, chunks };
+    return { file, chunks, extractedText: file.extractedText };
 }

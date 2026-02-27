@@ -7,12 +7,13 @@ import { generateEmbedding } from "./embeddings";
 /**
  * Search for similar documents using Drizzle ORM with cosineDistance.
  * Scoped to the given user's documents only.
+ * Returns up to `limit` results across ALL uploaded documents.
  */
 export async function searchDocuments(
     query: string,
     userId: string,
-    limit: number = 5,
-    threshold: number = 0.5
+    limit: number = 10,
+    threshold: number = 0.3
 ) {
     const embedding = await generateEmbedding(query);
 

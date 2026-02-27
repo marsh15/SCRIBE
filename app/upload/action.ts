@@ -32,6 +32,12 @@ export async function processDocument(formData: FormData) {
         const bytes = await file.arrayBuffer();
         const buffer = Buffer.from(bytes);
         let extractedText = "";
+        let numPages: number | undefined;
+
+        // Store original file as base64 for viewing
+        const fileBase64 = buffer.toString("base64");
+        const mimeType = file.type || "application/octet-stream";
+        const fileDataUri = `data:${mimeType};base64,${fileBase64}`;
 
         // Extract text based on file type
         const type = file.type;
@@ -42,6 +48,7 @@ export async function processDocument(formData: FormData) {
             if (type === "application/pdf" || extension === "pdf") {
                 const data = await pdf(buffer);
                 extractedText = data.text;
+                numPages = data.numpages;
             } else if (
                 type === "text/plain" ||
                 type === "text/markdown" ||
@@ -79,7 +86,7 @@ export async function processDocument(formData: FormData) {
             };
         }
 
-        // 1. Insert into 'files' table
+        // 1. Insert into 'files' table with original file data
         let insertedFile;
         try {
             [insertedFile] = await db.insert(files).values({
@@ -87,6 +94,8 @@ export async function processDocument(formData: FormData) {
                 type: file.type || extension || "unknown",
                 size: file.size,
                 userId,
+                fileData: fileDataUri,
+                extractedText,
             }).returning();
         } catch (dbError: any) {
             console.error("Database insert error:", dbError);
@@ -97,7 +106,7 @@ export async function processDocument(formData: FormData) {
         let chunks;
         let embeddings;
         try {
-            chunks = await chunkContent(extractedText);
+            chunks = await chunkContent(extractedText, { fileName: file.name, numPages });
             const chunkTexts = chunks.map(c => c.content);
             embeddings = await generateEmbeddings(chunkTexts);
         } catch (embeddingError: any) {
