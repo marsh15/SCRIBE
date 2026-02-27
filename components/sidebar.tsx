@@ -21,7 +21,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { UserButton, SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
+import { UserButton, SignedIn, SignedOut, SignInButton, useUser } from "@clerk/nextjs";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -37,6 +37,7 @@ function getFileIcon(type: string, name: string) {
 }
 
 export function Sidebar() {
+  const { user } = useUser();
   const [files, setFiles] = useState<any[]>([]);
   const [chats, setChats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -343,10 +344,8 @@ export function Sidebar() {
                         <>
                           <Link
                             href={`/files/${file.id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
                             className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden mr-2 group/link"
-                            title="View document chunks"
+                            title="View document"
                           >
                             <span className="text-muted-foreground shrink-0 group-hover/link:text-[#00C4A0] transition-colors">
                               {getFileIcon(file.type, file.name)}
@@ -392,9 +391,14 @@ export function Sidebar() {
               }}
             />
             <div className="flex-1 min-w-0">
-              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                Account
+              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground truncate">
+                {user?.fullName || user?.primaryEmailAddress?.emailAddress || "Account"}
               </p>
+              {user?.fullName && (
+                <p className="font-sans text-[10px] text-muted-foreground/60 truncate">
+                  {user.primaryEmailAddress?.emailAddress}
+                </p>
+              )}
             </div>
           </div>
         </SignedIn>

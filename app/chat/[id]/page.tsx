@@ -204,17 +204,20 @@ function ChatInterface({
                     <div className="prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-pre:bg-primary prose-pre:text-primary-foreground max-w-none prose-a:text-[#00C4A0] prose-a:no-underline hover:prose-a:underline">
                       <ReactMarkdown
                         components={{
-                          a: ({ href, children, ...props }) => (
-                            <a
-                              href={href}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[#00C4A0] hover:underline font-medium"
-                              {...props}
-                            >
-                              {children}
-                            </a>
-                          ),
+                          a: ({ href, children, ...props }) => {
+                            const isInternal = href?.startsWith("/");
+                            return (
+                              <a
+                                href={href}
+                                target={isInternal ? undefined : "_blank"}
+                                rel={isInternal ? undefined : "noopener noreferrer"}
+                                className="text-[#00C4A0] hover:underline font-medium inline-flex items-center gap-1"
+                                {...props}
+                              >
+                                {children}
+                              </a>
+                            );
+                          },
                         }}
                       >
                         {m.parts

@@ -111,9 +111,9 @@ export default function FileViewer() {
                             variant="outline"
                             size="sm"
                             className="font-mono text-xs uppercase tracking-wider"
-                            onClick={() => router.push("/upload")}
+                            onClick={() => router.back()}
                         >
-                            <ArrowLeft className="w-3 h-3 mr-2" /> Back to uploads
+                            <ArrowLeft className="w-3 h-3 mr-2" /> Go back
                         </Button>
                     </div>
                 </div>
@@ -134,7 +134,7 @@ export default function FileViewer() {
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7 rounded-sm hover:bg-muted transition-colors"
-                            onClick={() => router.push("/upload")}
+                            onClick={() => router.back()}
                         >
                             <ArrowLeft className="w-3.5 h-3.5" />
                         </Button>
