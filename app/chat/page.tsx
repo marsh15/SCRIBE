@@ -87,11 +87,10 @@ export default function Ragchatbot() {
                   <div
                     className={`
                     max-w-[85%] rounded-sm p-4 font-sans text-sm leading-relaxed
-                    ${
-                      m.role === "user"
+                    ${m.role === "user"
                         ? "bg-primary text-primary-foreground ml-12"
                         : "bg-card border border-border/50 text-foreground mr-12"
-                    }
+                      }
                   `}
                   >
                     {m.role === "assistant" && (
@@ -106,7 +105,21 @@ export default function Ragchatbot() {
                     )}
 
                     <div className="prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-pre:bg-primary prose-pre:text-primary-foreground max-w-none prose-a:text-[#00C4A0] prose-a:no-underline hover:prose-a:underline">
-                      <ReactMarkdown>
+                      <ReactMarkdown
+                        components={{
+                          a: ({ href, children, ...props }) => (
+                            <a
+                              href={href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[#00C4A0] hover:underline font-medium"
+                              {...props}
+                            >
+                              {children}
+                            </a>
+                          ),
+                        }}
+                      >
                         {m.parts
                           ?.filter((p: UIPart) => p.type === "text")
                           .map((p: UIPart) => p.text)

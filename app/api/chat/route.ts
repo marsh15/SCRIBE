@@ -66,7 +66,7 @@ export async function POST(req: Request) {
                         }
 
                         const formattedResults = results
-                            .map((r, i) => `[Citation ${i + 1}] Source: ${r.file.name}\nContent: ${r.content}`)
+                            .map((r, i) => `[Citation ${i + 1}] Source: [${r.file.name}](/files/${r.file.id}) (File ID: ${r.file.id})\nContent: ${r.content}`)
                             .join("\n\n---\n\n");
 
                         return formattedResults;
@@ -85,7 +85,11 @@ export async function POST(req: Request) {
             system: `You are a helpful assistant with access to a knowledge base. 
           When users ask questions, search the knowledge base for relevant information.
           Always search before answering if the question might relate to uploaded documents.
-          Base your answers on the search results when available. Give concise answers that correctly answer what the user is asking for. Do not flood them with all the information from the search results.`,
+          Base your answers on the search results when available. Give concise answers that correctly answer what the user is asking for. Do not flood them with all the information from the search results.
+          
+          IMPORTANT: Always cite your sources at the end of your response. Format citations as clickable markdown links like this:
+          **Sources:** [filename](/files/ID)
+          Use the exact file names and /files/ID paths provided in the search results. Users can click these links to view the original document.`,
             stopWhen: stepCountIs(2),
             onFinish: async ({ response, text }) => {
                 if (!chatId) return;

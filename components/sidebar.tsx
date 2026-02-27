@@ -343,6 +343,8 @@ export function Sidebar() {
                         <>
                           <Link
                             href={`/files/${file.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
                             className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden mr-2 group/link"
                             title="View document chunks"
                           >
