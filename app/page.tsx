@@ -108,6 +108,13 @@ export default function Home() {
             </li>
           </ol>
         </section>
+
+        <footer className="mt-16 border-t border-border pt-8 text-center">
+          <p className="text-sm font-mono text-muted-foreground uppercase tracking-wider">
+            Need help or have custom requirements? <br className="sm:hidden" />
+            Contact us: <a href="mailto:support@scribe-marsh.com" className="text-primary hover:underline">support@scribe-marsh.com</a>
+          </p>
+        </footer>
       </div>
     </main>
   );
