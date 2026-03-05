@@ -3,16 +3,13 @@ import { billingCustomers } from "@/lib/db-schema";
 import { eq } from "drizzle-orm";
 import { upsertGatewayCustomerId } from "@/lib/billing/store";
 
-type RazorpayCheckoutInput = {
+type RazorpayOrderInput = {
   userId: string;
   email?: string | null;
   name?: string | null;
   planName: string;
   amountInMinorUnit: number;
   currency: string;
-  planId?: string;
-  successUrl: string;
-  cancelUrl: string;
   metadata: Record<string, string>;
 };
 
@@ -70,40 +67,22 @@ async function ensureRazorpayCustomer(input: {
   return json.id;
 }
 
-export async function createRazorpayCheckout(input: RazorpayCheckoutInput) {
-  const customerId = await ensureRazorpayCustomer({
+/**
+ * Creates a Razorpay Order using the Standard Checkout flow.
+ * Returns the order details needed by the client to open the Razorpay modal.
+ */
+export async function createRazorpayOrder(input: RazorpayOrderInput) {
+  await ensureRazorpayCustomer({
     userId: input.userId,
     email: input.email,
     name: input.name,
   });
 
-  // Prefer subscription plan id when configured; fallback to payment link.
-  if (input.planId) {
-    const subRes = await fetch(`${RAZORPAY_API}/subscriptions`, {
-      method: "POST",
-      headers: {
-        Authorization: authHeader(),
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        plan_id: input.planId,
-        customer_notify: 1,
-        total_count: 12,
-        customer_id: customerId,
-        notes: input.metadata,
-      }),
-    });
+  const { keyId } = razorpayCreds();
 
-    if (subRes.ok) {
-      const json = (await subRes.json()) as { id: string; short_url?: string };
-      return {
-        url: json.short_url ?? input.successUrl,
-        sessionId: json.id,
-      };
-    }
-  }
+  const receipt = `scribe_${input.metadata.planCode}_${Date.now()}`;
 
-  const paymentRes = await fetch(`${RAZORPAY_API}/payment_links`, {
+  const res = await fetch(`${RAZORPAY_API}/orders`, {
     method: "POST",
     headers: {
       Authorization: authHeader(),
@@ -112,35 +91,38 @@ export async function createRazorpayCheckout(input: RazorpayCheckoutInput) {
     body: JSON.stringify({
       amount: input.amountInMinorUnit,
       currency: input.currency,
-      accept_partial: false,
-      description: `Scribe ${input.planName} monthly plan`,
-      customer: {
-        name: input.name ?? "Scribe User",
-        email: input.email,
-      },
-      notify: { sms: false, email: true },
-      callback_url: input.successUrl,
-      callback_method: "get",
-      notes: {
-        ...input.metadata,
-        cancelUrl: input.cancelUrl,
-      },
+      receipt,
+      notes: input.metadata,
     }),
   });
 
-  if (!paymentRes.ok) {
-    const text = await paymentRes.text();
-    throw new Error(`Razorpay checkout failed: ${text}`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Razorpay order creation failed: ${text}`);
   }
 
-  const json = (await paymentRes.json()) as { short_url: string; id: string };
+  const order = (await res.json()) as {
+    id: string;
+    amount: number;
+    currency: string;
+    receipt: string;
+  };
+
   return {
-    url: json.short_url,
-    sessionId: json.id,
+    orderId: order.id,
+    amount: order.amount,
+    currency: order.currency,
+    keyId,
+    receipt: order.receipt,
+    name: "Scribe",
+    description: `Scribe ${input.planName} monthly plan`,
+    prefill: {
+      name: input.name ?? undefined,
+      email: input.email ?? undefined,
+    },
   };
 }
 
 export async function createRazorpayPortalLink() {
-  // Razorpay does not provide a direct customer billing portal equivalent.
   return process.env.RAZORPAY_MANAGE_BILLING_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "/pricing";
 }

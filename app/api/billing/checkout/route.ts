@@ -9,7 +9,7 @@ import {
   getGatewayPriceId,
 } from "@/lib/billing/plans";
 import { createStripeCheckoutSession } from "@/lib/billing/gateways/stripe";
-import { createRazorpayCheckout } from "@/lib/billing/gateways/razorpay";
+import { createRazorpayOrder } from "@/lib/billing/gateways/razorpay";
 
 const requestSchema = z.object({
   planCode: z.enum(["free", "pro", "team"]),
@@ -51,6 +51,8 @@ export async function POST(req: Request) {
     const price = plan.monthlyPrice[currency];
     const priceId = getGatewayPriceId(planCode, gateway, currency);
 
+    const email = user?.primaryEmailAddress?.emailAddress ?? null;
+
     const metadata = {
       userId,
       planCode,
@@ -58,36 +60,42 @@ export async function POST(req: Request) {
       currency,
     };
 
-    const email = user?.primaryEmailAddress?.emailAddress ?? null;
+    if (gateway === "stripe") {
+      const session = await createStripeCheckoutSession({
+        userId,
+        email,
+        planName: plan.name,
+        amountInMinorUnit: toMinorUnit(currency, price),
+        currency,
+        priceId,
+        successUrl,
+        cancelUrl,
+        metadata,
+      });
 
-    const commonInput = {
+      return NextResponse.json({
+        ok: true,
+        gateway: "stripe",
+        checkoutUrl: session.url,
+        sessionId: session.sessionId,
+      });
+    }
+
+    // Razorpay Standard Checkout — returns order details for inline modal
+    const order = await createRazorpayOrder({
       userId,
       email,
+      name: user?.fullName,
       planName: plan.name,
       amountInMinorUnit: toMinorUnit(currency, price),
       currency,
-      successUrl,
-      cancelUrl,
       metadata,
-    };
-
-    const session =
-      gateway === "stripe"
-        ? await createStripeCheckoutSession({
-            ...commonInput,
-            priceId,
-          })
-        : await createRazorpayCheckout({
-            ...commonInput,
-            planId: priceId,
-            name: user?.fullName,
-          });
+    });
 
     return NextResponse.json({
       ok: true,
-      gateway,
-      checkoutUrl: session.url,
-      sessionId: session.sessionId,
+      gateway: "razorpay",
+      order,
     });
   } catch (error) {
     console.error("Billing checkout error:", error);

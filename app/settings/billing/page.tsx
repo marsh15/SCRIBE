@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { PLAN_CATALOG, type BillingGateway, type PlanCode } from "@/lib/billing/plans";
+import Script from "next/script";
+import { PLAN_CATALOG, type PlanCode } from "@/lib/billing/plans";
 
 type UsageResponse = {
   ok: boolean;
@@ -20,6 +21,32 @@ type UsageResponse = {
   };
   projectedOverageInr: number;
 };
+
+type RazorpayOrderResponse = {
+  ok: boolean;
+  gateway: "razorpay";
+  order: {
+    orderId: string;
+    amount: number;
+    currency: string;
+    keyId: string;
+    name: string;
+    description: string;
+    prefill: {
+      name?: string;
+      email?: string;
+    };
+  };
+};
+
+declare global {
+  interface Window {
+    Razorpay: new (options: Record<string, unknown>) => {
+      open: () => void;
+      on: (event: string, handler: (response: Record<string, unknown>) => void) => void;
+    };
+  }
+}
 
 function Meter({ label, used, limit }: { label: string; used: number; limit: number }) {
   const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
@@ -42,11 +69,11 @@ function Meter({ label, used, limit }: { label: string; used: number; limit: num
 }
 
 export default function BillingSettingsPage() {
-  const [gateway, setGateway] = useState<BillingGateway>("razorpay");
   const [planCode, setPlanCode] = useState<PlanCode>("pro");
   const [currency, setCurrency] = useState<"INR" | "USD">("INR");
   const [usage, setUsage] = useState<UsageResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [checkoutStatus, setCheckoutStatus] = useState<"idle" | "success" | "error">("idle");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -68,9 +95,7 @@ export default function BillingSettingsPage() {
         setUsage(json);
         if (json.planCode) setPlanCode(json.planCode);
       })
-      .catch(() => {
-        // ignore
-      });
+      .catch(() => { });
 
     return () => {
       mounted = false;
@@ -83,10 +108,12 @@ export default function BillingSettingsPage() {
     if (nextPlan === "free") return;
 
     setLoading(true);
+    setCheckoutStatus("idle");
+
     try {
       const payload = {
         planCode: nextPlan,
-        gateway,
+        gateway: "razorpay",
         currency,
         successUrl: `${window.location.origin}/settings/billing?checkout=success`,
         cancelUrl: `${window.location.origin}/settings/billing?checkout=cancel`,
@@ -98,13 +125,73 @@ export default function BillingSettingsPage() {
         body: JSON.stringify(payload),
       });
 
-      const json = (await res.json()) as { checkoutUrl?: string; error?: string };
-      if (!res.ok || !json.checkoutUrl) {
-        alert(json.error || "Checkout creation failed");
+      const json = (await res.json()) as RazorpayOrderResponse;
+
+      if (!res.ok || !json.order) {
+        alert("Failed to create order. Please try again.");
         return;
       }
 
-      window.location.href = json.checkoutUrl;
+      const { order } = json;
+
+      // Open Razorpay Standard Checkout modal
+      const options = {
+        key: order.keyId,
+        amount: String(order.amount),
+        currency: order.currency,
+        name: order.name,
+        description: order.description,
+        order_id: order.orderId,
+        prefill: order.prefill,
+        theme: {
+          color: "#00C4A0",
+        },
+        handler: async (response: {
+          razorpay_payment_id: string;
+          razorpay_order_id: string;
+          razorpay_signature: string;
+        }) => {
+          // Verify payment server-side
+          try {
+            const verifyRes = await fetch("/api/billing/verify", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                planCode: nextPlan,
+                gateway: "razorpay",
+              }),
+            });
+
+            const verifyJson = (await verifyRes.json()) as { ok: boolean; verified?: boolean; error?: string };
+
+            if (verifyRes.ok && verifyJson.verified) {
+              setCheckoutStatus("success");
+              setPlanCode(nextPlan);
+              // Refresh usage after successful upgrade
+              const usageRes = await fetch("/api/billing/usage");
+              const usageJson = (await usageRes.json()) as UsageResponse;
+              setUsage(usageJson);
+            } else {
+              setCheckoutStatus("error");
+            }
+          } catch {
+            setCheckoutStatus("error");
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setLoading(false);
+          },
+        },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } catch {
+      alert("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -114,7 +201,7 @@ export default function BillingSettingsPage() {
     const res = await fetch("/api/billing/portal", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ gateway, returnUrl: window.location.href }),
+      body: JSON.stringify({ gateway: "razorpay", returnUrl: window.location.href }),
     });
     const json = (await res.json()) as { url?: string; error?: string };
     if (!res.ok || !json.url) {
@@ -126,11 +213,26 @@ export default function BillingSettingsPage() {
 
   return (
     <main className="min-h-screen bg-background text-foreground">
+      {/* Load Razorpay Checkout.js */}
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
+
       <div className="mx-auto max-w-5xl px-6 py-10">
         <h1 className="font-serif text-4xl">Billing & Usage</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Track current cycle usage and manage subscriptions.
         </p>
+
+        {/* Success/Error banners */}
+        {checkoutStatus === "success" && (
+          <div className="mt-4 rounded-sm border border-[#00C4A0]/50 bg-[#00C4A0]/10 p-4 text-sm text-[#00C4A0]">
+            ✅ Payment successful! Your plan has been upgraded.
+          </div>
+        )}
+        {checkoutStatus === "error" && (
+          <div className="mt-4 rounded-sm border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+            ❌ Payment verification failed. Please contact support.
+          </div>
+        )}
 
         <section className="mt-6 rounded-sm border border-border bg-card p-5 space-y-4">
           <div className="flex flex-wrap items-center gap-3 justify-between">
@@ -139,13 +241,6 @@ export default function BillingSettingsPage() {
               <h2 className="font-serif text-3xl mt-1">{selectedPlan.name}</h2>
             </div>
             <div className="flex gap-2">
-              <select
-                value={gateway}
-                onChange={(e) => setGateway(e.target.value as BillingGateway)}
-                className="hidden border border-border rounded-sm bg-background px-2 py-1.5 text-xs font-mono uppercase tracking-wider"
-              >
-                <option value="razorpay">Razorpay</option>
-              </select>
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value as "INR" | "USD")}
