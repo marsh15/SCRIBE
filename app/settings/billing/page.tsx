@@ -42,7 +42,7 @@ function Meter({ label, used, limit }: { label: string; used: number; limit: num
 }
 
 export default function BillingSettingsPage() {
-  const [gateway, setGateway] = useState<BillingGateway>("stripe");
+  const [gateway, setGateway] = useState<BillingGateway>("razorpay");
   const [planCode, setPlanCode] = useState<PlanCode>("pro");
   const [currency, setCurrency] = useState<"INR" | "USD">("INR");
   const [usage, setUsage] = useState<UsageResponse | null>(null);
@@ -142,9 +142,8 @@ export default function BillingSettingsPage() {
               <select
                 value={gateway}
                 onChange={(e) => setGateway(e.target.value as BillingGateway)}
-                className="border border-border rounded-sm bg-background px-2 py-1.5 text-xs font-mono uppercase tracking-wider"
+                className="hidden border border-border rounded-sm bg-background px-2 py-1.5 text-xs font-mono uppercase tracking-wider"
               >
-                <option value="stripe">Stripe</option>
                 <option value="razorpay">Razorpay</option>
               </select>
               <select
