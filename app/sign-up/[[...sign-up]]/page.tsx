@@ -4,7 +4,7 @@ export default function SignUpPage() {
     return (
         <main className="min-h-screen flex items-center justify-center bg-background">
             <SignUp
-                afterSignUpUrl="/chat"
+                fallbackRedirectUrl="/chat"
                 signInUrl="/sign-in"
                 appearance={{
                     elements: {

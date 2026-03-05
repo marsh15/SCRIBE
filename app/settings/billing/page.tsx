@@ -92,8 +92,10 @@ export default function BillingSettingsPage() {
       .then((res) => res.json())
       .then((json: UsageResponse) => {
         if (!mounted) return;
-        setUsage(json);
-        if (json.planCode) setPlanCode(json.planCode);
+        if (json.ok) {
+          setUsage(json);
+          if (json.planCode) setPlanCode(json.planCode);
+        }
       })
       .catch(() => { });
 
