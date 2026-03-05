@@ -1,4 +1,4 @@
-import { PLAN_CATALOG, type BillingGateway, type PlanCode } from "@/lib/billing/plans";
+import { getGatewayPriceId, PLAN_CATALOG, type BillingGateway, type PlanCode, type CurrencyCode } from "@/lib/billing/plans";
 
 export function planFromProviderId(input: {
   gateway: BillingGateway;
@@ -7,10 +7,14 @@ export function planFromProviderId(input: {
   const target = input.providerPriceOrPlanId ?? "";
   if (!target) return "free";
 
-  const allPlans = Object.values(PLAN_CATALOG);
-  for (const plan of allPlans) {
-    const ids = Object.values(plan.gatewayPriceIds[input.gateway]).filter(Boolean);
-    if (ids.includes(target)) return plan.code;
+  const currencies: CurrencyCode[] = ["INR", "USD"];
+  const planCodes = Object.keys(PLAN_CATALOG) as PlanCode[];
+
+  for (const code of planCodes) {
+    for (const currency of currencies) {
+      const id = getGatewayPriceId(code, input.gateway, currency);
+      if (id && id === target) return code;
+    }
   }
 
   return "free";

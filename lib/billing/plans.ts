@@ -15,12 +15,9 @@ export interface PlanDefinition {
     includedEmbeddingTokens: number;
     allowOverage: boolean;
   };
-  gatewayPriceIds: {
-    stripe: Partial<Record<CurrencyCode, string>>;
-    razorpay: Partial<Record<CurrencyCode, string>>;
-  };
 }
 
+/** Client-safe plan catalog — no process.env references */
 export const PLAN_CATALOG: Record<PlanCode, PlanDefinition> = {
   free: {
     code: "free",
@@ -34,10 +31,6 @@ export const PLAN_CATALOG: Record<PlanCode, PlanDefinition> = {
       includedModelOutputTokens: 30_000,
       includedEmbeddingTokens: 100_000,
       allowOverage: false,
-    },
-    gatewayPriceIds: {
-      stripe: {},
-      razorpay: {},
     },
   },
   pro: {
@@ -53,15 +46,6 @@ export const PLAN_CATALOG: Record<PlanCode, PlanDefinition> = {
       includedEmbeddingTokens: 700_000,
       allowOverage: true,
     },
-    gatewayPriceIds: {
-      stripe: {
-        INR: process.env.STRIPE_PRICE_PRO_INR ?? "",
-        USD: process.env.STRIPE_PRICE_PRO_USD ?? "",
-      },
-      razorpay: {
-        INR: process.env.RAZORPAY_PLAN_PRO_INR ?? "",
-      },
-    },
   },
   team: {
     code: "team",
@@ -75,15 +59,6 @@ export const PLAN_CATALOG: Record<PlanCode, PlanDefinition> = {
       includedModelOutputTokens: 1_500_000,
       includedEmbeddingTokens: 3_500_000,
       allowOverage: true,
-    },
-    gatewayPriceIds: {
-      stripe: {
-        INR: process.env.STRIPE_PRICE_TEAM_INR ?? "",
-        USD: process.env.STRIPE_PRICE_TEAM_USD ?? "",
-      },
-      razorpay: {
-        INR: process.env.RAZORPAY_PLAN_TEAM_INR ?? "",
-      },
     },
   },
 };
@@ -101,10 +76,23 @@ export function getPlan(planCode: PlanCode) {
   return PLAN_CATALOG[planCode];
 }
 
+/**
+ * Server-only: resolve gateway price IDs from environment variables.
+ * This must NEVER be imported from "use client" components.
+ */
 export function getGatewayPriceId(
   planCode: PlanCode,
   gateway: BillingGateway,
   currency: CurrencyCode
-) {
-  return PLAN_CATALOG[planCode].gatewayPriceIds[gateway][currency] ?? "";
+): string {
+  const lookup: Record<string, string | undefined> = {
+    "pro_stripe_INR": process.env.STRIPE_PRICE_PRO_INR,
+    "pro_stripe_USD": process.env.STRIPE_PRICE_PRO_USD,
+    "team_stripe_INR": process.env.STRIPE_PRICE_TEAM_INR,
+    "team_stripe_USD": process.env.STRIPE_PRICE_TEAM_USD,
+    "pro_razorpay_INR": process.env.RAZORPAY_PLAN_PRO_INR,
+    "team_razorpay_INR": process.env.RAZORPAY_PLAN_TEAM_INR,
+  };
+
+  return lookup[`${planCode}_${gateway}_${currency}`] ?? "";
 }
