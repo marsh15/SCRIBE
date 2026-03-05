@@ -1,16 +1,27 @@
 "use client";
 
 import { ReactNode } from "react";
-import { Group, Panel, Separator } from "react-resizable-panels";
+import { Group, Panel, Separator, useGroupRef } from "react-resizable-panels";
 import type { UIMessage } from "@ai-sdk/react";
 import { Sidebar } from "@/components/sidebar";
 import { RAGInspector } from "@/components/rag-inspector";
+import { Button } from "@/components/ui/button";
+import { RotateCcw } from "lucide-react";
+import { useEffect, useState } from "react";
 
 interface ThreePaneLayoutProps {
   children: ReactNode;
   messages?: UIMessage[];
   status?: string;
 }
+
+const DEFAULT_LAYOUT = {
+  sidebar: 18,
+  main: 56,
+  inspector: 26,
+};
+
+const STORAGE_KEY = "scribe-layout-v2";
 
 function ResizeHandle() {
   return (
@@ -34,11 +45,72 @@ export function ThreePaneLayout({
   messages = [],
   status = "ready",
 }: ThreePaneLayoutProps) {
+  const groupRef = useGroupRef();
+  const [layout, setLayout] = useState(DEFAULT_LAYOUT);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw) as Partial<typeof DEFAULT_LAYOUT>;
+      if (
+        typeof parsed.sidebar === "number" &&
+        typeof parsed.main === "number" &&
+        typeof parsed.inspector === "number"
+      ) {
+        setLayout({
+          sidebar: parsed.sidebar,
+          main: parsed.main,
+          inspector: parsed.inspector,
+        });
+      }
+    } catch {
+      // ignore invalid persisted layout
+    }
+  }, []);
+
+  const handleResetLayout = () => {
+    groupRef.current?.setLayout(DEFAULT_LAYOUT);
+    setLayout(DEFAULT_LAYOUT);
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_LAYOUT));
+    } catch {
+      // ignore storage errors
+    }
+  };
+
   return (
-    <div className="h-screen w-full bg-background text-foreground overflow-hidden">
-      <Group orientation="horizontal" id="scribe-layout">
+    <div className="h-screen w-full bg-background text-foreground overflow-hidden relative">
+      <div className="absolute top-2 right-2 z-20">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-[10px] font-mono uppercase tracking-wider opacity-70 hover:opacity-100 rounded-sm"
+          onClick={handleResetLayout}
+          title="Reset panel layout"
+        >
+          <RotateCcw className="w-3 h-3 mr-1" />
+          Reset Layout
+        </Button>
+      </div>
+      <Group
+        orientation="horizontal"
+        id="scribe-layout"
+        groupRef={groupRef}
+        defaultLayout={layout}
+        onLayoutChanged={(nextLayout) => {
+          setLayout(nextLayout as typeof DEFAULT_LAYOUT);
+          try {
+            window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextLayout));
+          } catch {
+            // ignore storage errors
+          }
+        }}
+      >
         {/* Left Sidebar */}
-        <Panel defaultSize={16} id="sidebar">
+        <Panel defaultSize={DEFAULT_LAYOUT.sidebar} minSize={14} maxSize={30} id="sidebar">
           <div className="h-full bg-card overflow-hidden">
             <Sidebar />
           </div>
@@ -47,7 +119,7 @@ export function ThreePaneLayout({
         <ResizeHandle />
 
         {/* Main Content (Chat) */}
-        <Panel defaultSize={58} id="main">
+        <Panel defaultSize={DEFAULT_LAYOUT.main} minSize={35} id="main">
           <div className="h-full flex flex-col min-w-0 bg-background overflow-hidden">
             {children}
           </div>
@@ -56,7 +128,7 @@ export function ThreePaneLayout({
         <ResizeHandle />
 
         {/* Right Inspector */}
-        <Panel defaultSize={26} id="inspector">
+        <Panel defaultSize={DEFAULT_LAYOUT.inspector} minSize={18} maxSize={38} id="inspector">
           <div className="h-full bg-card overflow-hidden">
             <RAGInspector messages={messages} status={status} />
           </div>

@@ -5,6 +5,9 @@
 SCRIBE is an intelligent document management and chatbot application that allows users to seamlessly ingest files (PDF, CSV, MD, TXT, DOCX), process them into chunks, and query them using Google's Gemini AI. It provides a premium, resizable triple-pane interface to navigate chats, visualize the RAG pipeline in real time, and manage the uploaded vector knowledge base.
 
 ## Features
+- **SaaS Billing Ready** — INR-first pricing with dual gateways (Stripe + Razorpay), plan limits, and usage metering APIs.
+- **Async Ingestion Queue** — Uploads are queued and processed in the background with retry support.
+- **Large File Support** — Up to 100 MB uploads on paid plans (Blob-backed).
 - **Multi-Document RAG** — Upload multiple documents and query across all of them simultaneously. The AI references up to 10 relevant chunks across your entire knowledge base.
 - **User Session Isolation** — Each Clerk-authenticated user has a fully isolated workspace. Files, chats, and search results are scoped per-user.
 - **Document Viewer** — Click any file in the Knowledge Base to view it in a dedicated page with:
@@ -92,6 +95,25 @@ Create a `.env` or `.env.local` file:
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk publishable key | Yes |
 | `CLERK_SECRET_KEY` | Clerk secret key | Yes |
 | `SUPERMEMORY_API_KEY` | Supermemory AI context tool | Yes |
+| `FEATURE_BILLING_ENABLED` | Enable billing APIs/UI (`true`/`false`) | No |
+| `FEATURE_ASYNC_INGESTION_ENABLED` | Enable async ingestion queue (`true`/`false`) | No |
+| `FEATURE_PUBLIC_LANDING_ENABLED` | Enable public landing page (`true`/`false`) | No |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob token for large-file storage | Recommended |
+| `UPLOAD_SIGNING_SECRET` | HMAC secret for upload token signing | Recommended |
+| `INTERNAL_CRON_SECRET` | Auth secret for `/api/internal/ingest/run` | Recommended |
+| `NEXT_PUBLIC_APP_URL` | Public app URL used in checkout redirects | Recommended |
+| `STRIPE_SECRET_KEY` | Stripe API secret | Optional (billing) |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret | Optional (billing) |
+| `STRIPE_PRICE_PRO_INR` | Stripe recurring price id for Pro INR | Optional (billing) |
+| `STRIPE_PRICE_TEAM_INR` | Stripe recurring price id for Team INR | Optional (billing) |
+| `STRIPE_PRICE_PRO_USD` | Stripe recurring price id for Pro USD | Optional (billing) |
+| `STRIPE_PRICE_TEAM_USD` | Stripe recurring price id for Team USD | Optional (billing) |
+| `RAZORPAY_KEY_ID` | Razorpay key id | Optional (billing) |
+| `RAZORPAY_KEY_SECRET` | Razorpay key secret | Optional (billing) |
+| `RAZORPAY_WEBHOOK_SECRET` | Razorpay webhook signing secret | Optional (billing) |
+| `RAZORPAY_PLAN_PRO_INR` | Razorpay subscription plan id for Pro INR | Optional (billing) |
+| `RAZORPAY_PLAN_TEAM_INR` | Razorpay subscription plan id for Team INR | Optional (billing) |
+| `RAZORPAY_MANAGE_BILLING_URL` | Billing management fallback URL for Razorpay users | Optional |
 
 ## Scripts
 | Script | Command | Description |
@@ -104,7 +126,7 @@ Create a `.env` or `.env.local` file:
 ## Deployment
 The app is deployed on **Vercel**. Push to `main` to trigger auto-deploy.
 
-> **Note:** Vercel Hobby has a 10s serverless function timeout. File uploads are capped at 10 MB to stay within this limit.
+> **Note:** For reliable 100 MB ingestion, use Blob-backed uploads plus worker/cron execution (`/api/internal/ingest/run`) on a plan/runtime with sufficient execution time.
 
 ## License
 MIT License

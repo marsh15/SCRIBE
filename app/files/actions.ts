@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db-config";
-import { files, documents } from "@/lib/db-schema";
+import { files } from "@/lib/db-schema";
 import { eq, desc, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getUserId } from "@/lib/auth";

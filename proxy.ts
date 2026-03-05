@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 const isPublicRoute = createRouteMatcher([
     "/sign-in(.*)",
     "/sign-up(.*)",
+    "/api/webhooks/stripe",
+    "/api/webhooks/razorpay",
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
@@ -17,7 +19,13 @@ export default clerkMiddleware(async (auth, req) => {
 
     if (isServerAction) return NextResponse.next();
 
-    if (!isPublicRoute(req)) {
+    const pathname = req.nextUrl.pathname;
+    const isMarketingRoute =
+        pathname === "/" ||
+        pathname.startsWith("/pricing") ||
+        pathname.startsWith("/changelog");
+
+    if (!isPublicRoute(req) && !isMarketingRoute) {
         await auth.protect();
     }
 });

@@ -2,6 +2,7 @@ import { db } from "@/lib/db-config";
 import { files } from "@/lib/db-schema";
 import { eq, and } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
+import { downloadBlobToBuffer } from "@/lib/storage/blob";
 
 export async function GET(
     req: Request,
@@ -16,13 +17,29 @@ export async function GET(
             where: and(eq(files.id, fileId), eq(files.userId, userId)),
             columns: {
                 fileData: true,
+                storageUrl: true,
                 type: true,
                 name: true,
             },
         });
 
-        if (!file || !file.fileData) {
+        if (!file) {
             return new Response("File not found", { status: 404 });
+        }
+
+        if (file.storageUrl) {
+            const blobBuffer = await downloadBlobToBuffer(file.storageUrl);
+            return new Response(blobBuffer, {
+                headers: {
+                    "Content-Type": file.type || "application/octet-stream",
+                    "Content-Disposition": `inline; filename=\"${file.name}\"`,
+                    "Cache-Control": "private, max-age=3600",
+                },
+            });
+        }
+
+        if (!file.fileData) {
+            return new Response("File data unavailable", { status: 404 });
         }
 
         // Parse data URI: data:mime;base64,DATA

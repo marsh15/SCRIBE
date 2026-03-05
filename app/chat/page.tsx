@@ -17,8 +17,13 @@ type UIPart = {
 
 export default function Ragchatbot() {
   const router = useRouter();
-  const { messages, status, sendMessage } = useChat();
+  const { messages, status } = useChat();
   const [input, setInput] = useState("");
+  const onboardingPrompts = [
+    "Summarize the main obligations and deadlines in my uploaded contract.",
+    "List key risks from all policy documents with source citations.",
+    "Create a customer-ready answer for: refund eligibility and exceptions.",
+  ];
 
   const isLoading = status === "submitted" || status === "streaming";
 
@@ -77,6 +82,31 @@ export default function Ragchatbot() {
                   retrieve relevant chunks and synthesize a response with exact
                   citations.
                 </p>
+                <div className="w-full max-w-xl rounded-sm border border-border bg-card p-4 text-left">
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
+                    Onboarding Checklist
+                  </p>
+                  <ol className="space-y-1 text-sm text-foreground/90">
+                    <li>1. Upload at least one document in Knowledge Base.</li>
+                    <li>2. Ask one of the sample prompts below.</li>
+                    <li>3. Verify the Sources section in every response.</li>
+                  </ol>
+                  <div className="mt-4 space-y-2">
+                    {onboardingPrompts.map((prompt) => (
+                      <button
+                        key={prompt}
+                        type="button"
+                        className="w-full text-left rounded-sm border border-border px-3 py-2 text-xs font-sans hover:border-[#00C4A0]/40 hover:bg-muted/40 transition-colors"
+                        onClick={async () => {
+                          const chat = await createChat(prompt.substring(0, 50));
+                          router.push(`/chat/${chat.id}?q=${encodeURIComponent(prompt)}`);
+                        }}
+                      >
+                        {prompt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             ) : (
               messages.map((m) => (

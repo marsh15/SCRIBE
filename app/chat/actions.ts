@@ -19,10 +19,19 @@ export async function getChats() {
 
 export async function getChatMessages(chatId: string) {
     try {
+        const userId = await getUserId();
         return await db
-            .select()
+            .select({
+                id: chatMessages.id,
+                chatId: chatMessages.chatId,
+                role: chatMessages.role,
+                content: chatMessages.content,
+                parts: chatMessages.parts,
+                createdAt: chatMessages.createdAt,
+            })
             .from(chatMessages)
-            .where(eq(chatMessages.chatId, chatId))
+            .innerJoin(chats, eq(chatMessages.chatId, chats.id))
+            .where(and(eq(chatMessages.chatId, chatId), eq(chats.userId, userId)))
             .orderBy(chatMessages.createdAt);
     } catch (err) {
         console.error("Failed to fetch chat messages:", err);

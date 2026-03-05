@@ -2,7 +2,7 @@
 
 import { db } from "@/lib/db-config";
 import { files, documents } from "@/lib/db-schema";
-import { eq, and, isNotNull, sql } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { getUserId } from "@/lib/auth";
 
 export async function getFileWithChunks(fileId: number) {
@@ -16,8 +16,11 @@ export async function getFileWithChunks(fileId: number) {
             type: files.type,
             size: files.size,
             extractedText: files.extractedText,
+            status: files.status,
+            processingError: files.processingError,
             createdAt: files.createdAt,
             hasFileData: sql<boolean>`file_data IS NOT NULL`.as("has_file_data"),
+            hasStorageUrl: sql<boolean>`storage_url IS NOT NULL`.as("has_storage_url"),
         })
         .from(files)
         .where(and(eq(files.id, fileId), eq(files.userId, userId)))
@@ -42,10 +45,13 @@ export async function getFileWithChunks(fileId: number) {
             name: file.name,
             type: file.type,
             size: file.size,
+            status: file.status,
+            processingError: file.processingError,
             createdAt: file.createdAt,
         },
         chunks,
         extractedText: file.extractedText,
         hasFileData: file.hasFileData,
+        hasStorageUrl: file.hasStorageUrl,
     };
 }

@@ -110,6 +110,11 @@ function ChatInterface({
   });
 
   const [input, setInput] = useState("");
+  const onboardingPrompts = [
+    "Summarize the uploaded documents in 5 bullet points.",
+    "What are the deadlines and obligations mentioned across files?",
+    "Draft a customer-facing response with citations for refund policy.",
+  ];
   const isLoading = status === "submitted" || status === "streaming";
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -174,6 +179,23 @@ function ChatInterface({
                   retrieve relevant chunks and synthesize a response with exact
                   citations.
                 </p>
+                <div className="w-full max-w-xl rounded-sm border border-border bg-card p-4 text-left">
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
+                    Try a sample prompt
+                  </p>
+                  <div className="space-y-2">
+                    {onboardingPrompts.map((prompt) => (
+                      <button
+                        key={prompt}
+                        type="button"
+                        className="w-full text-left rounded-sm border border-border px-3 py-2 text-xs font-sans hover:border-[#00C4A0]/40 hover:bg-muted/40 transition-colors"
+                        onClick={() => sendMessage({ text: prompt })}
+                      >
+                        {prompt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             ) : (
               messages.map((m) => (

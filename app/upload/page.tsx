@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { processDocument } from "./action";
 import { getFiles, deleteFile } from "@/app/files/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -19,7 +18,6 @@ import {
   X,
 } from "lucide-react";
 import { ThreePaneLayout } from "@/components/three-pane-layout";
-import { useRouter } from "next/navigation";
 
 function getFileIcon(type: string, name: string) {
   const ext = name.split(".").pop()?.toLowerCase();
@@ -59,7 +57,6 @@ export default function DocumentUpload() {
   const [files, setFiles] = useState<any[]>([]);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const router = useRouter();
 
   const fetchFiles = useCallback(async () => {
     const data = await getFiles();
@@ -70,28 +67,86 @@ export default function DocumentUpload() {
     fetchFiles();
   }, [fetchFiles]);
 
+  useEffect(() => {
+    const hasPending = files.some((file) => file.status === "queued" || file.status === "processing");
+    if (!hasPending) return;
+
+    const interval = setInterval(() => {
+      fetchFiles().catch(() => {
+        // noop
+      });
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [files, fetchFiles]);
+
   const processFile = async (file: File) => {
     setIsLoading(true);
     setMessage(null);
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const result = await processDocument(formData);
+      const signRes = await fetch("/api/uploads/sign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type || "application/octet-stream",
+        }),
+      });
 
-      if (result.success) {
-        setMessage({
-          type: "success",
-          text: result.message || "Document indexed successfully",
-        });
-        if (fileInputRef.current) fileInputRef.current.value = "";
-        await fetchFiles();
-      } else {
+      const signJson = (await signRes.json()) as {
+        ok?: boolean;
+        uploadToken?: string;
+        error?: string;
+      };
+
+      if (!signRes.ok || !signJson.uploadToken) {
         setMessage({
           type: "error",
-          text: result.error || "Failed to process document",
+          text: signJson.error || "Upload signing failed",
         });
+        return;
       }
+
+      const uploadForm = new FormData();
+      uploadForm.append("file", file);
+      uploadForm.append("uploadToken", signJson.uploadToken);
+
+      const completeRes = await fetch("/api/uploads/complete", {
+        method: "POST",
+        body: uploadForm,
+      });
+
+      const completeJson = (await completeRes.json()) as {
+        ok?: boolean;
+        error?: string;
+        file?: { status?: string; id?: number };
+      };
+
+      if (!completeRes.ok || !completeJson.ok) {
+        setMessage({
+          type: "error",
+          text: completeJson.error || "Failed to queue upload",
+        });
+        return;
+      }
+
+      setMessage({
+        type: "success",
+        text:
+          completeJson.file?.status === "queued"
+            ? "File uploaded and queued for indexing. Processing will continue in background."
+            : "File uploaded successfully.",
+      });
+
+      // Best-effort worker trigger for non-cron environments
+      fetch("/api/internal/ingest/run?limit=1", { method: "POST" }).catch(() => {
+        // no-op; ingestion may be driven by cron
+      });
+
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      await fetchFiles();
     } catch {
       setMessage({
         type: "error",
@@ -235,7 +290,7 @@ export default function DocumentUpload() {
                         or drag and drop
                       </p>
                       <p className="font-mono text-[10px] text-muted-foreground mt-1.5 uppercase tracking-wider">
-                        PDF • TXT • MD • CSV • DOCX — Up to 10MB
+                        PDF • TXT • MD • CSV • DOCX — Up to 100MB (plan-based)
                       </p>
                     </div>
                   </div>
@@ -301,6 +356,7 @@ export default function DocumentUpload() {
                 <div className="space-y-2">
                   {files.map((file) => {
                     const isDeleting = deletingId === file.id;
+                    const status = file.status || "ready";
                     return (
                       <div
                         key={file.id}
@@ -329,7 +385,23 @@ export default function DocumentUpload() {
                             <span className="font-mono text-[10px] text-muted-foreground">
                               {formatDate(file.createdAt)}
                             </span>
+                            <span
+                              className={`font-mono text-[10px] uppercase px-1.5 py-0.5 rounded-sm ${
+                                status === "ready"
+                                  ? "bg-[#00C4A0]/15 text-[#00C4A0]"
+                                  : status === "failed"
+                                    ? "bg-destructive/10 text-destructive"
+                                    : "bg-muted text-muted-foreground"
+                              }`}
+                            >
+                              {status}
+                            </span>
                           </div>
+                          {status === "failed" && file.processingError && (
+                            <p className="mt-1 text-[10px] font-mono text-destructive/80 truncate">
+                              {file.processingError}
+                            </p>
+                          )}
                         </div>
 
                         {/* Delete Button */}

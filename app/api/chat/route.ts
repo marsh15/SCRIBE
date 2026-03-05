@@ -1,165 +1,273 @@
 import {
-    streamText,
-    UIMessage,
-    convertToModelMessages,
-    tool,
-    InferUITools,
-    UIDataTypes,
-    stepCountIs,
+  streamText,
+  type UIMessage,
+  convertToModelMessages,
+  tool,
+  stepCountIs,
 } from "ai";
 import { google } from "@ai-sdk/google";
 import { withSupermemory } from "@supermemory/tools/ai-sdk";
 import { z } from "zod";
 import { searchDocuments } from "@/lib/search";
 import { getUserId } from "@/lib/auth";
+import { getUsageSummary, recordUsageEvent } from "@/lib/billing/usage";
 
-const tools = {
-    searchKnowledgeBase: tool({
-        description: "Search the knowledge base for relevant information",
-        inputSchema: z.object({
-            query: z.string().describe("The search query to find relevant documents"),
-        }),
-    }),
+export type ChatMessage = UIMessage;
+
+type TextPart = {
+  type: "text";
+  text: string;
 };
 
-export type ChatTools = InferUITools<typeof tools>;
-export type ChatMessage = UIMessage<never, UIDataTypes, ChatTools>;
+type GenericPart = {
+  type?: string;
+  text?: string;
+};
+
+type UsageLike = {
+  inputTokens?: number;
+  outputTokens?: number;
+};
+
+type ToolCallLike = {
+  type?: string;
+  toolName?: string;
+  args?: unknown;
+  toolCallId?: string;
+};
+
+type ResponseLike = {
+  messages?: Array<{
+    content?: unknown;
+  }>;
+};
+
+function sanitizeMessages(messages: ChatMessage[]) {
+  return messages.map((message) => {
+    const cleanedParts = (message.parts ?? []).filter(
+      (part): part is TextPart => (part as GenericPart).type === "text"
+    );
+
+    return {
+      ...message,
+      parts: cleanedParts,
+    };
+  });
+}
+
+function extractTextFromMessage(message: ChatMessage) {
+  const parts = (message.parts ?? []) as GenericPart[];
+  const textFromParts = parts
+    .filter((part) => part.type === "text")
+    .map((part) => part.text ?? "")
+    .join("");
+
+  if (textFromParts.trim().length > 0) return textFromParts;
+  return "";
+}
+
+function ensureStructuredAnswer(text: string, hadKnowledgeLookup: boolean) {
+  const base = text?.trim() ?? "";
+  if (!base) return base;
+
+  const hasAnswerHeader = /(^|\n)#{0,3}\s*Answer\b/i.test(base);
+  const hasKeyPointsHeader = /(^|\n)#{0,3}\s*Key Points\b/i.test(base);
+  const hasSourcesHeader = /(^|\n)#{0,3}\s*Sources\b/i.test(base);
+
+  let updated = base;
+
+  if (!hasAnswerHeader) {
+    updated = `## Answer\n${updated}`;
+  }
+
+  if (!hasKeyPointsHeader) {
+    updated = `${updated}\n\n## Key Points\n- Summarized above.`;
+  }
+
+  if (hadKnowledgeLookup && !hasSourcesHeader) {
+    updated = `${updated}\n\n## Sources\n- No source links were generated. Please ask to re-run with citations.`;
+  }
+
+  return updated;
+}
 
 export async function POST(req: Request) {
-    try {
-        const userId = await getUserId();
-        const { messages }: { messages: ChatMessage[] } = await req.json();
-
-        const url = new URL(req.url);
-        const chatId = url.searchParams.get("chatId") || undefined;
-
-        // Sanitize messages to strip tool calls from historical context.
-        const sanitizedMessages = messages.map(m => {
-            const copy = { ...m };
-            if ((copy as any).toolInvocations) {
-                (copy as any).toolInvocations = [];
-            }
-            if (copy.parts) {
-                copy.parts = copy.parts.filter((p: any) => p.type === 'text');
-            }
-            return copy;
-        });
-
-        // Per-user Supermemory context
-        const modelWithMemory = withSupermemory(google("gemini-2.5-flash"), userId);
-
-        // Tools with userId closure for user-scoped search
-        const userTools = {
-            searchKnowledgeBase: tool({
-                description: "Search the knowledge base for relevant information",
-                inputSchema: z.object({
-                    query: z.string().describe("The search query to find relevant documents"),
-                }),
-                execute: async ({ query }) => {
-                    try {
-                        console.log(`[RAG] Searching for: "${query}" (user: ${userId})`);
-                        const results = await searchDocuments(query, userId, 10, 0.3);
-                        console.log(`[RAG] Found ${results.length} results from ${new Set(results.map(r => r.file.id)).size} document(s)`);
-
-                        if (results.length === 0) {
-                            return "No relevant information found in the knowledge base. The knowledge base may be empty — please upload documents first.";
-                        }
-
-                        const formattedResults = results
-                            .map((r, i) => {
-                                const meta = r.metadata as any;
-                                const location = [
-                                    meta?.estimatedPage ? `Page ~${meta.estimatedPage}${meta.totalPages ? `/${meta.totalPages}` : ''}` : null,
-                                    meta?.chunkIndex !== undefined ? `Chunk ${meta.chunkIndex + 1}/${meta.totalChunks}` : null,
-                                    meta?.section ? `Section ${meta.section}` : null,
-                                ].filter(Boolean).join(', ');
-                                return `[Citation ${i + 1}] Source: [${r.file.name}](/files/${r.file.id}) | ${location}\nContent: ${r.content}`;
-                            })
-                            .join("\n\n---\n\n");
-
-                        return formattedResults;
-                    } catch (error) {
-                        console.error("Search error:", error);
-                        return "Error searching the knowledge base.";
-                    }
-                },
-            }),
-        };
-
-        const result = streamText({
-            model: modelWithMemory,
-            messages: await convertToModelMessages(sanitizedMessages as ChatMessage[]),
-            tools: userTools,
-            system: `You are a helpful assistant with access to a knowledge base of uploaded documents.
-When users ask questions, ALWAYS search the knowledge base for relevant information first.
-You can search multiple times with different queries to find information across different documents.
-Base your answers on the search results when available. Give concise, accurate answers.
-
-IMPORTANT CITATION RULES:
-- Always cite your sources at the end of your response in a "Sources" section.
-- Format each source as: **Sources:** [filename — Page X, Chunk Y](/files/ID)
-- Use the EXACT file names, page numbers, chunk numbers, and /files/ID paths from the search results.
-- If information comes from MULTIPLE documents, cite ALL of them.
-- Users can click source links to view the original document.
-- Include the specific chunk/page location so users know exactly where to find the information.`,
-            stopWhen: stepCountIs(2),
-            onFinish: async ({ response, text }) => {
-                if (!chatId) return;
-
-                const { db } = await import("@/lib/db-config");
-                const { chatMessages } = await import("@/lib/db-schema");
-                const { nanoid } = await import("nanoid");
-
-                const lastUserMessage = messages[messages.length - 1];
-
-                try {
-                    // Save user message
-                    await db.insert(chatMessages).values({
-                        id: lastUserMessage.id || nanoid(),
-                        chatId,
-                        role: lastUserMessage.role,
-                        content: lastUserMessage.parts?.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('') || String((lastUserMessage as any).content || ""),
-                        parts: lastUserMessage.parts || [],
-                    });
-
-                    // Build assistant parts
-                    const assistantParts: any[] = [];
-
-                    if (text) {
-                        assistantParts.push({ type: "text", text });
-                    }
-
-                    if (response && response.messages) {
-                        const allToolCalls = response.messages.flatMap((m: any) =>
-                            Array.isArray(m.content) ? m.content.filter((c: any) => c.type === 'tool-call') : []
-                        );
-                        allToolCalls.forEach((tc: any) => {
-                            assistantParts.push({
-                                type: "tool-invocation",
-                                toolName: tc.toolName,
-                                args: tc.args,
-                                toolCallId: tc.toolCallId,
-                            });
-                        });
-                    }
-
-                    // Save assistant response
-                    await db.insert(chatMessages).values({
-                        id: nanoid(),
-                        chatId,
-                        role: "assistant",
-                        content: text || "",
-                        parts: assistantParts,
-                    });
-                } catch (e) {
-                    console.error("Failed to save chat to db onFinish", e);
-                }
-            }
-        });
-
-        return result.toUIMessageStreamResponse();
-    } catch (error) {
-        console.error("Error streaming chat completion:", error);
-        return new Response("Failed to stream chat completion", { status: 500 });
+  try {
+    const userId = await getUserId();
+    const usageSummary = await getUsageSummary(userId);
+    if (!usageSummary.allowOverage && usageSummary.projectedOverageInr > 0) {
+      return new Response("Free plan usage limit reached. Upgrade to continue chatting.", {
+        status: 402,
+      });
     }
+    const { messages }: { messages: ChatMessage[] } = await req.json();
+
+    const url = new URL(req.url);
+    const chatId = url.searchParams.get("chatId") || undefined;
+
+    const sanitizedMessages = sanitizeMessages(messages);
+    const modelWithMemory = withSupermemory(google("gemini-2.5-flash"), userId);
+
+    const userTools = {
+      searchKnowledgeBase: tool({
+        description: "Search the knowledge base for relevant information",
+        inputSchema: z.object({
+          query: z.string().describe("The search query to find relevant documents"),
+        }),
+        execute: async ({ query }) => {
+          try {
+            const results = await searchDocuments(query, userId, 10, 0.3);
+
+            if (results.length === 0) {
+              return "No relevant information found in the knowledge base. The knowledge base may be empty — please upload documents first.";
+            }
+
+            const formattedResults = results
+              .map((result, index) => {
+                const metadata = result.metadata as
+                  | {
+                      estimatedPage?: number;
+                      totalPages?: number;
+                      chunkIndex?: number;
+                      totalChunks?: number;
+                      section?: number;
+                    }
+                  | undefined;
+
+                const location = [
+                  metadata?.estimatedPage
+                    ? `Page ~${metadata.estimatedPage}${metadata.totalPages ? `/${metadata.totalPages}` : ""}`
+                    : null,
+                  metadata?.chunkIndex !== undefined
+                    ? `Chunk ${metadata.chunkIndex + 1}/${metadata.totalChunks ?? "?"}`
+                    : null,
+                  metadata?.section ? `Section ${metadata.section}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(", ");
+
+                return `[Citation ${index + 1}] Source: [${result.file.name}](/files/${result.file.id}) | ${location}\nContent: ${result.content}`;
+              })
+              .join("\n\n---\n\n");
+
+            return formattedResults;
+          } catch (error) {
+            console.error("Search error:", error);
+            return "Error searching the knowledge base.";
+          }
+        },
+      }),
+    };
+
+    const result = streamText({
+      model: modelWithMemory,
+      messages: await convertToModelMessages(sanitizedMessages),
+      tools: userTools,
+      system: `You are a helpful assistant with access to a knowledge base of uploaded documents.
+Always search the knowledge base first for relevant user queries.
+
+Response formatting contract (mandatory):
+1) Start with: "## Answer"
+2) Follow with: "## Key Points" as bullet list
+3) End with: "## Sources" when knowledge base context is used
+4) Keep tone concise, direct, and customer-ready
+
+Citation rules:
+- Use exact citation links from the retrieved context in markdown format.
+- If multiple docs are used, cite all relevant docs in Sources.
+- Never fabricate file names or page/chunk details.`,
+      stopWhen: stepCountIs(2),
+      onFinish: async ({ response, text, usage }: { response?: ResponseLike; text?: string; usage?: UsageLike }) => {
+        if (!chatId) return;
+
+        const { db } = await import("@/lib/db-config");
+        const { chatMessages } = await import("@/lib/db-schema");
+        const { nanoid } = await import("nanoid");
+
+        const lastUserMessage = messages[messages.length - 1];
+
+        try {
+          await db.insert(chatMessages).values({
+            id: lastUserMessage.id || nanoid(),
+            chatId,
+            role: lastUserMessage.role,
+            content: extractTextFromMessage(lastUserMessage),
+            parts: (lastUserMessage.parts ?? []) as never,
+          });
+
+          const assistantParts: Array<{
+            type: string;
+            text?: string;
+            toolName?: string;
+            args?: unknown;
+            toolCallId?: string;
+          }> = [];
+
+          const toolCalls = (response?.messages ?? []).flatMap((message) => {
+            const content = message.content;
+            if (!Array.isArray(content)) return [] as ToolCallLike[];
+            return content.filter(
+              (item): item is ToolCallLike =>
+                typeof item === "object" && item !== null && "type" in item && (item as ToolCallLike).type === "tool-call"
+            );
+          });
+
+          const hadKnowledgeLookup = toolCalls.some((call) => call.toolName === "searchKnowledgeBase");
+          const finalText = ensureStructuredAnswer(text ?? "", hadKnowledgeLookup);
+
+          if (finalText) {
+            assistantParts.push({ type: "text", text: finalText });
+          }
+
+          for (const call of toolCalls) {
+            assistantParts.push({
+              type: "tool-invocation",
+              toolName: call.toolName,
+              args: call.args,
+              toolCallId: call.toolCallId,
+            });
+          }
+
+          await db.insert(chatMessages).values({
+            id: nanoid(),
+            chatId,
+            role: "assistant",
+            content: finalText,
+            parts: assistantParts as never,
+          });
+
+          if (usage?.inputTokens && usage.inputTokens > 0) {
+            await recordUsageEvent({
+              userId,
+              metric: "model_input_tokens",
+              quantity: usage.inputTokens,
+              unit: "tokens",
+              sourceType: "chat",
+              sourceId: chatId,
+              isEstimated: false,
+            });
+          }
+
+          if (usage?.outputTokens && usage.outputTokens > 0) {
+            await recordUsageEvent({
+              userId,
+              metric: "model_output_tokens",
+              quantity: usage.outputTokens,
+              unit: "tokens",
+              sourceType: "chat",
+              sourceId: chatId,
+              isEstimated: false,
+            });
+          }
+        } catch (error) {
+          console.error("Failed to save chat or usage in onFinish", error);
+        }
+      },
+    });
+
+    return result.toUIMessageStreamResponse();
+  } catch (error) {
+    console.error("Error streaming chat completion:", error);
+    return new Response("Failed to stream chat completion", { status: 500 });
+  }
 }

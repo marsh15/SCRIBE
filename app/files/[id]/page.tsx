@@ -17,7 +17,6 @@ import {
     HardDrive,
     Layers,
     Eye,
-    BookOpen,
     ExternalLink,
 } from "lucide-react";
 
@@ -122,6 +121,7 @@ export default function FileViewer() {
     }
 
     const { file, chunks, extractedText } = data;
+    const fileStatus = file.status || "ready";
     const canPreview = isPdfFile(file.type, file.name) || isTextViewable(file.type, file.name);
 
     return (
@@ -208,7 +208,18 @@ export default function FileViewer() {
                                         <Layers className="w-3 h-3" />
                                         {chunks.length} chunk{chunks.length !== 1 ? "s" : ""}
                                     </span>
+                                    <span className={`px-1.5 py-0.5 rounded-sm uppercase ${fileStatus === "ready"
+                                        ? "bg-[#00C4A0]/15 text-[#00C4A0]"
+                                        : fileStatus === "failed"
+                                            ? "bg-destructive/10 text-destructive"
+                                            : "bg-muted text-muted-foreground"
+                                        }`}>
+                                        {fileStatus}
+                                    </span>
                                 </div>
+                                {fileStatus === "failed" && file.processingError && (
+                                    <p className="mt-2 text-xs text-destructive/80">{file.processingError}</p>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -219,7 +230,15 @@ export default function FileViewer() {
                     {activeTab === "preview" && canPreview && (
                         <div className="h-full px-6 sm:px-12 pb-4">
                             <div className="max-w-5xl mx-auto h-full">
-                                {isPdfFile(file.type, file.name) ? (
+                                {fileStatus !== "ready" ? (
+                                    <div className="h-full rounded-sm border border-border/50 bg-card p-6 flex items-center justify-center">
+                                        <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                                            {fileStatus === "failed"
+                                                ? "Indexing failed. Please retry upload."
+                                                : "File is being indexed. Preview will be available when processing completes."}
+                                        </p>
+                                    </div>
+                                ) : isPdfFile(file.type, file.name) ? (
                                     /* PDF Viewer — with fallback if no stored data */
                                     extractedText || chunks.length > 0 ? (
                                         <div className="h-full flex flex-col">
