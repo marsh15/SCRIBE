@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { PLAN_CATALOG, type PlanCode } from "@/lib/billing/plans";
 
@@ -69,6 +70,7 @@ function Meter({ label, used, limit }: { label: string; used: number; limit: num
 }
 
 export default function BillingSettingsPage() {
+  const router = useRouter();
   const [planCode, setPlanCode] = useState<PlanCode>("pro");
   const [currency, setCurrency] = useState<"INR" | "USD">("INR");
   const [usage, setUsage] = useState<UsageResponse | null>(null);
@@ -186,6 +188,8 @@ export default function BillingSettingsPage() {
         modal: {
           ondismiss: () => {
             setLoading(false);
+            // Clean up URL params so back/forward navigation works
+            window.history.replaceState({}, "", "/settings/billing");
           },
         },
       };
@@ -219,6 +223,12 @@ export default function BillingSettingsPage() {
       <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
 
       <div className="mx-auto max-w-5xl px-6 py-10">
+        <button
+          onClick={() => router.back()}
+          className="mb-4 flex items-center gap-1 text-sm font-mono uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+        >
+          ← Back
+        </button>
         <h1 className="font-serif text-4xl">Billing & Usage</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Track current cycle usage and manage subscriptions.

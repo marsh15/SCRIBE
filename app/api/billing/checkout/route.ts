@@ -32,7 +32,15 @@ export async function POST(req: Request) {
 
     const userId = await getUserId();
     const user = await currentUser();
-    const parsed = requestSchema.safeParse(await req.json());
+
+    let body;
+    try {
+      body = await req.json();
+    } catch (e) {
+      return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
+    }
+
+    const parsed = requestSchema.safeParse(body);
 
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
@@ -98,7 +106,12 @@ export async function POST(req: Request) {
       order,
     });
   } catch (error) {
-    console.error("Billing checkout error:", error);
-    return NextResponse.json({ error: "Failed to create checkout session" }, { status: 500 });
+    const message = error instanceof Error ? error.message : String(error);
+    const stack = error instanceof Error ? error.stack : undefined;
+    console.error("Billing checkout error:", { message, stack });
+    return NextResponse.json(
+      { error: "Failed to create checkout session", detail: message },
+      { status: 500 }
+    );
   }
 }
