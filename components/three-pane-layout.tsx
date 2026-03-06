@@ -21,7 +21,7 @@ const DEFAULT_LAYOUT = {
   inspector: 26,
 };
 
-const STORAGE_KEY = "scribe-layout-v2";
+const STORAGE_KEY = "scribe-layout-v3";
 
 function ResizeHandle() {
   return (
@@ -38,6 +38,10 @@ function ResizeHandle() {
       </div>
     </Separator>
   );
+}
+
+function isLayoutValid(l: { sidebar: number; main: number; inspector: number }) {
+  return l.sidebar >= 14 && l.main >= 35 && l.inspector >= 18;
 }
 
 export function ThreePaneLayout({
@@ -59,11 +63,18 @@ export function ThreePaneLayout({
         typeof parsed.main === "number" &&
         typeof parsed.inspector === "number"
       ) {
-        setLayout({
+        const candidate = {
           sidebar: parsed.sidebar,
           main: parsed.main,
           inspector: parsed.inspector,
-        });
+        };
+        // Only restore if all panels meet minimum sizes
+        if (isLayoutValid(candidate)) {
+          setLayout(candidate);
+        } else {
+          // Corrupted layout — clear it and use defaults
+          window.localStorage.removeItem(STORAGE_KEY);
+        }
       }
     } catch {
       // ignore invalid persisted layout
