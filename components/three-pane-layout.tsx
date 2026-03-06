@@ -21,7 +21,7 @@ const DEFAULT_LAYOUT = {
   inspector: 26,
 };
 
-const STORAGE_KEY = "scribe-layout-v3";
+const STORAGE_KEY = "scribe-layout-v8";
 
 function ResizeHandle() {
   return (
@@ -51,6 +51,7 @@ export function ThreePaneLayout({
 }: ThreePaneLayoutProps) {
   const groupRef = useGroupRef();
   const [layout, setLayout] = useState(DEFAULT_LAYOUT);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     try {
@@ -68,16 +69,14 @@ export function ThreePaneLayout({
           main: parsed.main,
           inspector: parsed.inspector,
         };
-        // Only restore if all panels meet minimum sizes
         if (isLayoutValid(candidate)) {
           setLayout(candidate);
-        } else {
-          // Corrupted layout — clear it and use defaults
-          window.localStorage.removeItem(STORAGE_KEY);
         }
       }
     } catch {
-      // ignore invalid persisted layout
+      window.localStorage.removeItem(STORAGE_KEY);
+    } finally {
+      setMounted(true);
     }
   }, []);
 
@@ -86,10 +85,20 @@ export function ThreePaneLayout({
     setLayout(DEFAULT_LAYOUT);
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_LAYOUT));
-    } catch {
-      // ignore storage errors
-    }
+    } catch { }
   };
+
+  if (!mounted) {
+    return (
+      <div className="h-screen w-full bg-background flex flex-col items-center justify-center p-4">
+        <div className="flex gap-2 items-center opacity-50">
+          <div className="w-2 h-2 rounded-full bg-muted-foreground animate-pulse" />
+          <div className="w-2 h-2 rounded-full bg-muted-foreground animate-pulse [animation-delay:0.2s]" />
+          <div className="w-2 h-2 rounded-full bg-muted-foreground animate-pulse [animation-delay:0.4s]" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen w-full bg-background text-foreground overflow-hidden relative">
@@ -115,13 +124,11 @@ export function ThreePaneLayout({
           setLayout(nextLayout as typeof DEFAULT_LAYOUT);
           try {
             window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextLayout));
-          } catch {
-            // ignore storage errors
-          }
+          } catch { }
         }}
       >
         {/* Left Sidebar */}
-        <Panel defaultSize={DEFAULT_LAYOUT.sidebar} minSize={14} maxSize={30} id="sidebar">
+        <Panel id="sidebar" defaultSize={`${layout.sidebar}%`} minSize="14%" maxSize="30%">
           <div className="h-full bg-card overflow-hidden">
             <Sidebar />
           </div>
@@ -130,7 +137,7 @@ export function ThreePaneLayout({
         <ResizeHandle />
 
         {/* Main Content (Chat) */}
-        <Panel defaultSize={DEFAULT_LAYOUT.main} minSize={35} id="main">
+        <Panel id="main" defaultSize={`${layout.main}%`} minSize="35%">
           <div className="h-full flex flex-col min-w-0 bg-background overflow-hidden">
             {children}
           </div>
@@ -139,7 +146,7 @@ export function ThreePaneLayout({
         <ResizeHandle />
 
         {/* Right Inspector */}
-        <Panel defaultSize={DEFAULT_LAYOUT.inspector} minSize={18} maxSize={38} id="inspector">
+        <Panel id="inspector" defaultSize={`${layout.inspector}%`} minSize="18%" maxSize="38%">
           <div className="h-full bg-card overflow-hidden">
             <RAGInspector messages={messages} status={status} />
           </div>
