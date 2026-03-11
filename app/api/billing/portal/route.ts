@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getUserId } from "@/lib/auth";
 import { flags } from "@/lib/flags";
-import { createStripePortalSession } from "@/lib/billing/gateways/stripe";
+
 import { createRazorpayPortalLink } from "@/lib/billing/gateways/razorpay";
 
 const schema = z.object({
-  gateway: z.enum(["stripe", "razorpay"]),
+  gateway: z.enum(["razorpay"]),
   returnUrl: z.string().url().optional(),
 });
 
@@ -27,10 +27,7 @@ export async function POST(req: Request) {
     const appOrigin = process.env.NEXT_PUBLIC_APP_URL ?? requestUrl.origin;
     const returnUrl = parsed.data.returnUrl ?? `${appOrigin}/settings/billing`;
 
-    const portalUrl =
-      parsed.data.gateway === "stripe"
-        ? await createStripePortalSession(userId, returnUrl)
-        : await createRazorpayPortalLink();
+    const portalUrl = await createRazorpayPortalLink();
 
     return NextResponse.json({ ok: true, url: portalUrl });
   } catch (error) {

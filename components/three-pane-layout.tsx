@@ -101,13 +101,13 @@ export function ThreePaneLayout({
   }
 
   return (
-    <div className="h-screen w-full bg-background text-foreground overflow-hidden relative">
-      <div className="absolute top-2 right-2 z-20">
+    <div className="h-screen w-full bg-background text-foreground overflow-hidden flex flex-col">
+      <div className="flex items-center justify-end px-2 py-1 bg-muted/20 border-b border-border/40 h-8 shrink-0">
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          className="h-7 px-2 text-[10px] font-mono uppercase tracking-wider opacity-70 hover:opacity-100 rounded-sm"
+          className="h-6 px-2 text-[10px] font-mono uppercase tracking-wider opacity-60 hover:opacity-100 hover:bg-muted rounded-[2px]"
           onClick={handleResetLayout}
           title="Reset panel layout"
         >

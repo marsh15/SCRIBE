@@ -132,18 +132,47 @@ export default function DocumentUpload() {
         return;
       }
 
+      // File is queued — now trigger ingestion and wait for it
       setMessage({
         type: "success",
-        text:
-          completeJson.file?.status === "queued"
-            ? "File uploaded and queued for indexing. Processing will continue in background."
-            : "File uploaded successfully.",
+        text: "File uploaded. Processing document...",
       });
 
-      // Best-effort worker trigger for non-cron environments
-      fetch("/api/internal/ingest/run?limit=1", { method: "POST" }).catch(() => {
-        // no-op; ingestion may be driven by cron
-      });
+      try {
+        const ingestRes = await fetch("/api/internal/ingest/run?limit=1", {
+          method: "POST",
+        });
+        const ingestJson = (await ingestRes.json()) as {
+          ok?: boolean;
+          results?: Array<{ processed?: boolean; reason?: string }>;
+        };
+
+        if (ingestRes.ok && ingestJson.ok) {
+          const firstResult = ingestJson.results?.[0];
+          if (firstResult?.processed) {
+            setMessage({
+              type: "success",
+              text: "File uploaded and indexed successfully!",
+            });
+          } else {
+            setMessage({
+              type: "error",
+              text: firstResult?.reason || "Processing failed. The document may be unsupported.",
+            });
+          }
+        } else {
+          setMessage({
+            type: "error",
+            text: "Document processing failed. Please try again.",
+          });
+        }
+      } catch {
+        // Ingestion trigger failed — file is still queued, polling will pick it up
+        setMessage({
+          type: "success",
+          text: "File uploaded and queued for indexing. Processing will continue in the background.",
+        });
+      }
 
       if (fileInputRef.current) fileInputRef.current.value = "";
       await fetchFiles();
@@ -290,7 +319,10 @@ export default function DocumentUpload() {
                         or drag and drop
                       </p>
                       <p className="font-mono text-[10px] text-muted-foreground mt-1.5 uppercase tracking-wider">
-                        PDF • TXT • MD • CSV • DOCX — Up to 100MB (plan-based)
+                        PDF • TXT • MD • CSV • DOCX
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-3 max-w-sm mx-auto bg-muted/50 p-2 rounded border border-border/50">
+                        <strong className="text-foreground">MVP Limit:</strong> Optimized for articles and essays. Files over ~25 pages may fail due to free-tier processing timeouts.
                       </p>
                     </div>
                   </div>
@@ -386,13 +418,12 @@ export default function DocumentUpload() {
                               {formatDate(file.createdAt)}
                             </span>
                             <span
-                              className={`font-mono text-[10px] uppercase px-1.5 py-0.5 rounded-sm ${
-                                status === "ready"
-                                  ? "bg-[#00C4A0]/15 text-[#00C4A0]"
-                                  : status === "failed"
-                                    ? "bg-destructive/10 text-destructive"
-                                    : "bg-muted text-muted-foreground"
-                              }`}
+                              className={`font-mono text-[10px] uppercase px-1.5 py-0.5 rounded-sm ${status === "ready"
+                                ? "bg-[#00C4A0]/15 text-[#00C4A0]"
+                                : status === "failed"
+                                  ? "bg-destructive/10 text-destructive"
+                                  : "bg-muted text-muted-foreground"
+                                }`}
                             >
                               {status}
                             </span>

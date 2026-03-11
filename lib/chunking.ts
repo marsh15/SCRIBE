@@ -1,8 +1,8 @@
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 
 export const textsplitter = new RecursiveCharacterTextSplitter({
-    chunkSize: 1000,
-    chunkOverlap: 200,
+    chunkSize: 4000,
+    chunkOverlap: 400,
     separators: ["\n\n", "\n", " ", ""],
 });
 

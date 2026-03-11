@@ -37,8 +37,6 @@ export async function upsertGatewayCustomerId(input: {
   await db
     .update(billingCustomers)
     .set({
-      stripeCustomerId:
-        input.gateway === "stripe" ? input.customerId : current.stripeCustomerId,
       razorpayCustomerId:
         input.gateway === "razorpay" ? input.customerId : current.razorpayCustomerId,
       defaultGateway: input.gateway,

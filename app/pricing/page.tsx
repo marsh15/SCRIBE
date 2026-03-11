@@ -24,17 +24,15 @@ export default function PricingPage() {
           </div>
           <div className="inline-flex rounded-sm border border-border p-1">
             <button
-              className={`px-3 py-1.5 text-xs font-mono uppercase tracking-wider rounded-sm ${
-                currency === "INR" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
-              }`}
+              className={`px-3 py-1.5 text-xs font-mono uppercase tracking-wider rounded-sm ${currency === "INR" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                }`}
               onClick={() => setCurrency("INR")}
             >
               INR
             </button>
             <button
-              className={`px-3 py-1.5 text-xs font-mono uppercase tracking-wider rounded-sm ${
-                currency === "USD" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
-              }`}
+              className={`px-3 py-1.5 text-xs font-mono uppercase tracking-wider rounded-sm ${currency === "USD" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                }`}
               onClick={() => setCurrency("USD")}
             >
               USD
@@ -48,9 +46,8 @@ export default function PricingPage() {
             return (
               <article
                 key={plan.code}
-                className={`rounded-sm border p-5 ${
-                  plan.code === "pro" ? "border-[#00C4A0]/50 bg-card" : "border-border bg-card"
-                }`}
+                className={`rounded-sm border p-5 ${plan.code === "pro" ? "border-[#00C4A0]/50 bg-card" : "border-border bg-card"
+                  }`}
               >
                 <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">{plan.name}</p>
                 <h2 className="mt-3 text-4xl font-serif">
@@ -61,7 +58,7 @@ export default function PricingPage() {
                 <p className="mt-3 text-sm text-muted-foreground">{plan.description}</p>
 
                 <ul className="mt-4 space-y-2 text-sm">
-                  <li>Max file size: {plan.limits.maxFileSizeMb} MB</li>
+                  <li>Max file size: ~{plan.limits.maxFileSizeMb} Pages</li>
                   <li>Storage: {plan.limits.storageGb} GB</li>
                   <li>Input tokens: {plan.limits.includedModelInputTokens.toLocaleString()}</li>
                   <li>Output tokens: {plan.limits.includedModelOutputTokens.toLocaleString()}</li>

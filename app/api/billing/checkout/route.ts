@@ -8,12 +8,12 @@ import {
   type CurrencyCode,
   getGatewayPriceId,
 } from "@/lib/billing/plans";
-import { createStripeCheckoutSession } from "@/lib/billing/gateways/stripe";
+
 import { createRazorpayOrder } from "@/lib/billing/gateways/razorpay";
 
 const requestSchema = z.object({
   planCode: z.enum(["free", "pro", "team"]),
-  gateway: z.enum(["stripe", "razorpay"]),
+  gateway: z.enum(["razorpay"]),
   currency: z.enum(["INR", "USD"]).optional().default("INR"),
   successUrl: z.string().url(),
   cancelUrl: z.string().url(),
@@ -68,26 +68,7 @@ export async function POST(req: Request) {
       currency,
     };
 
-    if (gateway === "stripe") {
-      const session = await createStripeCheckoutSession({
-        userId,
-        email,
-        planName: plan.name,
-        amountInMinorUnit: toMinorUnit(currency, price),
-        currency,
-        priceId,
-        successUrl,
-        cancelUrl,
-        metadata,
-      });
 
-      return NextResponse.json({
-        ok: true,
-        gateway: "stripe",
-        checkoutUrl: session.url,
-        sessionId: session.sessionId,
-      });
-    }
 
     // Razorpay Standard Checkout — returns order details for inline modal
     const order = await createRazorpayOrder({

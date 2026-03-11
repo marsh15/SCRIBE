@@ -1,5 +1,5 @@
 export type PlanCode = "free" | "pro" | "team";
-export type BillingGateway = "stripe" | "razorpay";
+export type BillingGateway = "razorpay";
 export type CurrencyCode = "INR" | "USD";
 
 export interface PlanDefinition {
@@ -26,10 +26,10 @@ export const PLAN_CATALOG: Record<PlanCode, PlanDefinition> = {
     description: "Try Scribe with strict usage limits and no overage.",
     limits: {
       maxFileSizeMb: 25,
-      storageGb: 0.1,
-      includedModelInputTokens: 120_000,
-      includedModelOutputTokens: 30_000,
-      includedEmbeddingTokens: 100_000,
+      storageGb: 0.5,
+      includedModelInputTokens: 1_000_000,
+      includedModelOutputTokens: 300_000,
+      includedEmbeddingTokens: 1_000_000,
       allowOverage: false,
     },
   },
@@ -39,7 +39,7 @@ export const PLAN_CATALOG: Record<PlanCode, PlanDefinition> = {
     monthlyPrice: { INR: 149, USD: 3 },
     description: "For solo professionals with metered overage support.",
     limits: {
-      maxFileSizeMb: 100,
+      maxFileSizeMb: 25,
       storageGb: 5,
       includedModelInputTokens: 1_000_000,
       includedModelOutputTokens: 300_000,
@@ -53,7 +53,7 @@ export const PLAN_CATALOG: Record<PlanCode, PlanDefinition> = {
     monthlyPrice: { INR: 499, USD: 7 },
     description: "For teams that need higher quotas and faster throughput.",
     limits: {
-      maxFileSizeMb: 100,
+      maxFileSizeMb: 25,
       storageGb: 25,
       includedModelInputTokens: 5_000_000,
       includedModelOutputTokens: 1_500_000,
@@ -86,10 +86,6 @@ export function getGatewayPriceId(
   currency: CurrencyCode
 ): string {
   const lookup: Record<string, string | undefined> = {
-    "pro_stripe_INR": process.env.STRIPE_PRICE_PRO_INR,
-    "pro_stripe_USD": process.env.STRIPE_PRICE_PRO_USD,
-    "team_stripe_INR": process.env.STRIPE_PRICE_TEAM_INR,
-    "team_stripe_USD": process.env.STRIPE_PRICE_TEAM_USD,
     "pro_razorpay_INR": process.env.RAZORPAY_PLAN_PRO_INR,
     "team_razorpay_INR": process.env.RAZORPAY_PLAN_TEAM_INR,
   };

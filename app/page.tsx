@@ -68,7 +68,7 @@ export default function Home() {
             <Database className="h-4 w-4 text-[#00C4A0]" />
             <h2 className="mt-3 text-sm font-mono uppercase tracking-wider">Document Ingestion</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Upload PDF, TXT, MD, CSV, and DOCX up to 100 MB based on plan.
+              Upload PDF, TXT, MD, CSV, and DOCX (Recommended max length: ~25 pages).
             </p>
           </article>
           <article className="rounded-sm border border-border bg-card p-4">

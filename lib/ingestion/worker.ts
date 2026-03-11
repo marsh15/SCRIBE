@@ -19,7 +19,7 @@ function estimateTokens(text: string) {
   return Math.ceil(text.length / 4);
 }
 
-async function processSingleJob(jobId: number) {
+export async function processSingleJob(jobId: number) {
   const job = await db.query.ingestionJobs.findFirst({
     where: eq(ingestionJobs.id, jobId),
   });

@@ -126,12 +126,12 @@ export async function POST(req: Request) {
               .map((result, index) => {
                 const metadata = result.metadata as
                   | {
-                      estimatedPage?: number;
-                      totalPages?: number;
-                      chunkIndex?: number;
-                      totalChunks?: number;
-                      section?: number;
-                    }
+                    estimatedPage?: number;
+                    totalPages?: number;
+                    chunkIndex?: number;
+                    totalChunks?: number;
+                    section?: number;
+                  }
                   | undefined;
 
                 const location = [
@@ -163,20 +163,25 @@ export async function POST(req: Request) {
       model: modelWithMemory,
       messages: await convertToModelMessages(sanitizedMessages),
       tools: userTools,
-      system: `You are a helpful assistant with access to a knowledge base of uploaded documents.
-Always search the knowledge base first for relevant user queries.
+      system: `You are Scribe AI, an assistant that answers questions using the user's uploaded documents.
 
-Response formatting contract (mandatory):
+CRITICAL RULE: You MUST call the searchKnowledgeBase tool on EVERY user message before responding. No exceptions.
+- Even if the question seems vague (e.g. "what is this about?", "summarize", "tell me about the book"), you MUST search.
+- For vague queries, use a broad search query like "summary overview introduction main topic".
+- NEVER respond with "I need more information" or "please specify". ALWAYS search first, then answer based on what you find.
+- If the search returns no results, tell the user their knowledge base appears empty and suggest uploading documents.
+
+Response formatting:
 1) Start with: "## Answer"
-2) Follow with: "## Key Points" as bullet list
-3) End with: "## Sources" when knowledge base context is used
-4) Keep tone concise, direct, and customer-ready
+2) Follow with: "## Key Points" as a bullet list
+3) End with: "## Sources" when knowledge base context is used (use the exact citation links from retrieved context)
+4) Keep tone concise, direct, and helpful
 
 Citation rules:
 - Use exact citation links from the retrieved context in markdown format.
 - If multiple docs are used, cite all relevant docs in Sources.
 - Never fabricate file names or page/chunk details.`,
-      stopWhen: stepCountIs(2),
+      stopWhen: stepCountIs(3),
       onFinish: async ({ response, text, usage }: { response?: ResponseLike; text?: string; usage?: UsageLike }) => {
         if (!chatId) return;
 

@@ -3,7 +3,7 @@
 // Free tier: 100 requests/minute. Vercel-compatible (pure HTTP fetch).
 
 const GOOGLE_API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY!;
-const MODEL = "models/gemini-embedding-001";
+const MODEL = "models/gemini-embedding-2-preview";
 const BASE_URL = `https://generativelanguage.googleapis.com/v1beta/${MODEL}`;
 
 const sanitizeInput = (text: string) => text.replace(/\s+/g, " ").trim();
@@ -72,10 +72,11 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
     const inputs = texts.map(sanitizeInput);
 
-    // batchEmbedContents accepts up to 100 texts per call.
-    // We send batches of 100 as fast as possible — if we hit
-    // the rate limit, fetchWithRetry handles the backoff.
-    const BATCH_SIZE = 100;
+    // Gemini Free Tier restricts to 15 Requests Per Minute.
+    // WARNING: `batchEmbedContents` counts each *string* in the batch as 1 request!
+    // So a batch of 15 strings instantly maxes out the 1-minute quota.
+    // To prevent 429 errors that crash Vercel, we send 14 chunks and wait a full minute.
+    const BATCH_SIZE = 14;
     const allEmbeddings: number[][] = [];
 
     for (let i = 0; i < inputs.length; i += BATCH_SIZE) {
@@ -88,6 +89,15 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
 
         const embeddings = await batchEmbedMany(batch);
         allEmbeddings.push(...embeddings);
+
+        // Sleep 61 seconds to refresh the 15 RPM quota completely.
+        // NOTE: This means a 200-chunk book will take ~15 minutes to embed.
+        // Vercel serverless functions will timeout (max 60s). This script is designed
+        // to be run locally or via a long-running background worker for huge files.
+        if (i + BATCH_SIZE < inputs.length) {
+            console.log(`[Embeddings] Sleeping 61s to respect 15 RPM limit...`);
+            await sleep(61000);
+        }
     }
 
     return allEmbeddings;

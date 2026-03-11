@@ -65,7 +65,6 @@ export const billingCustomers = pgTable(
   {
     id: serial("id").primaryKey(),
     userId: text("user_id").notNull(),
-    stripeCustomerId: text("stripe_customer_id"),
     razorpayCustomerId: text("razorpay_customer_id"),
     defaultGateway: text("default_gateway"), // stripe | razorpay
     billingCountry: text("billing_country"),

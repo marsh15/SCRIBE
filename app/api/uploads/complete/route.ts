@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
 import { db } from "@/lib/db-config";
 import { files, ingestionJobs } from "@/lib/db-schema";
 import { getUserId } from "@/lib/auth";
 import { verifyUploadToken } from "@/lib/uploads/signature";
 import { uploadBufferToBlob } from "@/lib/storage/blob";
-import { processQueuedIngestionJobs } from "@/lib/ingestion/worker";
 import { recordUsageEvent } from "@/lib/billing/usage";
 
 const DEV_FILEDATA_MAX_BYTES = 25 * 1024 * 1024;
@@ -106,48 +104,13 @@ export async function POST(req: Request) {
       isEstimated: true,
     });
 
-    // Always process the job inline so the user gets immediate feedback.
-    // The async flag only controls whether cron ALSO sweeps the queue.
-    let ingestionResult;
-    try {
-      ingestionResult = await processQueuedIngestionJobs(1);
-    } catch (ingestionError) {
-      console.error("Inline ingestion failed (will retry via cron):", ingestionError);
-      ingestionResult = null;
-    }
-
-    // Check if the file ended up in a failed state after processing
-    const updatedFile = await db.query.files.findFirst({
-      where: eq(files.id, insertedFile.id),
-    });
-
-    const fileStatus = updatedFile?.status ?? insertedFile.status;
-    const processingError = updatedFile?.processingError ?? null;
-
-    if (fileStatus === "failed") {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: processingError || "Document processing failed. Please try again.",
-          file: {
-            id: insertedFile.id,
-            name: insertedFile.name,
-            size: insertedFile.size,
-            status: fileStatus,
-          },
-          ingestionJobId: job.id,
-        },
-        { status: 422 }
-      );
-    }
-
     return NextResponse.json({
       ok: true,
       file: {
         id: insertedFile.id,
         name: insertedFile.name,
         size: insertedFile.size,
-        status: fileStatus,
+        status: insertedFile.status,
       },
       ingestionJobId: job.id,
     });

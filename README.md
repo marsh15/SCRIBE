@@ -7,7 +7,7 @@ SCRIBE is an intelligent document management and chatbot application that allows
 ## Features
 - **SaaS Billing Ready** — INR-first pricing with dual gateways (Stripe + Razorpay), plan limits, and usage metering APIs.
 - **Async Ingestion Queue** — Uploads are queued and processed in the background with retry support.
-- **Large File Support** — Up to 100 MB uploads on paid plans (Blob-backed).
+- **Large File Support** — Processes documents and essays up to ~25 pages reliably on free tier.
 - **Multi-Document RAG** — Upload multiple documents and query across all of them simultaneously. The AI references up to 10 relevant chunks across your entire knowledge base.
 - **User Session Isolation** — Each Clerk-authenticated user has a fully isolated workspace. Files, chats, and search results are scoped per-user.
 - **Document Viewer** — Click any file in the Knowledge Base to view it in a dedicated page with:
@@ -126,7 +126,7 @@ Create a `.env` or `.env.local` file:
 ## Deployment
 The app is deployed on **Vercel**. Push to `main` to trigger auto-deploy.
 
-> **Note:** For reliable 100 MB ingestion, use Blob-backed uploads plus worker/cron execution (`/api/internal/ingest/run`) on a plan/runtime with sufficient execution time.
+> **Note:** For reliable ingestion, ensure documents are under ~25 pages to avoid Vercel timeouts on the free tier.
 
 ## License
 MIT License
