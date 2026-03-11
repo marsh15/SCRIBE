@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, BookOpen, Database, MessageSquare, Shield, Zap } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { flags } from "@/lib/flags";
 import { redirect } from "next/navigation";
 
@@ -19,6 +20,7 @@ export default function Home() {
             <span className="font-serif text-2xl">Scribe</span>
           </div>
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <Link
               href="/pricing"
               className="rounded-sm border border-border px-3 py-2 text-xs font-mono uppercase tracking-wider hover:bg-muted transition-colors"
@@ -34,29 +36,29 @@ export default function Home() {
           </div>
         </header>
 
-        <section className="pt-14 pb-10">
-          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground mb-5">
+        <section className="pt-14 pb-10 animate-fade-up">
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground mb-5 animate-scale-in [animation-delay:100ms] opacity-0">
             AI Knowledge Workspace
           </p>
-          <h1 className="font-serif text-4xl sm:text-6xl leading-tight max-w-4xl">
+          <h1 className="font-serif text-4xl sm:text-6xl leading-tight max-w-4xl animate-fade-up [animation-delay:200ms] opacity-0">
             Upload documents, ask better questions, and get structured answers with source citations.
           </h1>
-          <p className="mt-6 max-w-2xl text-base text-muted-foreground leading-relaxed">
+          <p className="mt-6 max-w-2xl text-base text-muted-foreground leading-relaxed animate-fade-up [animation-delay:300ms] opacity-0">
             Scribe indexes your files, runs semantic retrieval across your entire knowledge base,
             and returns customer-ready responses in clear sections.
           </p>
 
-          <div className="mt-8 flex flex-wrap gap-3">
+          <div className="mt-8 flex flex-wrap gap-3 animate-fade-up [animation-delay:400ms] opacity-0">
             <Link
               href="/sign-in?redirect_url=/chat"
-              className="inline-flex items-center gap-2 rounded-sm bg-primary text-primary-foreground px-4 py-2.5 font-mono text-xs uppercase tracking-wider"
+              className="inline-flex items-center gap-2 rounded-sm bg-primary text-primary-foreground px-4 py-2.5 font-mono text-xs uppercase tracking-wider hover-lift"
             >
               Try It Now
               <ArrowRight className="h-3.5 w-3.5" />
             </Link>
             <Link
               href="/pricing"
-              className="inline-flex items-center gap-2 rounded-sm border border-border px-4 py-2.5 font-mono text-xs uppercase tracking-wider hover:bg-muted"
+              className="inline-flex items-center gap-2 rounded-sm border border-border px-4 py-2.5 font-mono text-xs uppercase tracking-wider hover:bg-muted hover-lift"
             >
               See Pricing
             </Link>
@@ -64,28 +66,28 @@ export default function Home() {
         </section>
 
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 py-6">
-          <article className="rounded-sm border border-border bg-card p-4">
+          <article className="rounded-sm border border-border bg-card p-4 animate-scale-in opacity-0 [animation-delay:500ms] glow-hover hover-lift cursor-default">
             <Database className="h-4 w-4 text-[#00C4A0]" />
             <h2 className="mt-3 text-sm font-mono uppercase tracking-wider">Document Ingestion</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               Upload PDF, TXT, MD, CSV, and DOCX (Recommended max length: ~25 pages).
             </p>
           </article>
-          <article className="rounded-sm border border-border bg-card p-4">
+          <article className="rounded-sm border border-border bg-card p-4 animate-scale-in opacity-0 [animation-delay:600ms] glow-hover hover-lift cursor-default">
             <MessageSquare className="h-4 w-4 text-[#00C4A0]" />
             <h2 className="mt-3 text-sm font-mono uppercase tracking-wider">Structured Replies</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               Responses are formatted into Answer, Key Points, and Sources.
             </p>
           </article>
-          <article className="rounded-sm border border-border bg-card p-4">
+          <article className="rounded-sm border border-border bg-card p-4 animate-scale-in opacity-0 [animation-delay:700ms] glow-hover hover-lift cursor-default">
             <Zap className="h-4 w-4 text-[#00C4A0]" />
             <h2 className="mt-3 text-sm font-mono uppercase tracking-wider">Three-Pane Workflow</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               Chat, navigation, and live RAG inspector with resizable constraints.
             </p>
           </article>
-          <article className="rounded-sm border border-border bg-card p-4">
+          <article className="rounded-sm border border-border bg-card p-4 animate-scale-in opacity-0 [animation-delay:800ms] glow-hover hover-lift cursor-default">
             <Shield className="h-4 w-4 text-[#00C4A0]" />
             <h2 className="mt-3 text-sm font-mono uppercase tracking-wider">Per-User Isolation</h2>
             <p className="mt-2 text-sm text-muted-foreground">
@@ -94,7 +96,7 @@ export default function Home() {
           </article>
         </section>
 
-        <section className="mt-10 rounded-sm border border-border bg-gradient-to-r from-card to-muted p-6 sm:p-8">
+        <section className="mt-10 rounded-sm border border-border bg-gradient-to-r from-card to-muted p-6 sm:p-8 animate-fade-up opacity-0 [animation-delay:900ms] hover-lift">
           <h3 className="font-serif text-3xl">How it works</h3>
           <ol className="mt-4 grid gap-3 sm:grid-cols-3 text-sm text-muted-foreground">
             <li className="rounded-sm bg-background/70 border border-border p-3">

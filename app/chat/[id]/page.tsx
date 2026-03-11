@@ -180,15 +180,15 @@ function ChatInterface({
         <div className="max-w-3xl mx-auto py-8 space-y-8">
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center text-center mt-32 space-y-6">
-              <h1 className="font-serif text-4xl text-foreground">
+              <h1 className="font-serif text-4xl text-foreground animate-fade-up">
                 Query the knowledge base.
               </h1>
-              <p className="font-sans text-muted-foreground max-w-md">
+              <p className="font-sans text-muted-foreground max-w-md animate-fade-up [animation-delay:100ms] opacity-0">
                 Ask questions about your indexed documents. The engine will
                 retrieve relevant chunks and synthesize a response with exact
                 citations.
               </p>
-              <div className="w-full max-w-xl rounded-sm border border-border bg-card p-4 text-left">
+              <div className="w-full max-w-xl rounded-sm border border-border bg-card p-4 text-left animate-scale-in [animation-delay:200ms] opacity-0 glow-hover">
                 <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
                   Try a sample prompt
                 </p>
@@ -285,13 +285,13 @@ function ChatInterface({
         <div className="max-w-3xl mx-auto relative">
           <form
             onSubmit={handleSubmit}
-            className="relative bg-card border border-border/50 rounded-md shadow-sm overflow-hidden focus-within:ring-1 focus-within:ring-ring focus-within:border-ring transition-all"
+            className="relative bg-card border border-border/50 rounded-md shadow-sm overflow-hidden focus-within:ring-1 focus-within:ring-ring focus-within:border-ring transition-all duration-300 hover:border-border/80"
           >
             <textarea
               value={input}
               onChange={handleInputChange}
               placeholder="Ask about your documents..."
-              className="w-full min-h-[56px] max-h-48 resize-none bg-transparent py-4 pl-4 pr-12 text-sm font-sans focus:outline-none scrollbar-none"
+              className="w-full min-h-[56px] max-h-48 resize-none bg-transparent py-4 pl-4 pr-12 text-sm font-sans focus:outline-none scrollbar-none transition-colors"
               rows={1}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {

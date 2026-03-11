@@ -249,12 +249,12 @@ export function Sidebar() {
                     >
                       <Link
                         href={`/chat/${chat.id}`}
-                        className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden mr-2"
+                        className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden mr-2 group/link"
                       >
                         <MessageSquare
-                          className={`w-3.5 h-3.5 shrink-0 ${isActive ? "text-[#00C4A0]" : "text-muted-foreground"}`}
+                          className={`w-3.5 h-3.5 shrink-0 transition-transform group-hover/link:scale-110 ${isActive ? "text-[#00C4A0]" : "text-muted-foreground"}`}
                         />
-                        <span className={`truncate font-sans text-sm ${isActive ? "font-medium" : ""}`}>
+                        <span className={`truncate font-sans text-sm transition-colors group-hover/link:text-foreground ${isActive ? "font-medium" : ""}`}>
                           {chat.title || "Untitled Chat"}
                         </span>
                       </Link>
@@ -344,7 +344,7 @@ export function Sidebar() {
                         className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden mr-2 group/link"
                         title="View document"
                       >
-                        <span className="text-muted-foreground shrink-0 group-hover/link:text-[#00C4A0] transition-colors">
+                        <span className="text-muted-foreground shrink-0 group-hover/link:text-[#00C4A0] transition-colors group-hover/link:scale-110">
                           {getFileIcon(file.type, file.name)}
                         </span>
                         <span className="truncate font-sans text-foreground/80 text-sm group-hover/link:text-foreground transition-colors">

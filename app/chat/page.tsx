@@ -94,7 +94,7 @@ export default function Ragchatbot() {
                 retrieve relevant chunks and synthesize a response with exact
                 citations.
               </p>
-              <div className="w-full max-w-xl rounded-sm border border-border bg-card p-4 text-left">
+              <div className="w-full max-w-xl rounded-sm border border-border bg-card p-4 text-left animate-scale-in [animation-delay:400ms] opacity-0 glow-hover">
                 <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
                   Onboarding Checklist
                 </p>
@@ -197,13 +197,13 @@ export default function Ragchatbot() {
         <div className="max-w-3xl mx-auto relative">
           <form
             onSubmit={handleSubmit}
-            className="relative bg-card border border-border/50 rounded-md shadow-sm overflow-hidden focus-within:ring-1 focus-within:ring-ring focus-within:border-ring transition-all"
+            className="relative bg-card border border-border/50 rounded-md shadow-sm overflow-hidden focus-within:ring-1 focus-within:ring-ring focus-within:border-ring transition-all duration-300 hover:border-border/80"
           >
             <textarea
               value={input}
               onChange={handleInputChange}
               placeholder="Ask about your documents..."
-              className="w-full min-h-[56px] max-h-48 resize-none bg-transparent py-4 pl-4 pr-12 text-sm font-sans focus:outline-none scrollbar-none"
+              className="w-full min-h-[56px] max-h-48 resize-none bg-transparent py-4 pl-4 pr-12 text-sm font-sans focus:outline-none scrollbar-none transition-colors"
               rows={1}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { PLAN_CATALOG } from "@/lib/billing/plans";
 
 const CURRENCY_SYMBOL: Record<"INR" | "USD", string> = {
@@ -22,21 +23,24 @@ export default function PricingPage() {
             <p className="text-[11px] font-mono uppercase tracking-[0.16em] text-muted-foreground">Pricing</p>
             <h1 className="mt-2 font-serif text-4xl">Affordable plans for production RAG</h1>
           </div>
-          <div className="inline-flex rounded-sm border border-border p-1">
-            <button
-              className={`px-3 py-1.5 text-xs font-mono uppercase tracking-wider rounded-sm ${currency === "INR" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
-                }`}
-              onClick={() => setCurrency("INR")}
-            >
-              INR
-            </button>
-            <button
-              className={`px-3 py-1.5 text-xs font-mono uppercase tracking-wider rounded-sm ${currency === "USD" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
-                }`}
-              onClick={() => setCurrency("USD")}
-            >
-              USD
-            </button>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <div className="inline-flex rounded-sm border border-border p-1">
+              <button
+                className={`px-3 py-1.5 text-xs font-mono uppercase tracking-wider rounded-sm ${currency === "INR" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                  }`}
+                onClick={() => setCurrency("INR")}
+              >
+                INR
+              </button>
+              <button
+                className={`px-3 py-1.5 text-xs font-mono uppercase tracking-wider rounded-sm ${currency === "USD" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                  }`}
+                onClick={() => setCurrency("USD")}
+              >
+                USD
+              </button>
+            </div>
           </div>
         </header>
 
