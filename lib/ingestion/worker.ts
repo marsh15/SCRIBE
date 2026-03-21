@@ -155,18 +155,24 @@ export async function processSingleJob(jobId: number) {
   );
   if (!job) return { processed: false, reason: "job_not_found" };
 
-  const [updated] = await withDatabaseRetry("markIngestionJobProcessing", () =>
-    db
-      .update(ingestionJobs)
-      .set({
-        status: "processing",
-        attempts: job.attempts + 1,
-        startedAt: new Date(),
-        updatedAt: new Date(),
-        lastError: null,
-      })
-      .where(eq(ingestionJobs.id, job.id))
-      .returning()
+  const [[updated]] = await withDatabaseRetry("markIngestionJobProcessing", () =>
+    db.batch([
+      db
+        .update(ingestionJobs)
+        .set({
+          status: "processing",
+          attempts: job.attempts + 1,
+          startedAt: new Date(),
+          updatedAt: new Date(),
+          lastError: null,
+        })
+        .where(eq(ingestionJobs.id, job.id))
+        .returning(),
+      db
+        .update(files)
+        .set({ status: "processing" })
+        .where(eq(files.id, job.fileId)),
+    ])
   );
 
   const result = await ingestFile(updated.fileId);
