@@ -64,7 +64,15 @@ export async function createChat(title: string) {
 export async function deleteChat(id: string) {
     try {
         const userId = await getUserId();
-        // Only allow deleting own chats
+        const chat = await db.query.chats.findFirst({
+            where: and(eq(chats.id, id), eq(chats.userId, userId)),
+            columns: { id: true },
+        });
+
+        if (!chat) {
+            return false;
+        }
+
         await db.delete(chatMessages).where(eq(chatMessages.chatId, id));
         await db.delete(chats).where(and(eq(chats.id, id), eq(chats.userId, userId)));
         revalidatePath("/");

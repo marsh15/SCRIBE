@@ -9,11 +9,10 @@ import { getChatMessages } from "@/app/chat/actions";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { Suspense } from "react";
 import { DefaultChatTransport } from "ai";
+import { messageUsesKnowledgeBase } from "@/lib/chat-tools";
 
-type UIPart = {
-  type: string;
-  toolName?: string;
-  result?: unknown;
+type StoredPart = {
+  type?: string;
   text?: string;
 };
 
@@ -32,7 +31,7 @@ export default function DynamicRagChatbot() {
         const history = await getChatMessages(chatId);
 
         const transformedMessages: UIMessage[] = history.map((msg) => {
-          const storedParts = (msg.parts as UIPart[]) || [];
+          const storedParts = ((msg.parts as StoredPart[] | null) ?? []);
           const hasTextPart = storedParts.some((p) => p.type === "text");
           const parts = hasTextPart
             ? storedParts
@@ -120,6 +119,7 @@ function ChatInterface({
   }, [status, setStatus]);
 
   const [input, setInput] = useState("");
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const onboardingPrompts = [
     "Summarize the uploaded documents in 5 bullet points.",
     "What are the deadlines and obligations mentioned across files?",
@@ -134,7 +134,11 @@ function ChatInterface({
     const q = searchParams.get("q");
     if (q && initialMessages.length === 0 && !initialSendDone.current) {
       initialSendDone.current = true;
-      sendMessage({ text: q });
+      setSubmitError(null);
+      void sendMessage({ text: q }).catch((error) => {
+        console.error("Failed to send initial chat message:", error);
+        setSubmitError("Could not send the first message. Please try again.");
+      });
       router.replace(`/chat/${chatId}`);
     }
   }, [searchParams, initialMessages.length, sendMessage, chatId, router]);
@@ -142,20 +146,29 @@ function ChatInterface({
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) =>
     setInput(e.target.value);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const submitMessage = async (text: string) => {
+    const trimmedText = text.trim();
+    if (!trimmedText || isLoading) return;
+
+    setSubmitError(null);
+
+    try {
+      await sendMessage({ text: trimmedText });
+    } catch (error) {
+      console.error("Failed to send chat message:", error);
+      setSubmitError("The message could not be sent. Please try again.");
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input || isLoading) return;
-    sendMessage({ text: input });
+    await submitMessage(input);
     setInput("");
   };
 
   const isRAGActive =
-    messages.some((m: UIMessage) =>
-      m.parts?.some(
-        (p: UIPart) =>
-          p.type === "tool-invocation" && p.toolName === "searchKnowledgeBase",
-      ),
-    ) || isLoading;
+    messages.some((message: UIMessage) => messageUsesKnowledgeBase(message)) ||
+    isLoading;
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -203,7 +216,8 @@ function ChatInterface({
                       key={prompt}
                       type="button"
                       className="w-full text-left rounded-sm border border-border px-4 py-2.5 text-sm font-sans hover:border-[#00C4A0]/40 hover:bg-muted/40 transition-all duration-200 hover:translate-x-0.5"
-                      onClick={() => sendMessage({ text: prompt })}
+                      onClick={() => void submitMessage(prompt)}
+                      disabled={isLoading}
                     >
                       {prompt}
                     </button>
@@ -237,9 +251,7 @@ function ChatInterface({
                   {m.role === "assistant" && (
                     <div className="font-mono text-[10px] uppercase tracking-widest text-[#B07D62] mb-2 flex items-center gap-2">
                       Scribe AI
-                      {m.parts?.some(
-                        (p: UIPart) => p.type === "tool-invocation",
-                      ) ? (
+                      {messageUsesKnowledgeBase(m) ? (
                         <span className="text-[#00C4A0]">• RAG Active</span>
                       ) : null}
                     </div>
@@ -265,8 +277,8 @@ function ChatInterface({
                       }}
                     >
                       {m.parts
-                        ?.filter((p: UIPart) => p.type === "text")
-                        .map((p: UIPart) => p.text)
+                        ?.filter((p) => p.type === "text")
+                        .map((p) => ("text" in p ? p.text : ""))
                         .join("") ||
                         (m as any).content ||
                         ""}
@@ -320,10 +332,11 @@ function ChatInterface({
               placeholder="Ask about your documents..."
               className="w-full min-h-[56px] max-h-48 resize-none bg-transparent py-4 pl-4 pr-12 text-sm font-sans focus:outline-none scrollbar-none transition-colors"
               rows={1}
+              disabled={isLoading}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  handleSubmit(e as unknown as React.FormEvent);
+                  void handleSubmit(e as unknown as React.FormEvent);
                 }
               }}
             />
@@ -335,6 +348,12 @@ function ChatInterface({
               <ArrowUp className="w-4 h-4" />
             </button>
           </form>
+
+          {submitError ? (
+            <p className="mt-2 text-xs font-sans text-destructive px-1">
+              {submitError}
+            </p>
+          ) : null}
 
           <div className="mt-2 flex items-center justify-between text-[10px] font-mono uppercase tracking-widest text-muted-foreground px-1">
             <span className="flex items-center gap-1.5">

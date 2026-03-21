@@ -4,13 +4,10 @@ import type { UIMessage } from "@ai-sdk/react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, CheckCircle2, Circle, Zap, Brain } from "lucide-react";
 import { useState, useEffect } from "react";
-
-type UIPart = {
-  type: string;
-  toolName?: string;
-  result?: unknown;
-  text?: string;
-};
+import {
+  countKnowledgeBaseInvocations,
+  getLastKnowledgeBaseInvocation,
+} from "@/lib/chat-tools";
 
 interface RAGInspectorProps {
   messages: UIMessage[];
@@ -22,14 +19,7 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
   const isStreaming = status === "streaming";
   const isLoading = isPendingStart || isStreaming;
 
-  const lastToolInvocation = messages
-    .flatMap((m: UIMessage) => {
-      const toolInvocs = (m as any).toolInvocations || [];
-      const partsInvocs = m.parts?.filter((p: UIPart) => p.type === "tool-invocation") || [];
-      return [...toolInvocs, ...partsInvocs];
-    })
-    .filter((t: any) => t.toolName === "searchKnowledgeBase")
-    .pop();
+  const lastToolInvocation = getLastKnowledgeBaseInvocation(messages);
 
   const currentToolInvocation = isPendingStart ? undefined : lastToolInvocation;
 
@@ -54,11 +44,7 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
   }, [isPendingStart, isSearching, isStreaming]);
 
   const totalMessages = messages.length;
-  const toolInvocations = messages.flatMap((m: UIMessage) => {
-    const toolInvocs = (m as any).toolInvocations || [];
-    const partsInvocs = m.parts?.filter((p: UIPart) => p.type === "tool-invocation") || [];
-    return [...toolInvocs, ...partsInvocs];
-  }).filter((t: any) => t.toolName === "searchKnowledgeBase").length;
+  const toolInvocations = countKnowledgeBaseInvocations(messages);
 
   return (
     <div className="flex flex-col h-full bg-muted/20 overflow-hidden">

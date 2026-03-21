@@ -7,18 +7,15 @@ import { ArrowUp, CornerDownLeft, Database } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { createChat } from "@/app/chat/actions";
 import { useRouter } from "next/navigation";
-
-type UIPart = {
-  type: string;
-  toolName?: string;
-  result?: unknown;
-  text?: string;
-};
+import { notifyChatCreated } from "@/lib/chat-events";
+import { messageUsesKnowledgeBase } from "@/lib/chat-tools";
 
 export default function Ragchatbot() {
   const router = useRouter();
   const { messages, status } = useChat();
   const { setMessages, setStatus } = useChatState();
+  const [isCreatingChat, setIsCreatingChat] = useState(false);
+  const [creationError, setCreationError] = useState<string | null>(null);
 
   useEffect(() => {
     setMessages(messages);
@@ -36,25 +33,41 @@ export default function Ragchatbot() {
   ];
 
   const isLoading = status === "submitted" || status === "streaming";
+  const isBusy = isLoading || isCreatingChat;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) =>
     setInput(e.target.value);
 
+  const startChat = async (prompt: string) => {
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt || isBusy) return;
+
+    setCreationError(null);
+    setIsCreatingChat(true);
+
+    try {
+      const chat = await createChat(trimmedPrompt.substring(0, 50));
+      notifyChatCreated({
+        id: chat.id,
+        title: chat.title,
+      });
+      router.push(`/chat/${chat.id}?q=${encodeURIComponent(trimmedPrompt)}`);
+    } catch (error) {
+      console.error("Failed to create chat:", error);
+      setCreationError("Could not start the chat. Please try again.");
+    } finally {
+      setIsCreatingChat(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input || isLoading) return;
-
-    const chat = await createChat(input.substring(0, 50));
-    router.push(`/chat/${chat.id}?q=${encodeURIComponent(input)}`);
+    await startChat(input);
   };
 
   const isRAGActive =
-    messages.some((m: UIMessage) =>
-      m.parts?.some(
-        (p: UIPart) =>
-          p.type === "tool-invocation" && p.toolName === "searchKnowledgeBase",
-      ),
-    ) || isLoading;
+    messages.some((message: UIMessage) => messageUsesKnowledgeBase(message)) ||
+    isLoading;
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -108,11 +121,9 @@ export default function Ragchatbot() {
                     <button
                       key={prompt}
                       type="button"
-                      className="w-full text-left rounded-sm border border-border px-3 py-2 text-xs font-sans hover:border-[#00C4A0]/40 hover:bg-muted/40 transition-colors"
-                      onClick={async () => {
-                        const chat = await createChat(prompt.substring(0, 50));
-                        router.push(`/chat/${chat.id}?q=${encodeURIComponent(prompt)}`);
-                      }}
+                      className="w-full text-left rounded-sm border border-border px-3 py-2 text-xs font-sans hover:border-[#00C4A0]/40 hover:bg-muted/40 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                      onClick={() => void startChat(prompt)}
+                      disabled={isBusy}
                     >
                       {prompt}
                     </button>
@@ -138,9 +149,7 @@ export default function Ragchatbot() {
                   {m.role === "assistant" && (
                     <div className="font-mono text-[10px] uppercase tracking-widest text-[#B07D62] mb-2 flex items-center gap-2">
                       Scribe AI
-                      {m.parts?.some(
-                        (p: UIPart) => p.type === "tool-invocation",
-                      ) ? (
+                      {messageUsesKnowledgeBase(m) ? (
                         <span className="text-[#00C4A0]">• RAG Active</span>
                       ) : null}
                     </div>
@@ -166,8 +175,8 @@ export default function Ragchatbot() {
                       }}
                     >
                       {m.parts
-                        ?.filter((p: UIPart) => p.type === "text")
-                        .map((p: UIPart) => p.text)
+                        ?.filter((p) => p.type === "text")
+                        .map((p) => ("text" in p ? p.text : ""))
                         .join("") || ""}
                     </ReactMarkdown>
                   </div>
@@ -202,24 +211,31 @@ export default function Ragchatbot() {
             <textarea
               value={input}
               onChange={handleInputChange}
-              placeholder="Ask about your documents..."
+              placeholder={isCreatingChat ? "Starting chat..." : "Ask about your documents..."}
               className="w-full min-h-[56px] max-h-48 resize-none bg-transparent py-4 pl-4 pr-12 text-sm font-sans focus:outline-none scrollbar-none transition-colors"
               rows={1}
+              disabled={isBusy}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  handleSubmit(e as unknown as React.FormEvent);
+                  void handleSubmit(e as unknown as React.FormEvent);
                 }
               }}
             />
             <button
               type="submit"
-              disabled={!input || isLoading}
+              disabled={!input || isBusy}
               className="absolute right-2 bottom-2 p-2 rounded-sm bg-primary text-primary-foreground disabled:opacity-50 transition-opacity hover:opacity-90 flex items-center justify-center"
             >
               <ArrowUp className="w-4 h-4" />
             </button>
           </form>
+
+          {creationError ? (
+            <p className="mt-2 text-xs font-sans text-destructive px-1">
+              {creationError}
+            </p>
+          ) : null}
 
           <div className="mt-2 flex items-center justify-between text-[10px] font-mono uppercase tracking-widest text-muted-foreground px-1">
             <span className="flex items-center gap-1.5">

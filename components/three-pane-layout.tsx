@@ -102,7 +102,7 @@ export function ThreePaneLayout({
         }}
       >
         {/* Left Sidebar */}
-        <Panel id="sidebar" defaultSize={`${layout.sidebar}%`} minSize="14%" maxSize="30%">
+        <Panel id="sidebar" defaultSize={layout.sidebar} minSize={14} maxSize={30}>
           <div className="h-full bg-card border-r border-border/40 overflow-hidden">
             <Sidebar />
           </div>
@@ -111,7 +111,7 @@ export function ThreePaneLayout({
         <ResizeHandle />
 
         {/* Main Content */}
-        <Panel id="main" defaultSize={`${layout.main}%`} minSize="35%">
+        <Panel id="main" defaultSize={layout.main} minSize={35}>
           <div className="h-full flex flex-col min-w-0 bg-background overflow-hidden">
             {children}
           </div>
@@ -120,7 +120,7 @@ export function ThreePaneLayout({
         <ResizeHandle />
 
         {/* Right Inspector */}
-        <Panel id="inspector" defaultSize={`${layout.inspector}%`} minSize="18%" maxSize="38%">
+        <Panel id="inspector" defaultSize={layout.inspector} minSize={18} maxSize={38}>
           <div className="h-full bg-card border-l border-border/40 overflow-hidden">
             <RAGInspector messages={messages} status={status} />
           </div>

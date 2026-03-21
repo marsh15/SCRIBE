@@ -20,9 +20,21 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { UserButton, SignedIn, SignedOut, SignInButton, useUser } from "@clerk/nextjs";
+import {
+  SignInButton,
+  SignOutButton,
+  SignedIn,
+  SignedOut,
+  UserButton,
+  useUser,
+} from "@clerk/nextjs";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { ThemeToggle } from "@/components/theme-toggle";
+import {
+  CHAT_CREATED_EVENT,
+  type SidebarChatSummary,
+  SIDEBAR_REFRESH_EVENT,
+} from "@/lib/chat-events";
 
 function ConfirmDeleteButton({
   onConfirm,
@@ -134,8 +146,35 @@ export function Sidebar() {
   }, []);
 
   useEffect(() => {
-    fetchData();
-  }, [pathname, fetchData]);
+    void fetchData();
+  }, [fetchData]);
+
+  useEffect(() => {
+    const handleRefresh = () => {
+      void fetchData();
+    };
+
+    const handleChatCreated = (event: Event) => {
+      const { detail } = event as CustomEvent<SidebarChatSummary>;
+      if (!detail?.id) return;
+
+      setChats((currentChats) => {
+        const remainingChats = currentChats.filter((chat) => chat.id !== detail.id);
+        return [detail, ...remainingChats];
+      });
+      setLoading(false);
+    };
+
+    window.addEventListener(SIDEBAR_REFRESH_EVENT, handleRefresh);
+    window.addEventListener(CHAT_CREATED_EVENT, handleChatCreated as EventListener);
+    window.addEventListener("focus", handleRefresh);
+
+    return () => {
+      window.removeEventListener(SIDEBAR_REFRESH_EVENT, handleRefresh);
+      window.removeEventListener(CHAT_CREATED_EVENT, handleChatCreated as EventListener);
+      window.removeEventListener("focus", handleRefresh);
+    };
+  }, [fetchData]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -145,20 +184,27 @@ export function Sidebar() {
 
   async function handleDeleteFile(id: number) {
     setDeletingFileId(id);
-    await deleteFile(id);
+    setFiles((currentFiles) => currentFiles.filter((file) => file.id !== id));
+    const result = await deleteFile(id);
+    if (!result.success) {
+      await fetchData();
+    }
     await fetchData();
     setDeletingFileId(null);
   }
 
   async function handleDeleteChat(id: string) {
     setDeletingChatId(id);
-    await deleteChat(id);
-    await fetchData();
-    setDeletingChatId(null);
-
-    if (activeChatId === id) {
+    setChats((currentChats) => currentChats.filter((chat) => chat.id !== id));
+    const deleted = await deleteChat(id);
+    if (!deleted) {
+      await fetchData();
+    } else if (activeChatId === id) {
       router.push("/chat");
     }
+
+    await fetchData();
+    setDeletingChatId(null);
   }
 
   return (
@@ -401,6 +447,16 @@ export function Sidebar() {
                 </p>
               )}
             </div>
+            <SignOutButton redirectUrl="/">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-sm opacity-60 hover:opacity-100 transition-all"
+                title="Sign out"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </Button>
+            </SignOutButton>
           </div>
         </SignedIn>
         <SignedOut>

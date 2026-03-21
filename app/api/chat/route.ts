@@ -37,6 +37,13 @@ type ToolCallLike = {
   toolCallId?: string;
 };
 
+type ToolResultLike = {
+  type?: string;
+  toolCallId?: string;
+  output?: unknown;
+  result?: unknown;
+};
+
 type ResponseLike = {
   messages?: Array<{
     content?: unknown;
@@ -230,16 +237,34 @@ Citation rules:
             toolName?: string;
             args?: unknown;
             toolCallId?: string;
+            result?: unknown;
           }> = [];
 
-          const toolCalls = (response?.messages ?? []).flatMap((message) => {
+          const responseContent = (response?.messages ?? []).flatMap((message) => {
             const content = message.content;
-            if (!Array.isArray(content)) return [] as ToolCallLike[];
+            if (!Array.isArray(content)) return [] as Array<ToolCallLike | ToolResultLike>;
             return content.filter(
-              (item): item is ToolCallLike =>
-                typeof item === "object" && item !== null && "type" in item && (item as ToolCallLike).type === "tool-call"
+              (item): item is ToolCallLike | ToolResultLike =>
+                typeof item === "object" &&
+                item !== null &&
+                "type" in item &&
+                ((item as ToolCallLike).type === "tool-call" ||
+                  (item as ToolResultLike).type === "tool-result"),
             );
           });
+
+          const toolCalls = responseContent.filter(
+            (item): item is ToolCallLike => item.type === "tool-call",
+          );
+
+          const toolResults = new Map(
+            responseContent
+              .filter((item): item is ToolResultLike => item.type === "tool-result")
+              .map((item) => [
+                item.toolCallId ?? "",
+                item.output ?? item.result,
+              ]),
+          );
 
           const hadKnowledgeLookup = toolCalls.some((call) => call.toolName === "searchKnowledgeBase");
           const finalText = ensureStructuredAnswer(text ?? "", hadKnowledgeLookup);
@@ -254,6 +279,7 @@ Citation rules:
               toolName: call.toolName,
               args: call.args,
               toolCallId: call.toolCallId,
+              result: call.toolCallId ? toolResults.get(call.toolCallId) : undefined,
             });
           }
 
