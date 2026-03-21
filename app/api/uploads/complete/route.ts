@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db, pool } from "@/lib/db-config";
+import { db, sql } from "@/lib/db-config";
 import { files, ingestionJobs } from "@/lib/db-schema";
 import { getUserId } from "@/lib/auth";
 import { verifyUploadToken } from "@/lib/uploads/signature";
@@ -59,22 +59,22 @@ async function insertQueuedFileRecord(input: {
   storageKey: string | null;
   storageUrl: string | null;
 }) {
-    try {
-      const [insertedFile] = await withDatabaseRetry("insertQueuedFileRecord", () =>
-        db
-          .insert(files)
-          .values({
-            name: input.name,
-            type: input.type,
-            size: input.size,
-            userId: input.userId,
-            fileData: input.fileData,
-            storageKey: input.storageKey,
-            storageUrl: input.storageUrl,
-            status: "queued",
-          })
-          .returning()
-      );
+  try {
+    const [insertedFile] = await withDatabaseRetry("insertQueuedFileRecord", () =>
+      db
+        .insert(files)
+        .values({
+          name: input.name,
+          type: input.type,
+          size: input.size,
+          userId: input.userId,
+          fileData: input.fileData,
+          storageKey: input.storageKey,
+          storageUrl: input.storageUrl,
+          status: "queued",
+        })
+        .returning()
+    );
 
     return insertedFile;
   } catch (primaryError) {
@@ -84,24 +84,15 @@ async function insertQueuedFileRecord(input: {
 
     try {
       const result = await withDatabaseRetry("insertQueuedFileRecordRaw", () =>
-        pool.query(
-          `insert into "files" ("name", "type", "size", "user_id", "file_data", "storage_key", "storage_url", "status")
-           values ($1, $2, $3, $4, $5, $6, $7, $8)
-           returning "id", "name", "type", "size", "user_id", "file_data", "extracted_text", "storage_key", "storage_url", "status", "processing_error", "text_bytes", "created_at"`,
-          [
-            input.name,
-            input.type,
-            input.size,
-            input.userId,
-            input.fileData,
-            input.storageKey,
-            input.storageUrl,
-            "queued",
-          ]
-        )
+        sql`
+          insert into "files" ("name", "type", "size", "user_id", "file_data", "storage_key", "storage_url", "status")
+          values (${input.name}, ${input.type}, ${input.size}, ${input.userId}, ${input.fileData}, ${input.storageKey}, ${input.storageUrl}, 'queued')
+          returning "id", "name", "type", "size", "user_id", "file_data", "extracted_text", "storage_key", "storage_url", "status", "processing_error", "text_bytes", "created_at"
+        `
       );
 
-      const row = result.rows[0];
+      // neon-http returns rows as an array directly
+      const row = result[0];
       if (!row) {
         throw new Error("Raw SQL insert returned no file row");
       }
@@ -130,6 +121,7 @@ async function insertQueuedFileRecord(input: {
     }
   }
 }
+
 
 export async function POST(req: Request) {
   try {

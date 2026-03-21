@@ -1,22 +1,9 @@
-import { Pool, neonConfig } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-serverless";
+import { neon } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-http";
 import { config } from "dotenv";
 import * as schema from "./db-schema";
-import ws from "ws";
 
 config({ path: ".env.local" });
-
-// Use WebSocket for connection pooling (required for neon-serverless in Node.js)
-neonConfig.webSocketConstructor = ws;
-
-function createDb(pool: Pool) {
-  return drizzle(pool, { schema });
-}
-
-const globalForDb = globalThis as typeof globalThis & {
-  __scribePool?: Pool;
-  __scribeDb?: ReturnType<typeof createDb>;
-};
 
 const connectionString = process.env.NEON_DATABASE_URL;
 
@@ -24,15 +11,11 @@ if (!connectionString) {
   throw new Error("NEON_DATABASE_URL is not configured");
 }
 
-export const pool =
-  globalForDb.__scribePool ??
-  new Pool({
-    connectionString,
-  });
+// Use neon-http: Prevents WebSocket connection limit hanging in Next.js dev server.
+// It executes queries multiplexed over HTTP and natively supports db.batch() for atomicity.
+export const sql = neon(connectionString);
+export const db = drizzle(sql, { schema });
 
-export const db = globalForDb.__scribeDb ?? createDb(pool);
+// Export a dummy pool if code still explicitly imports it, or we can just remove pool imports.
+// (We should remove `pool` imports from the codebase instead).
 
-if (process.env.NODE_ENV !== "production") {
-  globalForDb.__scribePool = pool;
-  globalForDb.__scribeDb = db;
-}

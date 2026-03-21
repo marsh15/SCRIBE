@@ -66,23 +66,27 @@ export async function ingestFile(fileId: number) {
     const chunkTexts = chunks.map((chunk) => chunk.content);
     const embeddings = await generateEmbeddings(chunkTexts);
 
-    // ATOMIC: delete old embeddings and insert new ones in a transaction.
-    // A crash between delete and insert previously left files permanently unembedded.
-    await withDatabaseRetry("replaceDocumentEmbeddings", () =>
-      db.transaction(async (tx) => {
-        await tx.delete(documents).where(eq(documents.fileId, file.id));
-        if (chunks.length > 0) {
-          await tx.insert(documents).values(
+    // ATOMIC: delete old embeddings and insert new ones in a single batch over HTTP.
+    await withDatabaseRetry("replaceDocumentEmbeddings", () => {
+      const queries: any[] = [
+        db.delete(documents).where(eq(documents.fileId, file.id))
+      ];
+
+      if (chunks.length > 0) {
+        queries.push(
+          db.insert(documents).values(
             chunks.map((chunk, index) => ({
               fileId: file.id,
               content: chunk.content,
               metadata: chunk.metadata,
               embeddings: embeddings[index],
             }))
-          );
-        }
-      })
-    );
+          )
+        );
+      }
+
+      return db.batch(queries as [any]);
+    });
 
     await withDatabaseRetry("markFileReady", () =>
       db
