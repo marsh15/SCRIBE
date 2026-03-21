@@ -6,6 +6,8 @@ import type { UIMessage } from "@ai-sdk/react";
 import { Sidebar } from "@/components/sidebar";
 import { RAGInspector } from "@/components/rag-inspector";
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { LayoutPanelLeft, RotateCcw } from "lucide-react";
 
 interface ThreePaneLayoutProps {
   children: ReactNode;
@@ -99,6 +101,12 @@ export function ThreePaneLayout({
   const [layout, setLayout] = useState(DEFAULT_LAYOUT);
   const [mounted, setMounted] = useState(false);
 
+  const resetLayout = () => {
+    groupRef.current?.setLayout(DEFAULT_LAYOUT);
+    setLayout(DEFAULT_LAYOUT);
+    persistLayout(DEFAULT_LAYOUT);
+  };
+
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -149,6 +157,20 @@ export function ThreePaneLayout({
 
   return (
     <div className="h-screen w-full bg-background text-foreground overflow-hidden">
+      <div className="pointer-events-none absolute top-3 right-3 z-20">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="pointer-events-auto h-8 rounded-sm bg-background/95 px-2 font-mono text-[10px] uppercase tracking-wider shadow-sm backdrop-blur"
+          onClick={resetLayout}
+          title="Reset panel layout"
+        >
+          <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+          <LayoutPanelLeft className="mr-1.5 h-3.5 w-3.5" />
+          Reset Layout
+        </Button>
+      </div>
       <Group
         orientation="horizontal"
         id="scribe-layout"

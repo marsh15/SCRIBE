@@ -6,9 +6,11 @@ import { desc, eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { nanoid } from "nanoid";
 import { getUserId } from "@/lib/auth";
+import { ensureApplicationSchema } from "@/lib/schema-compat";
 
 export async function getChats() {
     try {
+        await ensureApplicationSchema();
         const userId = await getUserId();
         return await db.select().from(chats).where(eq(chats.userId, userId)).orderBy(desc(chats.createdAt));
     } catch (err) {
@@ -19,6 +21,7 @@ export async function getChats() {
 
 export async function getChatMessages(chatId: string) {
     try {
+        await ensureApplicationSchema();
         const userId = await getUserId();
         return await db
             .select({
@@ -41,6 +44,7 @@ export async function getChatMessages(chatId: string) {
 
 export async function createChat(title: string) {
     try {
+        await ensureApplicationSchema();
         const userId = await getUserId();
         const newChatId = nanoid();
         const newChat = await db
@@ -63,6 +67,7 @@ export async function createChat(title: string) {
 
 export async function deleteChat(id: string) {
     try {
+        await ensureApplicationSchema();
         const userId = await getUserId();
         const chat = await db.query.chats.findFirst({
             where: and(eq(chats.id, id), eq(chats.userId, userId)),
