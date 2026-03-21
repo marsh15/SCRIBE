@@ -303,9 +303,9 @@ export default function DocumentUpload() {
                   <div className="flex flex-col items-center gap-3 py-4">
                     <div
                       className={`
-                                            w-14 h-14 rounded-full border-2 flex items-center justify-center transition-all
-                                            ${isDragging ? "border-[#00C4A0] bg-[#00C4A0]/10" : "border-border bg-card"}
-                                        `}
+                        w-14 h-14 rounded-full border-2 flex items-center justify-center transition-all animate-float
+                        ${isDragging ? "border-[#00C4A0] bg-[#00C4A0]/10" : "border-border bg-card"}
+                      `}
                     >
                       <UploadCloud
                         className={`w-6 h-6 transition-colors ${isDragging ? "text-[#00C4A0]" : "text-muted-foreground"}`}
@@ -338,19 +338,19 @@ export default function DocumentUpload() {
                     }
                     className={`rounded-sm border relative ${message.type === "success" ? "border-[#00C4A0]/30 bg-[#00C4A0]/5" : ""}`}
                   >
-                    <div className="flex items-start gap-2">
+                    <div className="flex items-start gap-2 w-full">
                       {message.type === "success" ? (
                         <CheckCircle2 className="w-4 h-4 text-[#00C4A0] shrink-0 mt-0.5" />
                       ) : (
                         <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                       )}
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <AlertTitle className="font-mono text-[10px] uppercase tracking-widest">
                           {message.type === "error"
                             ? "Ingestion Error"
                             : "Indexed Successfully"}
                         </AlertTitle>
-                        <AlertDescription className="font-sans text-sm mt-1">
+                        <AlertDescription className="font-sans text-sm mt-1 break-words">
                           {message.text}
                         </AlertDescription>
                       </div>

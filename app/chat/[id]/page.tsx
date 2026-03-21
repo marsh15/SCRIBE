@@ -1,7 +1,7 @@
 "use client";
 
 import { useChat, type UIMessage } from "@ai-sdk/react";
-import { ArrowUp, CornerDownLeft, Database } from "lucide-react";
+import { ArrowUp, CornerDownLeft, Database, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useChatState } from "@/components/chat-context";
 import ReactMarkdown from "react-markdown";
@@ -179,17 +179,22 @@ function ChatInterface({
       <div className="flex-1 overflow-y-auto px-6 sm:px-12 w-full scroll-smooth">
         <div className="max-w-3xl mx-auto py-8 space-y-8">
           {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center text-center mt-32 space-y-6">
-              <h1 className="font-serif text-4xl text-foreground animate-fade-up">
-                Query the knowledge base.
-              </h1>
-              <p className="font-sans text-muted-foreground max-w-md animate-fade-up [animation-delay:100ms] opacity-0">
-                Ask questions about your indexed documents. The engine will
-                retrieve relevant chunks and synthesize a response with exact
-                citations.
+            <div className="flex flex-col items-center justify-center text-center mt-24 space-y-8">
+              <div className="animate-fade-up">
+                <div className="w-16 h-16 rounded-full bg-primary/5 border border-border/50 flex items-center justify-center mx-auto mb-6">
+                  <Sparkles className="w-7 h-7 text-[#00C4A0]" />
+                </div>
+                <h1 className="font-serif text-4xl text-foreground tracking-tight">
+                  Query the knowledge base.
+                </h1>
+              </div>
+              <p className="font-sans text-muted-foreground max-w-md animate-fade-up [animation-delay:100ms] opacity-0 leading-relaxed">
+                Ask questions about your indexed documents. The engine retrieves
+                relevant chunks and synthesizes a response with exact citations.
               </p>
-              <div className="w-full max-w-xl rounded-sm border border-border bg-card p-4 text-left animate-scale-in [animation-delay:200ms] opacity-0 glow-hover">
-                <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
+              <div className="w-full max-w-xl rounded-sm border border-border bg-card p-5 text-left animate-scale-in [animation-delay:200ms] opacity-0 glow-hover">
+                <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#00C4A0]"></span>
                   Try a sample prompt
                 </p>
                 <div className="space-y-2">
@@ -197,7 +202,7 @@ function ChatInterface({
                     <button
                       key={prompt}
                       type="button"
-                      className="w-full text-left rounded-sm border border-border px-3 py-2 text-xs font-sans hover:border-[#00C4A0]/40 hover:bg-muted/40 transition-colors"
+                      className="w-full text-left rounded-sm border border-border px-4 py-2.5 text-sm font-sans hover:border-[#00C4A0]/40 hover:bg-muted/40 transition-all duration-200 hover:translate-x-0.5"
                       onClick={() => sendMessage({ text: prompt })}
                     >
                       {prompt}
@@ -210,16 +215,24 @@ function ChatInterface({
             messages.map((m) => (
               <div
                 key={m.id}
-                className={`flex animate-in fade-in slide-in-from-bottom-2 duration-300 ${m.role === "user" ? "justify-end" : "justify-start"}`}
+                className={`flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300 ${m.role === "user" ? "justify-end" : "justify-start"}`}
               >
+                {/* AI Avatar */}
+                {m.role === "assistant" && (
+                  <div className="w-7 h-7 rounded-full bg-card border border-border/50 flex items-center justify-center shrink-0 mt-1">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#00C4A0]">
+                      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                    </svg>
+                  </div>
+                )}
                 <div
                   className={`
-                                        max-w-[85%] rounded-sm p-4 font-sans text-sm leading-relaxed
-                                        ${m.role === "user"
-                      ? "bg-primary text-primary-foreground ml-12"
-                      : "bg-card border border-border/50 text-foreground mr-12"
+                    max-w-[80%] rounded-sm p-4 font-sans text-sm leading-relaxed
+                    ${m.role === "user"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-card border border-border/50 text-foreground"
                     }
-                                    `}
+                  `}
                 >
                   {m.role === "assistant" && (
                     <div className="font-mono text-[10px] uppercase tracking-widest text-[#B07D62] mb-2 flex items-center gap-2">
@@ -260,17 +273,31 @@ function ChatInterface({
                     </ReactMarkdown>
                   </div>
                 </div>
+                {/* User Avatar */}
+                {m.role === "user" && (
+                  <div className="w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center shrink-0 mt-1 text-[10px] font-mono font-medium">
+                    U
+                  </div>
+                )}
               </div>
             ))
           )}
 
           {/* Loading Indicator */}
           {isLoading && messages[messages.length - 1]?.role === "user" && (
-            <div className="flex justify-start">
-              <div className="bg-card border border-border/50 rounded-sm p-4 flex gap-1 items-center h-12">
-                <div className="w-1.5 h-1.5 bg-[#00C4A0] rounded-full animate-bounce [animation-delay:-0.3s]" />
-                <div className="w-1.5 h-1.5 bg-[#00C4A0] rounded-full animate-bounce [animation-delay:-0.15s]" />
-                <div className="w-1.5 h-1.5 bg-[#00C4A0] rounded-full animate-bounce" />
+            <div className="flex justify-start gap-3">
+              <div className="w-7 h-7 rounded-full bg-card border border-border/50 flex items-center justify-center shrink-0 mt-1">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#00C4A0] animate-pulse">
+                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                </svg>
+              </div>
+              <div className="bg-card border border-border/50 rounded-sm p-4 flex items-center gap-2 h-12">
+                <div className="flex gap-1">
+                  <div className="w-1.5 h-1.5 bg-[#00C4A0] rounded-full animate-bounce [animation-delay:-0.3s]" />
+                  <div className="w-1.5 h-1.5 bg-[#00C4A0] rounded-full animate-bounce [animation-delay:-0.15s]" />
+                  <div className="w-1.5 h-1.5 bg-[#00C4A0] rounded-full animate-bounce" />
+                </div>
+                <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground ml-1">Thinking</span>
               </div>
             </div>
           )}
@@ -285,7 +312,7 @@ function ChatInterface({
         <div className="max-w-3xl mx-auto relative">
           <form
             onSubmit={handleSubmit}
-            className="relative bg-card border border-border/50 rounded-md shadow-sm overflow-hidden focus-within:ring-1 focus-within:ring-ring focus-within:border-ring transition-all duration-300 hover:border-border/80"
+            className="relative bg-card border border-border/50 rounded-md shadow-sm overflow-hidden focus-within:ring-1 focus-within:ring-[#00C4A0]/30 focus-within:border-[#00C4A0]/40 transition-all duration-300 hover:border-border/80"
           >
             <textarea
               value={input}

@@ -13,7 +13,6 @@ import {
   Plus,
   MessageSquarePlus,
   MessageSquare,
-  BookOpen,
   RefreshCw,
   LogOut,
   Eye,
@@ -168,7 +167,10 @@ export function Sidebar() {
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-sm bg-primary flex items-center justify-center">
-              <BookOpen className="w-3.5 h-3.5 text-primary-foreground" />
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary-foreground">
+                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                <path d="m15 5 4 4" />
+              </svg>
             </div>
             <h1 className="font-serif text-xl font-normal tracking-tight">Scribe</h1>
           </div>
@@ -237,7 +239,7 @@ export function Sidebar() {
               </div>
             ) : (
               <div className="space-y-1 p-2">
-                {chats.map((chat) => {
+                {chats.map((chat, index) => {
                   const isActive = activeChatId === chat.id;
                   const isDeleting = deletingChatId === chat.id;
 
@@ -246,6 +248,7 @@ export function Sidebar() {
                       key={chat.id}
                       className={`group flex w-full items-center justify-between p-2 text-sm rounded-sm transition-all duration-200 overflow-hidden border ${isActive ? "bg-primary/5 border-border/80" : "border-transparent hover:bg-muted"
                         } ${isDeleting ? "opacity-50 scale-95" : ""}`}
+                      style={{ animation: `stagger-in 0.3s ease-out ${index * 50}ms both` }}
                     >
                       <Link
                         href={`/chat/${chat.id}`}
@@ -329,7 +332,7 @@ export function Sidebar() {
               </div>
             ) : (
               <div className="space-y-1 p-2">
-                {files.map((file) => {
+                {files.map((file, index) => {
                   const isDeleting = deletingFileId === file.id;
                   const status = file.status || "ready";
 
@@ -338,6 +341,7 @@ export function Sidebar() {
                       key={file.id}
                       className={`group flex w-full items-center justify-between p-2 text-sm rounded-sm hover:bg-muted transition-all border border-transparent overflow-hidden ${isDeleting ? "opacity-50 scale-95" : ""
                         }`}
+                      style={{ animation: `stagger-in 0.3s ease-out ${index * 50}ms both` }}
                     >
                       <Link
                         href={`/files/${file.id}`}

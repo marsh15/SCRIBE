@@ -5,8 +5,6 @@ import { Group, Panel, Separator, useGroupRef } from "react-resizable-panels";
 import type { UIMessage } from "@ai-sdk/react";
 import { Sidebar } from "@/components/sidebar";
 import { RAGInspector } from "@/components/rag-inspector";
-import { Button } from "@/components/ui/button";
-import { RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 
 interface ThreePaneLayoutProps {
@@ -25,12 +23,9 @@ const STORAGE_KEY = "scribe-layout-v8";
 
 function ResizeHandle() {
   return (
-    <Separator className="group relative w-[3px] bg-border hover:bg-[#00C4A0]/50 active:bg-[#00C4A0] transition-colors cursor-col-resize">
-      {/* Visual drag indicator dots — shows on hover */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-        <div className="flex flex-col gap-[2px]">
-          <div className="w-[3px] h-[3px] rounded-full bg-[#00C4A0]" />
-          <div className="w-[3px] h-[3px] rounded-full bg-[#00C4A0]" />
+    <Separator className="group relative w-[2px] bg-border/60 hover:bg-[#00C4A0]/40 active:bg-[#00C4A0] transition-all duration-200 cursor-col-resize">
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+        <div className="flex flex-col gap-[3px]">
           <div className="w-[3px] h-[3px] rounded-full bg-[#00C4A0]" />
           <div className="w-[3px] h-[3px] rounded-full bg-[#00C4A0]" />
           <div className="w-[3px] h-[3px] rounded-full bg-[#00C4A0]" />
@@ -80,41 +75,20 @@ export function ThreePaneLayout({
     }
   }, []);
 
-  const handleResetLayout = () => {
-    groupRef.current?.setLayout(DEFAULT_LAYOUT);
-    setLayout(DEFAULT_LAYOUT);
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_LAYOUT));
-    } catch { }
-  };
-
   if (!mounted) {
     return (
-      <div className="h-screen w-full bg-background flex flex-col items-center justify-center p-4">
-        <div className="flex gap-2 items-center opacity-50">
-          <div className="w-2 h-2 rounded-full bg-muted-foreground animate-pulse" />
-          <div className="w-2 h-2 rounded-full bg-muted-foreground animate-pulse [animation-delay:0.2s]" />
-          <div className="w-2 h-2 rounded-full bg-muted-foreground animate-pulse [animation-delay:0.4s]" />
+      <div className="h-screen w-full bg-background flex items-center justify-center">
+        <div className="flex gap-1.5 items-center">
+          <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-pulse" />
+          <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-pulse [animation-delay:0.15s]" />
+          <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-pulse [animation-delay:0.3s]" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen w-full bg-background text-foreground overflow-hidden flex flex-col">
-      <div className="flex items-center justify-end px-2 py-1 bg-muted/20 border-b border-border/40 h-8 shrink-0">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-6 px-2 text-[10px] font-mono uppercase tracking-wider opacity-60 hover:opacity-100 hover:bg-muted rounded-[2px]"
-          onClick={handleResetLayout}
-          title="Reset panel layout"
-        >
-          <RotateCcw className="w-3 h-3 mr-1" />
-          Reset Layout
-        </Button>
-      </div>
+    <div className="h-screen w-full bg-background text-foreground overflow-hidden">
       <Group
         orientation="horizontal"
         id="scribe-layout"
@@ -129,14 +103,14 @@ export function ThreePaneLayout({
       >
         {/* Left Sidebar */}
         <Panel id="sidebar" defaultSize={`${layout.sidebar}%`} minSize="14%" maxSize="30%">
-          <div className="h-full bg-card overflow-hidden">
+          <div className="h-full bg-card border-r border-border/40 overflow-hidden">
             <Sidebar />
           </div>
         </Panel>
 
         <ResizeHandle />
 
-        {/* Main Content (Chat) */}
+        {/* Main Content */}
         <Panel id="main" defaultSize={`${layout.main}%`} minSize="35%">
           <div className="h-full flex flex-col min-w-0 bg-background overflow-hidden">
             {children}
@@ -147,7 +121,7 @@ export function ThreePaneLayout({
 
         {/* Right Inspector */}
         <Panel id="inspector" defaultSize={`${layout.inspector}%`} minSize="18%" maxSize="38%">
-          <div className="h-full bg-card overflow-hidden">
+          <div className="h-full bg-card border-l border-border/40 overflow-hidden">
             <RAGInspector messages={messages} status={status} />
           </div>
         </Panel>

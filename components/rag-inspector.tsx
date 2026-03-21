@@ -22,7 +22,6 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
   const isStreaming = status === "streaming";
   const isLoading = isPendingStart || isStreaming;
 
-  // Find the most recent tool call that is a search
   const lastToolInvocation = messages
     .flatMap((m: UIMessage) => {
       const toolInvocs = (m as any).toolInvocations || [];
@@ -32,7 +31,6 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
     .filter((t: any) => t.toolName === "searchKnowledgeBase")
     .pop();
 
-  // Ignore previous turn's tool call if we are just starting a new turn and it hasn't fired yet
   const currentToolInvocation = isPendingStart ? undefined : lastToolInvocation;
 
   const isSearching = !!currentToolInvocation && !("result" in currentToolInvocation) && isLoading;
@@ -42,34 +40,19 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
 
   useEffect(() => {
     if (isPendingStart || isSearching) {
-      setActiveStep(1); // Start Tokenize
-
-      const t1 = setTimeout(() => {
-        setActiveStep(2); // Start Embed
-      }, 400);
-
-      const t2 = setTimeout(() => {
-        setActiveStep(3); // Start Vector Search
-      }, 900);
-
-      return () => {
-        clearTimeout(t1);
-        clearTimeout(t2);
-      };
+      setActiveStep(1);
+      const t1 = setTimeout(() => setActiveStep(2), 400);
+      const t2 = setTimeout(() => setActiveStep(3), 900);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
     } else if (isStreaming) {
-      setActiveStep(4); // Build Context
-
-      const t3 = setTimeout(() => {
-        setActiveStep(5); // Stream Response
-      }, 400);
-
+      setActiveStep(4);
+      const t3 = setTimeout(() => setActiveStep(5), 400);
       return () => clearTimeout(t3);
     } else {
       setActiveStep(0);
     }
   }, [isPendingStart, isSearching, isStreaming]);
 
-  // Compute message stats
   const totalMessages = messages.length;
   const toolInvocations = messages.flatMap((m: UIMessage) => {
     const toolInvocs = (m as any).toolInvocations || [];
@@ -78,8 +61,8 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
   }).filter((t: any) => t.toolName === "searchKnowledgeBase").length;
 
   return (
-    <div className="flex flex-col h-full bg-muted/30 overflow-hidden">
-      {/* Header with dynamic status */}
+    <div className="flex flex-col h-full bg-muted/20 overflow-hidden">
+      {/* Header */}
       <div
         className={`p-4 border-b transition-all duration-500 ${isActive ? "border-[#00C4A0]/30 bg-[#00C4A0]/5" : "border-border/50"
           }`}
@@ -94,7 +77,7 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
           >
             <div
               className={`w-2 h-2 rounded-full transition-all duration-300 ${isActive
-                ? "bg-[#00C4A0] animate-pulse shadow-[0_0_8px_rgba(0,196,160,0.5)]"
+                ? "bg-[#00C4A0] pipeline-active"
                 : "bg-border"
                 }`}
             />
@@ -105,43 +88,18 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
 
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-6">
-          {/* Pipeline Status */}
+          {/* Pipeline */}
           <section>
             <h3 className="font-mono text-[10px] text-muted-foreground uppercase mb-3 flex items-center gap-1.5">
               <Zap className="w-3 h-3" />
               Pipeline
             </h3>
-            <div className="space-y-1.5 pl-1">
-              <Step
-                label="Tokenize Query"
-                step={1}
-                active={activeStep === 1}
-                done={activeStep > 1 || (!isLoading && messages.length > 0)}
-              />
-              <Step
-                label="Embed (gemini-embedding-001)"
-                step={2}
-                active={activeStep === 2}
-                done={activeStep > 2 || (!isLoading && messages.length > 0)}
-              />
-              <Step
-                label="Vector Search (pgvector)"
-                step={3}
-                active={activeStep === 3}
-                done={activeStep > 3 || (!isLoading && messages.length > 0)}
-              />
-              <Step
-                label="Build Context"
-                step={4}
-                active={activeStep === 4}
-                done={activeStep > 4 || (!isLoading && messages.length > 0)}
-              />
-              <Step
-                label="Stream LLM Response"
-                step={5}
-                active={activeStep === 5}
-                done={!isLoading && messages.length > 0}
-              />
+            <div className="space-y-0 pl-1">
+              <Step label="Tokenize Query" step={1} active={activeStep === 1} done={activeStep > 1 || (!isLoading && messages.length > 0)} isLast={false} />
+              <Step label="Embed (gemini-embedding-001)" step={2} active={activeStep === 2} done={activeStep > 2 || (!isLoading && messages.length > 0)} isLast={false} />
+              <Step label="Vector Search (pgvector)" step={3} active={activeStep === 3} done={activeStep > 3 || (!isLoading && messages.length > 0)} isLast={false} />
+              <Step label="Build Context" step={4} active={activeStep === 4} done={activeStep > 4 || (!isLoading && messages.length > 0)} isLast={false} />
+              <Step label="Stream LLM Response" step={5} active={activeStep === 5} done={!isLoading && messages.length > 0} isLast={true} />
             </div>
           </section>
 
@@ -152,16 +110,16 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
               Session
             </h3>
             <div className="grid grid-cols-2 gap-2">
-              <div className="border border-border/50 bg-card p-3 rounded-sm">
-                <div className="font-mono text-lg font-medium text-foreground">
+              <div className="border border-border/50 bg-card p-3 rounded-sm hover:border-border/80 transition-colors">
+                <div className="font-mono text-lg font-medium text-foreground tabular-nums">
                   {totalMessages}
                 </div>
                 <div className="font-mono text-[9px] uppercase text-muted-foreground mt-0.5">
                   Messages
                 </div>
               </div>
-              <div className="border border-border/50 bg-card p-3 rounded-sm">
-                <div className="font-mono text-lg font-medium text-[#00C4A0]">
+              <div className="border border-border/50 bg-card p-3 rounded-sm hover:border-[#00C4A0]/30 transition-colors">
+                <div className="font-mono text-lg font-medium text-[#00C4A0] tabular-nums">
                   {Math.max(toolInvocations, messages.filter(m => m.role === "user").length)}
                 </div>
                 <div className="font-mono text-[9px] uppercase text-muted-foreground mt-0.5">
@@ -198,23 +156,22 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
                     return (
                       <div
                         key={i}
-                        className="border border-border/50 bg-card p-3 rounded-sm space-y-2 hover:border-[#00C4A0]/30 transition-colors"
+                        className="border border-border/50 bg-card p-3 rounded-sm space-y-2 hover:border-[#00C4A0]/30 transition-all duration-200 glow-hover"
+                        style={{ animation: `stagger-in 0.4s ease-out ${i * 100}ms both` }}
                       >
                         <div className="flex justify-between items-center text-xs">
                           <span className="font-mono text-[9px] text-[#B07D62] truncate mr-2">
                             {sourceLine}
                           </span>
-                          <span className="font-mono text-[9px] text-[#00C4A0] tabular-nums">
+                          <span className="font-mono text-[9px] text-[#00C4A0] tabular-nums shrink-0">
                             {(score * 100).toFixed(1)}%
                           </span>
                         </div>
-                        {/* Cosine Similarity Bar */}
+                        {/* Similarity Bar */}
                         <div className="h-1 w-full bg-muted rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-gradient-to-r from-[#00C4A0] to-[#00C4A0]/60 transition-all duration-1000 rounded-full"
-                            style={{
-                              width: `${score * 100}%`,
-                            }}
+                            className="h-full bg-gradient-to-r from-[#00C4A0] to-[#00C4A0]/40 transition-all duration-1000 rounded-full"
+                            style={{ width: `${score * 100}%` }}
                           />
                         </div>
                         <p className="text-xs font-sans text-muted-foreground line-clamp-3 leading-relaxed">
@@ -236,7 +193,7 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
                     key={i}
                     className="w-3 h-3 bg-foreground/20 rounded-sm"
                     style={{
-                      animationDelay: `${i * 100}ms`,
+                      animation: `stagger-in 0.5s ease-out ${i * 60}ms both`,
                     }}
                   />
                 ))}
@@ -260,33 +217,41 @@ function Step({
   step,
   active,
   done,
+  isLast,
 }: {
   label: string;
   step: number;
   active?: boolean;
   done?: boolean;
+  isLast?: boolean;
 }) {
   return (
-    <div
-      className={`flex items-center gap-2.5 font-mono text-[10px] py-1 transition-all duration-300 ${active
-        ? "text-[#00C4A0]"
-        : done
-          ? "text-foreground/80"
-          : "text-muted-foreground/60"
-        }`}
-    >
-      <div className="w-4 h-4 flex items-center justify-center shrink-0">
-        {active ? (
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-[#00C4A0]" />
-        ) : done ? (
-          <CheckCircle2 className="w-3.5 h-3.5 text-[#00C4A0]" />
-        ) : (
-          <Circle className="w-3 h-3 text-border" />
-        )}
+    <div className="relative flex items-start gap-2.5">
+      {/* Connecting line */}
+      {!isLast && (
+        <div className="absolute left-[7px] top-[18px] w-[2px] h-[calc(100%-2px)] bg-border/40" />
+      )}
+      <div
+        className={`flex items-center gap-2.5 font-mono text-[10px] py-1.5 transition-all duration-300 relative z-10 ${active
+          ? "text-[#00C4A0]"
+          : done
+            ? "text-foreground/80"
+            : "text-muted-foreground/60"
+          }`}
+      >
+        <div className="w-4 h-4 flex items-center justify-center shrink-0 bg-card rounded-full">
+          {active ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#00C4A0]" />
+          ) : done ? (
+            <CheckCircle2 className="w-3.5 h-3.5 text-[#00C4A0]" />
+          ) : (
+            <Circle className="w-3 h-3 text-border" />
+          )}
+        </div>
+        <span>
+          {step}. {label}
+        </span>
       </div>
-      <span>
-        {step}. {label}
-      </span>
     </div>
   );
 }
