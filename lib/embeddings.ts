@@ -1,9 +1,10 @@
 // Uses Google's Generative Language REST API (v1beta) directly.
 // Model: gemini-embedding-2-preview — outputs 3072-dimensional vectors.
 // Paid tier: up to 1500 RPM. Vercel-compatible (pure HTTP fetch).
+import { EMBEDDING_MODEL_ID } from "@/lib/embedding-config";
 
 const GOOGLE_API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY!;
-const MODEL = "models/gemini-embedding-2-preview";
+const MODEL = EMBEDDING_MODEL_ID;
 const BASE_URL = `https://generativelanguage.googleapis.com/v1beta/${MODEL}`;
 
 const sanitizeInput = (text: string) => text.replace(/\s+/g, " ").trim();

@@ -19,36 +19,21 @@ function estimateTokens(text: string) {
   return Math.ceil(text.length / 4);
 }
 
-export async function processSingleJob(jobId: number) {
-  const job = await db.query.ingestionJobs.findFirst({
-    where: eq(ingestionJobs.id, jobId),
+export async function ingestFile(fileId: number) {
+  const file = await db.query.files.findFirst({
+    where: eq(files.id, fileId),
   });
-  if (!job) return { processed: false, reason: "job_not_found" };
 
-  const [updated] = await db
-    .update(ingestionJobs)
-    .set({
-      status: "processing",
-      attempts: job.attempts + 1,
-      startedAt: new Date(),
-      updatedAt: new Date(),
-      lastError: null,
-    })
-    .where(eq(ingestionJobs.id, job.id))
-    .returning();
+  if (!file) {
+    return { processed: false, reason: "File not found for ingestion" };
+  }
+
+  await db
+    .update(files)
+    .set({ status: "processing", processingError: null })
+    .where(eq(files.id, file.id));
 
   try {
-    const file = await db.query.files.findFirst({
-      where: eq(files.id, updated.fileId),
-    });
-
-    if (!file) throw new Error("File not found for ingestion job");
-
-    await db
-      .update(files)
-      .set({ status: "processing", processingError: null })
-      .where(eq(files.id, file.id));
-
     let bytes: ArrayBuffer | Uint8Array;
     if (file.storageUrl) {
       bytes = await downloadBlobToBuffer(file.storageUrl);
@@ -58,7 +43,10 @@ export async function processSingleJob(jobId: number) {
       throw new Error("No source payload available for ingestion");
     }
 
-    const buffer = bytes instanceof ArrayBuffer ? Buffer.from(new Uint8Array(bytes)) : Buffer.from(bytes);
+    const buffer =
+      bytes instanceof ArrayBuffer
+        ? Buffer.from(new Uint8Array(bytes))
+        : Buffer.from(bytes);
     const extraction = await extractTextFromBuffer({
       buffer,
       fileName: file.name,
@@ -99,15 +87,6 @@ export async function processSingleJob(jobId: number) {
       })
       .where(eq(files.id, file.id));
 
-    await db
-      .update(ingestionJobs)
-      .set({
-        status: "completed",
-        finishedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(ingestionJobs.id, updated.id));
-
     if (file.userId) {
       await recordUsageEvent({
         userId: file.userId,
@@ -123,28 +102,13 @@ export async function processSingleJob(jobId: number) {
     return {
       processed: true,
       fileId: file.id,
+      fileName: file.name,
       chunks: chunks.length,
+      status: "ready" as const,
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown ingestion error";
-
-    const nextAttempts = (job.attempts ?? 0) + 1;
-    const shouldRetry = nextAttempts < MAX_ATTEMPTS;
-    const waitMinutes = Math.min(60, 2 ** nextAttempts);
-    const nextRetryAt = shouldRetry
-      ? new Date(Date.now() + waitMinutes * 60 * 1000)
-      : null;
-
-    await db
-      .update(ingestionJobs)
-      .set({
-        status: shouldRetry ? "queued" : "failed",
-        lastError: errorMessage,
-        nextRetryAt,
-        finishedAt: shouldRetry ? null : new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(ingestionJobs.id, updated.id));
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown ingestion error";
 
     await db
       .update(files)
@@ -152,14 +116,76 @@ export async function processSingleJob(jobId: number) {
         status: "failed",
         processingError: errorMessage,
       })
-      .where(eq(files.id, updated.fileId));
+      .where(eq(files.id, file.id));
 
     return {
       processed: false,
+      fileId: file.id,
+      fileName: file.name,
       reason: errorMessage,
-      willRetry: shouldRetry,
+      status: "failed" as const,
     };
   }
+}
+
+export async function processSingleJob(jobId: number) {
+  const job = await db.query.ingestionJobs.findFirst({
+    where: eq(ingestionJobs.id, jobId),
+  });
+  if (!job) return { processed: false, reason: "job_not_found" };
+
+  const [updated] = await db
+    .update(ingestionJobs)
+    .set({
+      status: "processing",
+      attempts: job.attempts + 1,
+      startedAt: new Date(),
+      updatedAt: new Date(),
+      lastError: null,
+    })
+    .where(eq(ingestionJobs.id, job.id))
+    .returning();
+
+  const result = await ingestFile(updated.fileId);
+
+  if (result.processed) {
+    await db
+      .update(ingestionJobs)
+      .set({
+        status: "completed",
+        finishedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(ingestionJobs.id, updated.id));
+
+    return result;
+  }
+
+  const nextAttempts = (job.attempts ?? 0) + 1;
+  const shouldRetry = nextAttempts < MAX_ATTEMPTS;
+  const waitMinutes = Math.min(60, 2 ** nextAttempts);
+  const nextRetryAt = shouldRetry
+    ? new Date(Date.now() + waitMinutes * 60 * 1000)
+    : null;
+
+  await db
+    .update(ingestionJobs)
+    .set({
+      status: shouldRetry ? "queued" : "failed",
+      lastError: result.reason,
+      nextRetryAt,
+      finishedAt: shouldRetry ? null : new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(ingestionJobs.id, updated.id));
+
+  return {
+    processed: false,
+    fileId: result.fileId,
+    fileName: result.fileName,
+    reason: result.reason,
+    willRetry: shouldRetry,
+  };
 }
 
 export async function processQueuedIngestionJobs(limit = 2) {

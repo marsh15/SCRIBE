@@ -8,6 +8,7 @@ import {
   countKnowledgeBaseInvocations,
   getLastKnowledgeBaseInvocation,
 } from "@/lib/chat-tools";
+import { EMBEDDING_MODEL_LABEL } from "@/lib/embedding-config";
 
 interface RAGInspectorProps {
   messages: UIMessage[];
@@ -82,7 +83,7 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
             </h3>
             <div className="space-y-0 pl-1">
               <Step label="Tokenize Query" step={1} active={activeStep === 1} done={activeStep > 1 || (!isLoading && messages.length > 0)} isLast={false} />
-              <Step label="Embed (gemini-embedding-001)" step={2} active={activeStep === 2} done={activeStep > 2 || (!isLoading && messages.length > 0)} isLast={false} />
+              <Step label={`Embed (${EMBEDDING_MODEL_LABEL})`} step={2} active={activeStep === 2} done={activeStep > 2 || (!isLoading && messages.length > 0)} isLast={false} />
               <Step label="Vector Search (pgvector)" step={3} active={activeStep === 3} done={activeStep > 3 || (!isLoading && messages.length > 0)} isLast={false} />
               <Step label="Build Context" step={4} active={activeStep === 4} done={activeStep > 4 || (!isLoading && messages.length > 0)} isLast={false} />
               <Step label="Stream LLM Response" step={5} active={activeStep === 5} done={!isLoading && messages.length > 0} isLast={true} />

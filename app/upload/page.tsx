@@ -121,7 +121,13 @@ export default function DocumentUpload() {
       const completeJson = (await completeRes.json()) as {
         ok?: boolean;
         error?: string;
-        file?: { status?: string; id?: number };
+        file?: {
+          status?: string;
+          id?: number;
+          processingError?: string;
+        };
+        ingestionMode?: "async" | "direct";
+        chunks?: number;
       };
 
       if (!completeRes.ok || !completeJson.ok) {
@@ -129,6 +135,20 @@ export default function DocumentUpload() {
           type: "error",
           text: completeJson.error || "Failed to queue upload",
         });
+        await fetchFiles();
+        return;
+      }
+
+      if (completeJson.file?.status === "ready") {
+        setMessage({
+          type: "success",
+          text:
+            completeJson.ingestionMode === "direct"
+              ? `File uploaded and indexed successfully${completeJson.chunks ? ` (${completeJson.chunks} chunks)` : ""}!`
+              : "File uploaded and indexed successfully!",
+        });
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        await fetchFiles();
         return;
       }
 

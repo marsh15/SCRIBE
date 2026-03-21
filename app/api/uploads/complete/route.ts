@@ -5,8 +5,11 @@ import { getUserId } from "@/lib/auth";
 import { verifyUploadToken } from "@/lib/uploads/signature";
 import { uploadBufferToBlob } from "@/lib/storage/blob";
 import { recordUsageEvent } from "@/lib/billing/usage";
+import { ingestFile } from "@/lib/ingestion/worker";
+import { flags } from "@/lib/flags";
 
 const DEV_FILEDATA_MAX_BYTES = 25 * 1024 * 1024;
+export const maxDuration = 60;
 
 const ALLOWED_MIME_TYPES = new Set([
   "application/pdf",
@@ -100,15 +103,6 @@ export async function POST(req: Request) {
       })
       .returning();
 
-    const [job] = await db
-      .insert(ingestionJobs)
-      .values({
-        fileId: insertedFile.id,
-        status: "queued",
-        attempts: 0,
-      })
-      .returning();
-
     const storageMilliGbDay = Math.ceil((file.size / (1024 * 1024 * 1024)) * 1000);
     await recordUsageEvent({
       userId,
@@ -120,18 +114,68 @@ export async function POST(req: Request) {
       isEstimated: true,
     });
 
+    if (flags.asyncIngestionEnabled) {
+      try {
+        const [job] = await db
+          .insert(ingestionJobs)
+          .values({
+            fileId: insertedFile.id,
+            status: "queued",
+            attempts: 0,
+          })
+          .returning();
+
+        return NextResponse.json({
+          ok: true,
+          file: {
+            id: insertedFile.id,
+            name: insertedFile.name,
+            size: insertedFile.size,
+            status: insertedFile.status,
+          },
+          ingestionJobId: job.id,
+          ingestionMode: "async",
+        });
+      } catch (queueError) {
+        console.error("Falling back to direct ingestion after queue insert failure:", queueError);
+      }
+    }
+
+    const ingestionResult = await ingestFile(insertedFile.id);
+
+    if (!ingestionResult.processed) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: ingestionResult.reason,
+          file: {
+            id: insertedFile.id,
+            name: insertedFile.name,
+            size: insertedFile.size,
+            status: "failed",
+            processingError: ingestionResult.reason,
+          },
+          ingestionMode: "direct",
+        },
+        { status: 500 },
+      );
+    }
+
     return NextResponse.json({
       ok: true,
       file: {
         id: insertedFile.id,
         name: insertedFile.name,
         size: insertedFile.size,
-        status: insertedFile.status,
+        status: "ready",
       },
-      ingestionJobId: job.id,
+      ingestionMode: "direct",
+      chunks: ingestionResult.chunks,
     });
   } catch (error) {
     console.error("Upload complete error:", error);
-    return NextResponse.json({ error: "Failed to complete upload" }, { status: 500 });
+    const message =
+      error instanceof Error ? error.message : "Failed to complete upload";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
