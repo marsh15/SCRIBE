@@ -4,7 +4,9 @@ import { db } from "@/lib/db-config";
 let ensureSchemaPromise: Promise<void> | null = null;
 
 async function runSchemaCompatibilityPass() {
-  await db.execute(sql`CREATE EXTENSION IF NOT EXISTS vector`);
+  // Do not attempt extension installs at request time.
+  // Hosted Postgres roles often lack permission for CREATE EXTENSION even when
+  // pgvector is already available and in use by the existing schema.
 
   await db.execute(sql`
     ALTER TABLE "files" ADD COLUMN IF NOT EXISTS "user_id" text;
