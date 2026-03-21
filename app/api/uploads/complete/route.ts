@@ -7,6 +7,7 @@ import { uploadBufferToBlob } from "@/lib/storage/blob";
 import { recordUsageEvent } from "@/lib/billing/usage";
 import { ingestFile } from "@/lib/ingestion/worker";
 import { flags } from "@/lib/flags";
+import { withDatabaseRetry } from "@/lib/db-retry";
 
 const DEV_FILEDATA_MAX_BYTES = 25 * 1024 * 1024;
 export const maxDuration = 60;
@@ -58,20 +59,22 @@ async function insertQueuedFileRecord(input: {
   storageKey: string | null;
   storageUrl: string | null;
 }) {
-  try {
-    const [insertedFile] = await db
-      .insert(files)
-      .values({
-        name: input.name,
-        type: input.type,
-        size: input.size,
-        userId: input.userId,
-        fileData: input.fileData,
-        storageKey: input.storageKey,
-        storageUrl: input.storageUrl,
-        status: "queued",
-      })
-      .returning();
+    try {
+      const [insertedFile] = await withDatabaseRetry("insertQueuedFileRecord", () =>
+        db
+          .insert(files)
+          .values({
+            name: input.name,
+            type: input.type,
+            size: input.size,
+            userId: input.userId,
+            fileData: input.fileData,
+            storageKey: input.storageKey,
+            storageUrl: input.storageUrl,
+            status: "queued",
+          })
+          .returning()
+      );
 
     return insertedFile;
   } catch (primaryError) {
@@ -80,20 +83,22 @@ async function insertQueuedFileRecord(input: {
     });
 
     try {
-      const result = await pool.query(
-        `insert into "files" ("name", "type", "size", "user_id", "file_data", "storage_key", "storage_url", "status")
-         values ($1, $2, $3, $4, $5, $6, $7, $8)
-         returning "id", "name", "type", "size", "user_id", "file_data", "extracted_text", "storage_key", "storage_url", "status", "processing_error", "text_bytes", "created_at"`,
-        [
-          input.name,
-          input.type,
-          input.size,
-          input.userId,
-          input.fileData,
-          input.storageKey,
-          input.storageUrl,
-          "queued",
-        ]
+      const result = await withDatabaseRetry("insertQueuedFileRecordRaw", () =>
+        pool.query(
+          `insert into "files" ("name", "type", "size", "user_id", "file_data", "storage_key", "storage_url", "status")
+           values ($1, $2, $3, $4, $5, $6, $7, $8)
+           returning "id", "name", "type", "size", "user_id", "file_data", "extracted_text", "storage_key", "storage_url", "status", "processing_error", "text_bytes", "created_at"`,
+          [
+            input.name,
+            input.type,
+            input.size,
+            input.userId,
+            input.fileData,
+            input.storageKey,
+            input.storageUrl,
+            "queued",
+          ]
+        )
       );
 
       const row = result.rows[0];
@@ -215,14 +220,16 @@ export async function POST(req: Request) {
 
     if (flags.asyncIngestionEnabled) {
       try {
-        const [job] = await db
-          .insert(ingestionJobs)
-          .values({
-            fileId: insertedFile.id,
-            status: "queued",
-            attempts: 0,
-          })
-          .returning();
+        const [job] = await withDatabaseRetry("enqueueIngestionJob", () =>
+          db
+            .insert(ingestionJobs)
+            .values({
+              fileId: insertedFile.id,
+              status: "queued",
+              attempts: 0,
+            })
+            .returning()
+        );
 
         return NextResponse.json({
           ok: true,

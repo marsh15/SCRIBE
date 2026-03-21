@@ -4,6 +4,7 @@ import { usageEvents, subscriptions } from "@/lib/db-schema";
 import { PLAN_CATALOG, type PlanCode } from "@/lib/billing/plans";
 import { calculateOverageInr } from "@/lib/billing/rating";
 import { flags } from "@/lib/flags";
+import { withDatabaseRetry } from "@/lib/db-retry";
 
 export type UsageMetric =
   | "model_input_tokens"
@@ -24,16 +25,18 @@ export async function recordUsageEvent(input: {
   if (!flags.billingEnabled) return;
 
   try {
-    await db.insert(usageEvents).values({
-      userId: input.userId,
-      metric: input.metric,
-      quantity: Math.max(0, Math.round(input.quantity)),
-      unit: input.unit,
-      sourceType: input.sourceType,
-      sourceId: input.sourceId,
-      isEstimated: input.isEstimated ?? false,
-      occurredAt: input.occurredAt ?? new Date(),
-    });
+    await withDatabaseRetry("recordUsageEvent", () =>
+      db.insert(usageEvents).values({
+        userId: input.userId,
+        metric: input.metric,
+        quantity: Math.max(0, Math.round(input.quantity)),
+        unit: input.unit,
+        sourceType: input.sourceType,
+        sourceId: input.sourceId,
+        isEstimated: input.isEstimated ?? false,
+        occurredAt: input.occurredAt ?? new Date(),
+      })
+    );
   } catch (error) {
     console.error("Failed to record usage event:", error);
   }

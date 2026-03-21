@@ -162,12 +162,12 @@ export function ThreePaneLayout({
           type="button"
           variant="outline"
           size="sm"
-          className="pointer-events-auto h-8 rounded-sm bg-background/95 px-2 font-mono text-[10px] uppercase tracking-wider shadow-sm backdrop-blur"
+          className="pointer-events-auto h-7 rounded-sm bg-background/95 px-1.5 font-mono text-[9px] uppercase tracking-wider shadow-sm backdrop-blur"
           onClick={resetLayout}
           title="Reset panel layout"
         >
-          <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-          <LayoutPanelLeft className="mr-1.5 h-3.5 w-3.5" />
+          <RotateCcw className="mr-1 h-3 w-3" />
+          <LayoutPanelLeft className="mr-1 h-3 w-3" />
           Reset Layout
         </Button>
       </div>

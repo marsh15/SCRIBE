@@ -6,6 +6,7 @@ import { generateEmbeddings } from "@/lib/embeddings";
 import { extractTextFromBuffer } from "@/lib/ingestion/extract";
 import { downloadBlobToBuffer } from "@/lib/storage/blob";
 import { recordUsageEvent } from "@/lib/billing/usage";
+import { withDatabaseRetry } from "@/lib/db-retry";
 
 const MAX_ATTEMPTS = 5;
 
@@ -20,18 +21,22 @@ function estimateTokens(text: string) {
 }
 
 export async function ingestFile(fileId: number) {
-  const file = await db.query.files.findFirst({
-    where: eq(files.id, fileId),
-  });
+  const file = await withDatabaseRetry("loadFileForIngestion", () =>
+    db.query.files.findFirst({
+      where: eq(files.id, fileId),
+    })
+  );
 
   if (!file) {
     return { processed: false, reason: "File not found for ingestion" };
   }
 
-  await db
-    .update(files)
-    .set({ status: "processing", processingError: null })
-    .where(eq(files.id, file.id));
+  await withDatabaseRetry("markFileProcessing", () =>
+    db
+      .update(files)
+      .set({ status: "processing", processingError: null })
+      .where(eq(files.id, file.id))
+  );
 
   try {
     let bytes: ArrayBuffer | Uint8Array;
@@ -63,29 +68,33 @@ export async function ingestFile(fileId: number) {
 
     // ATOMIC: delete old embeddings and insert new ones in a transaction.
     // A crash between delete and insert previously left files permanently unembedded.
-    await db.transaction(async (tx) => {
-      await tx.delete(documents).where(eq(documents.fileId, file.id));
-      if (chunks.length > 0) {
-        await tx.insert(documents).values(
-          chunks.map((chunk, index) => ({
-            fileId: file.id,
-            content: chunk.content,
-            metadata: chunk.metadata,
-            embeddings: embeddings[index],
-          }))
-        );
-      }
-    });
-
-    await db
-      .update(files)
-      .set({
-        extractedText: extraction.extractedText,
-        textBytes: extraction.extractedText.length,
-        status: "ready",
-        processingError: null,
+    await withDatabaseRetry("replaceDocumentEmbeddings", () =>
+      db.transaction(async (tx) => {
+        await tx.delete(documents).where(eq(documents.fileId, file.id));
+        if (chunks.length > 0) {
+          await tx.insert(documents).values(
+            chunks.map((chunk, index) => ({
+              fileId: file.id,
+              content: chunk.content,
+              metadata: chunk.metadata,
+              embeddings: embeddings[index],
+            }))
+          );
+        }
       })
-      .where(eq(files.id, file.id));
+    );
+
+    await withDatabaseRetry("markFileReady", () =>
+      db
+        .update(files)
+        .set({
+          extractedText: extraction.extractedText,
+          textBytes: extraction.extractedText.length,
+          status: "ready",
+          processingError: null,
+        })
+        .where(eq(files.id, file.id))
+    );
 
     if (file.userId) {
       await recordUsageEvent({
@@ -110,13 +119,19 @@ export async function ingestFile(fileId: number) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown ingestion error";
 
-    await db
-      .update(files)
-      .set({
-        status: "failed",
-        processingError: errorMessage,
-      })
-      .where(eq(files.id, file.id));
+    try {
+      await withDatabaseRetry("markFileFailed", () =>
+        db
+          .update(files)
+          .set({
+            status: "failed",
+            processingError: errorMessage,
+          })
+          .where(eq(files.id, file.id))
+      );
+    } catch (updateError) {
+      console.error("Failed to persist file failure state:", updateError);
+    }
 
     return {
       processed: false,
@@ -129,34 +144,40 @@ export async function ingestFile(fileId: number) {
 }
 
 export async function processSingleJob(jobId: number) {
-  const job = await db.query.ingestionJobs.findFirst({
-    where: eq(ingestionJobs.id, jobId),
-  });
+  const job = await withDatabaseRetry("loadIngestionJob", () =>
+    db.query.ingestionJobs.findFirst({
+      where: eq(ingestionJobs.id, jobId),
+    })
+  );
   if (!job) return { processed: false, reason: "job_not_found" };
 
-  const [updated] = await db
-    .update(ingestionJobs)
-    .set({
-      status: "processing",
-      attempts: job.attempts + 1,
-      startedAt: new Date(),
-      updatedAt: new Date(),
-      lastError: null,
-    })
-    .where(eq(ingestionJobs.id, job.id))
-    .returning();
+  const [updated] = await withDatabaseRetry("markIngestionJobProcessing", () =>
+    db
+      .update(ingestionJobs)
+      .set({
+        status: "processing",
+        attempts: job.attempts + 1,
+        startedAt: new Date(),
+        updatedAt: new Date(),
+        lastError: null,
+      })
+      .where(eq(ingestionJobs.id, job.id))
+      .returning()
+  );
 
   const result = await ingestFile(updated.fileId);
 
   if (result.processed) {
-    await db
-      .update(ingestionJobs)
-      .set({
-        status: "completed",
-        finishedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(ingestionJobs.id, updated.id));
+    await withDatabaseRetry("markIngestionJobCompleted", () =>
+      db
+        .update(ingestionJobs)
+        .set({
+          status: "completed",
+          finishedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(ingestionJobs.id, updated.id))
+    );
 
     return result;
   }
@@ -168,16 +189,18 @@ export async function processSingleJob(jobId: number) {
     ? new Date(Date.now() + waitMinutes * 60 * 1000)
     : null;
 
-  await db
-    .update(ingestionJobs)
-    .set({
-      status: shouldRetry ? "queued" : "failed",
-      lastError: result.reason,
-      nextRetryAt,
-      finishedAt: shouldRetry ? null : new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(ingestionJobs.id, updated.id));
+  await withDatabaseRetry("updateIngestionJobRetryState", () =>
+    db
+      .update(ingestionJobs)
+      .set({
+        status: shouldRetry ? "queued" : "failed",
+        lastError: result.reason,
+        nextRetryAt,
+        finishedAt: shouldRetry ? null : new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(ingestionJobs.id, updated.id))
+  );
 
   return {
     processed: false,
@@ -194,24 +217,28 @@ export async function processQueuedIngestionJobs(limit = 2) {
 
   // RELIABILITY: Reset jobs stuck in "processing" for more than 5 minutes
   // (indicates a Vercel function crash without a chance to update status).
-  await db
-    .update(ingestionJobs)
-    .set({ status: "queued", updatedAt: new Date() })
-    .where(
-      and(
-        eq(ingestionJobs.status, "processing"),
-        lte(ingestionJobs.startedAt, staleThreshold)
+  await withDatabaseRetry("resetStaleIngestionJobs", () =>
+    db
+      .update(ingestionJobs)
+      .set({ status: "queued", updatedAt: new Date() })
+      .where(
+        and(
+          eq(ingestionJobs.status, "processing"),
+          lte(ingestionJobs.startedAt, staleThreshold)
+        )
       )
-    );
+  );
 
-  const queuedJobs = await db.query.ingestionJobs.findMany({
-    where: and(
-      eq(ingestionJobs.status, "queued"),
-      or(lte(ingestionJobs.nextRetryAt, now), isNull(ingestionJobs.nextRetryAt))
-    ),
-    orderBy: (table, { asc }) => [asc(table.createdAt)],
-    limit,
-  });
+  const queuedJobs = await withDatabaseRetry("loadQueuedIngestionJobs", () =>
+    db.query.ingestionJobs.findMany({
+      where: and(
+        eq(ingestionJobs.status, "queued"),
+        or(lte(ingestionJobs.nextRetryAt, now), isNull(ingestionJobs.nextRetryAt))
+      ),
+      orderBy: (table, { asc }) => [asc(table.createdAt)],
+      limit,
+    })
+  );
 
   const results = [];
   for (const job of queuedJobs) {
