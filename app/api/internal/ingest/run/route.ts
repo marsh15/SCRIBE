@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { processQueuedIngestionJobs } from "@/lib/ingestion/worker";
 import { auth } from "@clerk/nextjs/server";
 
-function authorized(req: Request) {
+function hasCronSecret(req: Request) {
   const expected = process.env.INTERNAL_CRON_SECRET;
-  if (!expected) return true;
+  // SECURITY: deny ALL requests when secret is not configured — never open by default
+  if (!expected) return false;
   return req.headers.get("x-internal-secret") === expected;
 }
 
@@ -13,10 +14,10 @@ export const maxDuration = 60;
 export async function POST(req: Request) {
   try {
     // Allow either internal cron secret OR a logged-in Clerk user
-    const hasCronSecret = authorized(req);
+    const cronAuthed = hasCronSecret(req);
     let isClerkUser = false;
 
-    if (!hasCronSecret) {
+    if (!cronAuthed) {
       try {
         const { userId } = await auth();
         isClerkUser = !!userId;
@@ -25,7 +26,7 @@ export async function POST(req: Request) {
       }
     }
 
-    if (!hasCronSecret && !isClerkUser) {
+    if (!cronAuthed && !isClerkUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

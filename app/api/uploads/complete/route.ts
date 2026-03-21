@@ -8,6 +8,14 @@ import { recordUsageEvent } from "@/lib/billing/usage";
 
 const DEV_FILEDATA_MAX_BYTES = 25 * 1024 * 1024;
 
+const ALLOWED_MIME_TYPES = new Set([
+  "application/pdf",
+  "text/plain",
+  "text/csv",
+  "text/markdown",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
+
 function makeDataUri(fileType: string, bytes: Buffer) {
   return `data:${fileType};base64,${bytes.toString("base64")}`;
 }
@@ -31,6 +39,14 @@ export async function POST(req: Request) {
 
     if (tokenPayload.userId !== userId) {
       return NextResponse.json({ error: "Upload token is not valid for this user" }, { status: 403 });
+    }
+
+    // Server-side file type allowlist — reject before wasting blob storage or DB rows
+    if (!ALLOWED_MIME_TYPES.has(file.type)) {
+      return NextResponse.json(
+        { error: `Unsupported file type: ${file.type || "unknown"}. Allowed types: PDF, TXT, CSV, Markdown, DOCX.` },
+        { status: 415 }
+      );
     }
 
     if (

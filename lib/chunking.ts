@@ -15,9 +15,14 @@ export async function chunkContent(content: string, options: ChunkOptions = {}) 
     const rawChunks = await textsplitter.splitText(content.trim());
     const totalLength = content.trim().length;
 
+    // Track cumulative search offset to prevent duplicate substrings from pointing
+    // to an earlier position than they actually appear in the document.
+    let searchOffset = 0;
+
     return rawChunks.map((chunk, index) => {
-        // Estimate position in original document
-        const chunkStart = content.indexOf(chunk);
+        const chunkStart = content.indexOf(chunk, searchOffset);
+        if (chunkStart >= 0) searchOffset = chunkStart + chunk.length;
+
         const positionPercent = chunkStart >= 0 ? Math.round((chunkStart / totalLength) * 100) : 0;
 
         // Estimate page number if we know total pages

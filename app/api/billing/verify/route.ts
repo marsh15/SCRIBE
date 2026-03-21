@@ -13,6 +13,19 @@ const verifySchema = z.object({
     gateway: z.literal("razorpay"),
 });
 
+/** Compute the same calendar day in the next month (handles 28/29/31-day months correctly). */
+function addOneMonth(date: Date): Date {
+    const next = new Date(Date.UTC(
+        date.getUTCFullYear(),
+        date.getUTCMonth() + 1,  // JS Date auto-rolls over if month > 11
+        date.getUTCDate(),
+        date.getUTCHours(),
+        date.getUTCMinutes(),
+        date.getUTCSeconds(),
+    ));
+    return next;
+}
+
 export async function POST(req: Request) {
     try {
         const userId = await getUserId();
@@ -57,15 +70,19 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Payment verification failed" }, { status: 400 });
         }
 
-        // Payment verified — activate the subscription
+        // Payment verified — activate the subscription.
+        // Use proper calendar month arithmetic instead of a hardcoded 30-day offset.
+        const periodStart = new Date();
+        const periodEnd = addOneMonth(periodStart);
+
         await setUserSubscription({
             userId,
             planCode: planCode as PlanCode,
             gateway: gateway as BillingGateway,
             providerSubscriptionId: razorpay_payment_id,
             status: "active",
-            currentPeriodStart: new Date(),
-            currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // +30 days
+            currentPeriodStart: periodStart,
+            currentPeriodEnd: periodEnd,
             cancelAtPeriodEnd: false,
         });
 

@@ -17,7 +17,7 @@ export const files = pgTable("files", {
   name: text("name").notNull(),
   type: text("type").notNull(),
   size: integer("size").notNull(),
-  userId: text("user_id"),
+  userId: text("user_id").notNull(),
   fileData: text("file_data"), // base64-encoded original file for viewing
   extractedText: text("extracted_text"), // full extracted text
   storageKey: text("storage_key"),
@@ -44,7 +44,7 @@ export const documents = pgTable(
 export const chats = pgTable("chats", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
-  userId: text("user_id"),
+  userId: text("user_id").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

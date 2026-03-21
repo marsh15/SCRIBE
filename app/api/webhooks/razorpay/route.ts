@@ -6,6 +6,7 @@ import {
   setUserSubscription,
 } from "@/lib/billing/store";
 import { planFromProviderId } from "@/lib/billing/mapper";
+import crypto from "node:crypto";
 
 function toDate(ts: unknown) {
   if (typeof ts !== "number") return undefined;
@@ -30,11 +31,11 @@ export async function POST(req: Request) {
       };
     };
 
-    const eventId = String(
-      event.payload?.subscription?.entity?.id ??
-        event.payload?.payment?.entity?.id ??
-        `${event.event}-${event.created_at ?? Date.now()}`
-    );
+    // Use SHA-256 of the raw webhook body as the dedup key.
+    // This guarantees one record per unique payload — different events for the same
+    // subscription (e.g. subscription.activated vs subscription.charged) have different
+    // bodies and will NOT be incorrectly deduplicated.
+    const eventId = crypto.createHash("sha256").update(rawBody).digest("hex");
 
     const marker = await markPaymentEventIfNew({
       gateway: "razorpay",

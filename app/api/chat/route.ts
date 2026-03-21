@@ -5,6 +5,7 @@ import {
   tool,
   stepCountIs,
 } from "ai";
+import { NextResponse } from "next/server";
 import { google } from "@ai-sdk/google";
 import { withSupermemory } from "@supermemory/tools/ai-sdk";
 import { z } from "zod";
@@ -96,9 +97,14 @@ export async function POST(req: Request) {
     const userId = await getUserId();
     const usageSummary = await getUsageSummary(userId);
     if (!usageSummary.allowOverage && usageSummary.projectedOverageInr > 0) {
-      return new Response("Free plan usage limit reached. Upgrade to continue chatting.", {
-        status: 402,
-      });
+      return NextResponse.json(
+        {
+          error: "Free plan usage limit reached.",
+          message: "You've used all your free quota for this billing period.",
+          upgradeUrl: "/pricing",
+        },
+        { status: 402 }
+      );
     }
     const { messages }: { messages: ChatMessage[] } = await req.json();
 
@@ -107,6 +113,27 @@ export async function POST(req: Request) {
 
     const sanitizedMessages = sanitizeMessages(messages);
     const modelWithMemory = withSupermemory(google("gemini-2.5-flash"), userId);
+
+    // Save user message to DB immediately — BEFORE starting the stream.
+    // If we save only in onFinish and Gemini crashes mid-stream, the message is lost forever.
+    if (chatId) {
+      const { db: dbInstance } = await import("@/lib/db-config");
+      const { chatMessages: chatMessagesTable } = await import("@/lib/db-schema");
+      const { nanoid } = await import("nanoid");
+      const lastUserMessage = messages[messages.length - 1];
+      try {
+        await dbInstance.insert(chatMessagesTable).values({
+          id: lastUserMessage.id || nanoid(),
+          chatId,
+          role: lastUserMessage.role,
+          content: extractTextFromMessage(lastUserMessage),
+          parts: (lastUserMessage.parts ?? []) as never,
+        });
+      } catch (e) {
+        // Non-fatal: message may already exist (idempotent retry)
+        console.error("[Chat] Failed to pre-save user message:", e);
+      }
+    }
 
     const userTools = {
       searchKnowledgeBase: tool({
@@ -171,6 +198,12 @@ CRITICAL RULE: You MUST call the searchKnowledgeBase tool on EVERY user message 
 - NEVER respond with "I need more information" or "please specify". ALWAYS search first, then answer based on what you find.
 - If the search returns no results, tell the user their knowledge base appears empty and suggest uploading documents.
 
+HALLUCINATION PREVENTION (CRITICAL):
+- ONLY answer based on the retrieved context from the knowledge base.
+- If the retrieved context does not contain enough information to confidently answer, say so explicitly: "I couldn't find sufficient information about this in your documents."
+- Do NOT guess, extrapolate, or use your general training knowledge to fill in gaps — if it's not in the documents, say you don't know.
+- Never fabricate file names, page numbers, chunk details, or quotes.
+
 Response formatting:
 1) Start with: "## Answer"
 2) Follow with: "## Key Points" as a bullet list
@@ -189,17 +222,8 @@ Citation rules:
         const { chatMessages } = await import("@/lib/db-schema");
         const { nanoid } = await import("nanoid");
 
-        const lastUserMessage = messages[messages.length - 1];
-
         try {
-          await db.insert(chatMessages).values({
-            id: lastUserMessage.id || nanoid(),
-            chatId,
-            role: lastUserMessage.role,
-            content: extractTextFromMessage(lastUserMessage),
-            parts: (lastUserMessage.parts ?? []) as never,
-          });
-
+          // User message was already saved before the stream started — only save assistant response here
           const assistantParts: Array<{
             type: string;
             text?: string;
@@ -265,8 +289,9 @@ Citation rules:
             });
           }
         } catch (error) {
-          console.error("Failed to save chat or usage in onFinish", error);
+          console.error("Failed to save assistant message or usage in onFinish", error);
         }
+
       },
     });
 

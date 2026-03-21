@@ -73,18 +73,21 @@ export async function processSingleJob(jobId: number) {
     const chunkTexts = chunks.map((chunk) => chunk.content);
     const embeddings = await generateEmbeddings(chunkTexts);
 
-    await db.delete(documents).where(eq(documents.fileId, file.id));
-
-    if (chunks.length > 0) {
-      await db.insert(documents).values(
-        chunks.map((chunk, index) => ({
-          fileId: file.id,
-          content: chunk.content,
-          metadata: chunk.metadata,
-          embeddings: embeddings[index],
-        }))
-      );
-    }
+    // ATOMIC: delete old embeddings and insert new ones in a transaction.
+    // A crash between delete and insert previously left files permanently unembedded.
+    await db.transaction(async (tx) => {
+      await tx.delete(documents).where(eq(documents.fileId, file.id));
+      if (chunks.length > 0) {
+        await tx.insert(documents).values(
+          chunks.map((chunk, index) => ({
+            fileId: file.id,
+            content: chunk.content,
+            metadata: chunk.metadata,
+            embeddings: embeddings[index],
+          }))
+        );
+      }
+    });
 
     await db
       .update(files)
@@ -161,6 +164,19 @@ export async function processSingleJob(jobId: number) {
 
 export async function processQueuedIngestionJobs(limit = 2) {
   const now = new Date();
+  const staleThreshold = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes ago
+
+  // RELIABILITY: Reset jobs stuck in "processing" for more than 5 minutes
+  // (indicates a Vercel function crash without a chance to update status).
+  await db
+    .update(ingestionJobs)
+    .set({ status: "queued", updatedAt: new Date() })
+    .where(
+      and(
+        eq(ingestionJobs.status, "processing"),
+        lte(ingestionJobs.startedAt, staleThreshold)
+      )
+    );
 
   const queuedJobs = await db.query.ingestionJobs.findMany({
     where: and(
