@@ -14,12 +14,15 @@ interface ThreePaneLayoutProps {
 }
 
 const DEFAULT_LAYOUT = {
-  sidebar: 18,
-  main: 56,
+  sidebar: 20,
+  main: 54,
   inspector: 26,
 };
 
-const STORAGE_KEY = "scribe-layout-v8";
+const STORAGE_KEY = "scribe-layout-v9";
+const PANEL_IDS = ["sidebar", "main", "inspector"] as const;
+
+type LayoutMap = typeof DEFAULT_LAYOUT;
 
 function ResizeHandle() {
   return (
@@ -35,8 +38,56 @@ function ResizeHandle() {
   );
 }
 
-function isLayoutValid(l: { sidebar: number; main: number; inspector: number }) {
-  return l.sidebar >= 14 && l.main >= 35 && l.inspector >= 18;
+function isLayoutValid(l: LayoutMap) {
+  const sum = l.sidebar + l.main + l.inspector;
+  return (
+    l.sidebar >= 16 &&
+    l.main >= 40 &&
+    l.inspector >= 20 &&
+    l.sidebar <= 30 &&
+    l.inspector <= 38 &&
+    Math.abs(sum - 100) <= 0.5
+  );
+}
+
+function normalizeLayoutValue(value: number) {
+  return Number(value.toFixed(2));
+}
+
+function normalizeLayout(raw: unknown): LayoutMap | null {
+  if (!raw || typeof raw !== "object") return null;
+
+  const parsed = raw as Partial<Record<(typeof PANEL_IDS)[number], unknown>>;
+  const values = PANEL_IDS.map((panelId) => parsed[panelId]);
+
+  if (!values.every((value) => typeof value === "number" && Number.isFinite(value))) {
+    return null;
+  }
+
+  let [sidebar, main, inspector] = values as number[];
+  const rawSum = sidebar + main + inspector;
+
+  if (rawSum > 0 && rawSum <= 1.01) {
+    sidebar *= 100;
+    main *= 100;
+    inspector *= 100;
+  }
+
+  const normalized: LayoutMap = {
+    sidebar: normalizeLayoutValue(sidebar),
+    main: normalizeLayoutValue(main),
+    inspector: normalizeLayoutValue(inspector),
+  };
+
+  if (!isLayoutValid(normalized)) {
+    return null;
+  }
+
+  return normalized;
+}
+
+function persistLayout(layout: LayoutMap) {
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(layout));
 }
 
 export function ThreePaneLayout({
@@ -51,29 +102,38 @@ export function ThreePaneLayout({
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
+      if (!raw) {
+        persistLayout(DEFAULT_LAYOUT);
+        return;
+      }
 
-      const parsed = JSON.parse(raw) as Partial<typeof DEFAULT_LAYOUT>;
-      if (
-        typeof parsed.sidebar === "number" &&
-        typeof parsed.main === "number" &&
-        typeof parsed.inspector === "number"
-      ) {
-        const candidate = {
-          sidebar: parsed.sidebar,
-          main: parsed.main,
-          inspector: parsed.inspector,
-        };
-        if (isLayoutValid(candidate)) {
-          setLayout(candidate);
-        }
+      const normalized = normalizeLayout(JSON.parse(raw));
+      if (normalized) {
+        setLayout(normalized);
+      } else {
+        window.localStorage.removeItem(STORAGE_KEY);
+        persistLayout(DEFAULT_LAYOUT);
       }
     } catch {
       window.localStorage.removeItem(STORAGE_KEY);
+      persistLayout(DEFAULT_LAYOUT);
     } finally {
       setMounted(true);
     }
   }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+
+    const currentLayout = groupRef.current?.getLayout();
+    const normalized = normalizeLayout(currentLayout);
+
+    if (!normalized) {
+      groupRef.current?.setLayout(DEFAULT_LAYOUT);
+      setLayout(DEFAULT_LAYOUT);
+      persistLayout(DEFAULT_LAYOUT);
+    }
+  }, [groupRef, mounted]);
 
   if (!mounted) {
     return (
@@ -95,10 +155,11 @@ export function ThreePaneLayout({
         groupRef={groupRef}
         defaultLayout={layout}
         onLayoutChanged={(nextLayout) => {
-          setLayout(nextLayout as typeof DEFAULT_LAYOUT);
+          const normalized = normalizeLayout(nextLayout) ?? DEFAULT_LAYOUT;
+          setLayout(normalized);
           try {
-            window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextLayout));
-          } catch { }
+            persistLayout(normalized);
+          } catch {}
         }}
       >
         {/* Left Sidebar */}
