@@ -5,6 +5,8 @@ const isPublicRoute = createRouteMatcher([
     "/sign-in(.*)",
     "/sign-up(.*)",
     "/api/webhooks/razorpay",
+    "/api/internal/ingest/run",
+    "/api/health",
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
