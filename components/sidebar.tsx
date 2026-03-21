@@ -122,7 +122,8 @@ export function Sidebar() {
   const { user } = useUser();
   const [files, setFiles] = useState<SidebarFile[]>([]);
   const [chats, setChats] = useState<SidebarChat[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [loadedOnce, setLoadedOnce] = useState(false);
   const [deletingChatId, setDeletingChatId] = useState<string | null>(null);
   const [deletingFileId, setDeletingFileId] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -142,6 +143,7 @@ export function Sidebar() {
       console.error("Failed to fetch sidebar data:", err);
     } finally {
       setLoading(false);
+      setLoadedOnce(true);
     }
   }, []);
 
@@ -178,6 +180,7 @@ export function Sidebar() {
 
   const handleRefresh = async () => {
     setRefreshing(true);
+    setLoading(true);
     await fetchData();
     setTimeout(() => setRefreshing(false), 400);
   };
@@ -271,7 +274,7 @@ export function Sidebar() {
           </div>
 
           <ScrollArea className="flex-1 -mx-2">
-            {loading ? (
+            {loading && !loadedOnce && chats.length > 0 ? (
               <div className="p-2 space-y-2">
                 {[1, 2, 3].map((i) => (
                   <div key={i} className="h-8 bg-muted/50 rounded-sm animate-pulse" />
@@ -366,7 +369,7 @@ export function Sidebar() {
           </div>
 
           <ScrollArea className="flex-1 -mx-2">
-            {loading ? (
+            {loading && !loadedOnce && files.length > 0 ? (
               <div className="p-2 space-y-2">
                 {[1, 2].map((i) => (
                   <div key={i} className="h-8 bg-muted/50 rounded-sm animate-pulse" />

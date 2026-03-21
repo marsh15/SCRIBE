@@ -2,18 +2,25 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db-config";
 import { subscriptions } from "@/lib/db-schema";
 import { PLAN_CATALOG, type PlanCode } from "@/lib/billing/plans";
+import { flags } from "@/lib/flags";
 
 export const ABSOLUTE_MAX_FILE_SIZE_MB = 100;
 
 export async function getUserPlanCode(userId: string): Promise<PlanCode> {
-  const active = await db.query.subscriptions.findFirst({
-    where: and(eq(subscriptions.userId, userId), eq(subscriptions.status, "active")),
-    orderBy: (table, { desc }) => [desc(table.updatedAt)],
-  });
+  if (!flags.billingEnabled) return "free";
 
-  if (!active) return "free";
-  if (active.planCode === "pro" || active.planCode === "team" || active.planCode === "free") {
-    return active.planCode;
+  try {
+    const active = await db.query.subscriptions.findFirst({
+      where: and(eq(subscriptions.userId, userId), eq(subscriptions.status, "active")),
+      orderBy: (table, { desc }) => [desc(table.updatedAt)],
+    });
+
+    if (!active) return "free";
+    if (active.planCode === "pro" || active.planCode === "team" || active.planCode === "free") {
+      return active.planCode;
+    }
+  } catch (error) {
+    console.error("Failed to resolve upload plan code:", error);
   }
 
   return "free";

@@ -62,6 +62,8 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     console.error("Upload sign error:", error);
-    return NextResponse.json({ error: "Failed to prepare upload" }, { status: 500 });
+    const message =
+      error instanceof Error ? error.message : "Failed to prepare upload";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
