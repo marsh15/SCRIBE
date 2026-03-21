@@ -57,6 +57,7 @@ export default function DocumentUpload() {
   const [files, setFiles] = useState<any[]>([]);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const hasPendingIngestion = isLoading || files.some((file) => file.status === "queued" || file.status === "processing");
 
   const fetchFiles = useCallback(async () => {
     const data = await getFiles();
@@ -241,7 +242,7 @@ export default function DocumentUpload() {
   };
 
   return (
-    <ThreePaneLayout>
+    <ThreePaneLayout status={hasPendingIngestion ? "submitted" : "ready"}>
       <div className="flex flex-col h-full relative bg-background">
         {/* Header Bar */}
         <div className="h-12 border-b border-border/50 flex items-center justify-between px-6 shrink-0 bg-background/95 backdrop-blur z-10">

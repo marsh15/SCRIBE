@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db-config";
+import { db, pool } from "@/lib/db-config";
 import { files, ingestionJobs } from "@/lib/db-schema";
 import { getUserId } from "@/lib/auth";
 import { verifyUploadToken } from "@/lib/uploads/signature";
@@ -21,6 +21,109 @@ const ALLOWED_MIME_TYPES = new Set([
 
 function makeDataUri(fileType: string, bytes: Buffer) {
   return `data:${fileType};base64,${bytes.toString("base64")}`;
+}
+
+function formatDatabaseError(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return "Unknown database error";
+  }
+
+  const details = error as {
+    message?: string;
+    code?: string;
+    detail?: string;
+    table?: string;
+    column?: string;
+    constraint?: string;
+  };
+
+  return [
+    details.message,
+    details.code ? `code=${details.code}` : null,
+    details.table ? `table=${details.table}` : null,
+    details.column ? `column=${details.column}` : null,
+    details.constraint ? `constraint=${details.constraint}` : null,
+    details.detail ?? null,
+  ]
+    .filter(Boolean)
+    .join(" | ");
+}
+
+async function insertQueuedFileRecord(input: {
+  name: string;
+  type: string;
+  size: number;
+  userId: string;
+  fileData: string | null;
+  storageKey: string | null;
+  storageUrl: string | null;
+}) {
+  try {
+    const [insertedFile] = await db
+      .insert(files)
+      .values({
+        name: input.name,
+        type: input.type,
+        size: input.size,
+        userId: input.userId,
+        fileData: input.fileData,
+        storageKey: input.storageKey,
+        storageUrl: input.storageUrl,
+        status: "queued",
+      })
+      .returning();
+
+    return insertedFile;
+  } catch (primaryError) {
+    console.error("Primary file insert failed; retrying with raw SQL:", {
+      error: formatDatabaseError(primaryError),
+    });
+
+    try {
+      const result = await pool.query(
+        `insert into "files" ("name", "type", "size", "user_id", "file_data", "storage_key", "storage_url", "status")
+         values ($1, $2, $3, $4, $5, $6, $7, $8)
+         returning "id", "name", "type", "size", "user_id", "file_data", "extracted_text", "storage_key", "storage_url", "status", "processing_error", "text_bytes", "created_at"`,
+        [
+          input.name,
+          input.type,
+          input.size,
+          input.userId,
+          input.fileData,
+          input.storageKey,
+          input.storageUrl,
+          "queued",
+        ]
+      );
+
+      const row = result.rows[0];
+      if (!row) {
+        throw new Error("Raw SQL insert returned no file row");
+      }
+
+      return {
+        id: row.id,
+        name: row.name,
+        type: row.type,
+        size: row.size,
+        userId: row.user_id,
+        fileData: row.file_data,
+        extractedText: row.extracted_text,
+        storageKey: row.storage_key,
+        storageUrl: row.storage_url,
+        status: row.status,
+        processingError: row.processing_error,
+        textBytes: row.text_bytes,
+        createdAt: row.created_at,
+      };
+    } catch (fallbackError) {
+      console.error("Raw SQL file insert failed:", {
+        error: formatDatabaseError(fallbackError),
+      });
+
+      throw new Error(formatDatabaseError(fallbackError) || formatDatabaseError(primaryError));
+    }
+  }
 }
 
 export async function POST(req: Request) {
@@ -89,19 +192,15 @@ export async function POST(req: Request) {
       );
     }
 
-    const [insertedFile] = await db
-      .insert(files)
-      .values({
-        name: file.name,
-        type: file.type || "application/octet-stream",
-        size: file.size,
-        userId,
-        fileData,
-        storageKey,
-        storageUrl,
-        status: "queued",
-      })
-      .returning();
+    const insertedFile = await insertQueuedFileRecord({
+      name: file.name,
+      type: file.type || "application/octet-stream",
+      size: file.size,
+      userId,
+      fileData,
+      storageKey,
+      storageUrl,
+    });
 
     const storageMilliGbDay = Math.ceil((file.size / (1024 * 1024 * 1024)) * 1000);
     await recordUsageEvent({
