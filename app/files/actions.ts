@@ -5,11 +5,9 @@ import { files } from "@/lib/db-schema";
 import { eq, desc, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getUserId } from "@/lib/auth";
-import { ensureApplicationSchema } from "@/lib/schema-compat";
 
 export async function getFiles() {
     try {
-        await ensureApplicationSchema();
         const userId = await getUserId();
         const allFiles = await db.query.files.findMany({
             where: eq(files.userId, userId),
@@ -24,7 +22,6 @@ export async function getFiles() {
 
 export async function deleteFile(fileId: number) {
     try {
-        await ensureApplicationSchema();
         const userId = await getUserId();
         // Only allow deleting own files
         await db.delete(files).where(and(eq(files.id, fileId), eq(files.userId, userId)));

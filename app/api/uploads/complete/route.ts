@@ -7,7 +7,6 @@ import { uploadBufferToBlob } from "@/lib/storage/blob";
 import { recordUsageEvent } from "@/lib/billing/usage";
 import { ingestFile } from "@/lib/ingestion/worker";
 import { flags } from "@/lib/flags";
-import { ensureApplicationSchema } from "@/lib/schema-compat";
 
 const DEV_FILEDATA_MAX_BYTES = 25 * 1024 * 1024;
 export const maxDuration = 60;
@@ -26,7 +25,6 @@ function makeDataUri(fileType: string, bytes: Buffer) {
 
 export async function POST(req: Request) {
   try {
-    await ensureApplicationSchema();
     const userId = await getUserId();
     const formData = await req.formData();
 
