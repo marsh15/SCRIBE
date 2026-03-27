@@ -214,15 +214,15 @@ export function Sidebar() {
     <div className="flex flex-col h-full overflow-hidden">
       <div className="p-4 pb-0">
         <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-sm bg-primary flex items-center justify-center">
+          <Link href="/" className="flex items-center gap-2 group">
+            <div className="w-7 h-7 rounded-sm bg-primary flex items-center justify-center group-hover:opacity-80 transition-opacity">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary-foreground">
                 <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
                 <path d="m15 5 4 4" />
               </svg>
             </div>
-            <h1 className="font-serif text-xl font-normal tracking-tight">Scribe</h1>
-          </div>
+            <h1 className="font-serif text-xl font-normal tracking-tight group-hover:opacity-80 transition-opacity">Scribe</h1>
+          </Link>
           <div className="flex items-center gap-0.5">
             <ThemeToggle />
             <Button

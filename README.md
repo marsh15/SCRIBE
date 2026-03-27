@@ -1,11 +1,18 @@
 # ✒️ SCRIBE
-> AI-Powered RAG Knowledge Base & Chatbot
+
+> **AI-Powered RAG Knowledge Base & Chatbot** — Upload documents, ask questions, get cited answers.
+
+[![Live Demo](https://img.shields.io/badge/Live-scribe--marsh.vercel.app-00C4A0?style=flat-square&logo=vercel)](https://scribe-marsh.vercel.app)
+[![Next.js](https://img.shields.io/badge/Next.js-16.1-black?style=flat-square&logo=next.js)](https://nextjs.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
+
+---
 
 ## Overview
 
 SCRIBE is an intelligent document management and chatbot application that lets you ingest files (PDF, CSV, MD, TXT, DOCX), process them into vector embeddings, and query them using Google Gemini AI. It features a premium resizable three-pane interface to navigate chats, visualize the RAG pipeline in real time, and manage your uploaded knowledge base — all scoped per-user.
 
-**Live:** [scribe-marsh.com](https://scribe-marsh.com)
+**Live:** [scribe-marsh.vercel.app](https://scribe-marsh.vercel.app)
 
 ---
 
@@ -16,6 +23,7 @@ SCRIBE is an intelligent document management and chatbot application that lets y
 - **Cited Sources** — Chat responses include clickable citations with file name, page number, and chunk index. Click a citation to navigate directly to the source document.
 - **Document Viewer** — Preview PDFs inline, view extracted text for TXT/MD/CSV, and browse all indexed chunks with page, section, and character-offset metadata.
 - **Smart Error Handling** — Specific error messages for corrupt PDFs, scanned documents, oversized files, and API rate limits. Failed embeddings automatically roll back.
+- **Hallucination Prevention** — Strict guardrails ensure the AI only answers based on retrieved context; it will never fabricate sources or fill gaps with general knowledge.
 
 ### Infrastructure
 - **Async Ingestion Queue** — Uploads are queued and processed in the background with retry support.
@@ -24,7 +32,7 @@ SCRIBE is an intelligent document management and chatbot application that lets y
 
 ### UI/UX
 - **Three-Pane Layout** — Resizable sidebar, main content, and RAG inspector with persistent panel sizes.
-- **Real-Time RAG Inspector** — Live pipeline visualization with flow lines (Tokenize → Embed → Vector Search → Build Context → Stream Response).
+- **Real-Time RAG Inspector** — Live pipeline visualization (Tokenize → Embed → Vector Search → Build Context → Stream Response) with retrieved chunk preview.
 - **Dark & Light Mode** — Smooth animated toggle with proper contrast across all panels.
 - **Premium Typography** — DM Serif Display (headlines), DM Sans (body), JetBrains Mono (code/labels).
 - **Chat Avatars** — User/AI avatar indicators with a custom pen nib logomark.
@@ -153,6 +161,7 @@ Create a `.env.local` file:
 | `build` | `npm run build` | Create optimized production build |
 | `start` | `npm start` | Start production server |
 | `lint` | `npm run lint` | Run ESLint |
+| `test` | `npx vitest run` | Run unit tests |
 
 ---
 

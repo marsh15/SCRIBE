@@ -123,50 +123,68 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
                 Retrieved Chunks
               </h3>
               <div className="space-y-3">
-                {String((lastToolInvocation as any).result || "")
-                  .split("\n\n---\n\n")
-                  .filter(Boolean)
-                  .map((chunkStr, i) => {
-                    if (
-                      chunkStr ===
-                      "No relevant information found in the knowledge base. The knowledge base may be empty — please upload documents first."
-                    )
-                      return null;
-                    const lines = chunkStr.split("\n");
-                    const sourceLine = lines[0] || "";
-                    const content = lines
-                      .slice(1)
-                      .join("\n")
-                      .replace("Content: ", "");
-                    const score = 0.85 - i * 0.05;
+                {(() => {
+                  const raw = (lastToolInvocation as any).result;
+                  // Safely extract the string content from the tool result.
+                  // It may arrive as a plain string, or as an object (e.g. { text: "..." } or { content: "..." }).
+                  let resultText = "";
+                  if (typeof raw === "string") {
+                    resultText = raw;
+                  } else if (raw && typeof raw === "object") {
+                    // Try common SDK wrapper shapes
+                    if (typeof raw.text === "string") resultText = raw.text;
+                    else if (typeof raw.content === "string") resultText = raw.content;
+                    else if (typeof raw.result === "string") resultText = raw.result;
+                    else if (Array.isArray(raw)) {
+                      resultText = raw.map((item: any) => (typeof item === "string" ? item : JSON.stringify(item))).join("\n\n---\n\n");
+                    } else {
+                      try { resultText = JSON.stringify(raw); } catch { resultText = ""; }
+                    }
+                  }
 
-                    return (
-                      <div
-                        key={i}
-                        className="border border-border/50 bg-card p-3 rounded-sm space-y-2 hover:border-[#00C4A0]/30 transition-all duration-200 glow-hover"
-                        style={{ animation: `stagger-in 0.4s ease-out ${i * 100}ms both` }}
-                      >
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="font-mono text-[9px] text-[#B07D62] truncate mr-2">
-                            {sourceLine}
-                          </span>
-                          <span className="font-mono text-[9px] text-[#00C4A0] tabular-nums shrink-0">
-                            {(score * 100).toFixed(1)}%
-                          </span>
+                  if (!resultText) return null;
+
+                  return resultText
+                    .split("\n\n---\n\n")
+                    .filter(Boolean)
+                    .map((chunkStr: string, i: number) => {
+                      if (
+                        chunkStr ===
+                        "No relevant information found in the knowledge base. The knowledge base may be empty — please upload documents first."
+                      )
+                        return null;
+                      const lines = chunkStr.split("\n");
+                      const sourceLine = lines[0] || "";
+                      const content = lines
+                        .slice(1)
+                        .join("\n")
+                        .replace("Content: ", "");
+
+                      // Extract source name for display
+                      const sourceMatch = sourceLine.match(/Source:\s*\[([^\]]+)\]/);
+                      const sourceName = sourceMatch ? sourceMatch[1] : sourceLine.replace(/^\[Citation \d+\]\s*/, "");
+
+                      return (
+                        <div
+                          key={i}
+                          className="border border-border/50 bg-card p-3 rounded-sm space-y-2 hover:border-[#00C4A0]/30 transition-all duration-200 glow-hover"
+                          style={{ animation: `stagger-in 0.4s ease-out ${i * 100}ms both` }}
+                        >
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="font-mono text-[9px] text-[#B07D62] truncate mr-2">
+                              {sourceName}
+                            </span>
+                            <span className="font-mono text-[9px] bg-[#00C4A0]/15 text-[#00C4A0] px-1.5 py-0.5 rounded-sm shrink-0">
+                              Chunk {i + 1}
+                            </span>
+                          </div>
+                          <p className="text-xs font-sans text-muted-foreground line-clamp-3 leading-relaxed">
+                            {content}
+                          </p>
                         </div>
-                        {/* Similarity Bar */}
-                        <div className="h-1 w-full bg-muted rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-gradient-to-r from-[#00C4A0] to-[#00C4A0]/40 transition-all duration-1000 rounded-full"
-                            style={{ width: `${score * 100}%` }}
-                          />
-                        </div>
-                        <p className="text-xs font-sans text-muted-foreground line-clamp-3 leading-relaxed">
-                          {content}
-                        </p>
-                      </div>
-                    );
-                  })}
+                      );
+                    });
+                })()}
               </div>
             </section>
           )}
