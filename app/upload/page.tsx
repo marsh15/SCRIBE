@@ -274,7 +274,7 @@ export default function DocumentUpload() {
       setMessage({ type: "success", text: "Processing embeddings..." });
       setIsLoading(false); // Pipeline hook manages its own loading state
 
-      const success = await runPipeline(
+      const { success, error: pipelineError } = await runPipeline(
         fileId,
         chunks,
         extraction.extractedText.length
@@ -288,7 +288,7 @@ export default function DocumentUpload() {
       } else {
         setMessage({
           type: "error",
-          text: pipelineState.error || "Processing failed. Please try again.",
+          text: pipelineError || "Processing failed. Please try again.",
         });
       }
 

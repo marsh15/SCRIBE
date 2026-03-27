@@ -87,7 +87,7 @@ export function useIngestionPipeline() {
       chunks: ClientChunk[],
       textBytes: number,
       startFromBatch = 0
-    ): Promise<boolean> => {
+    ): Promise<{ success: boolean; error: string | null }> => {
       abortRef.current = false;
 
       const totalBatches = Math.ceil(chunks.length / BATCH_SIZE);
@@ -111,29 +111,52 @@ export function useIngestionPipeline() {
               status: "error",
               error: "Upload cancelled.",
             }));
-            return false;
+            return { success: false, error: "Upload cancelled." };
           }
 
           const start = batchIdx * BATCH_SIZE;
           const end = Math.min(start + BATCH_SIZE, chunks.length);
           const batchChunks = chunks.slice(start, end);
 
-          const res = await fetch("/api/ingest/batch", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              fileId,
-              batchIndex: batchIdx,
-              totalBatches,
-              chunks: batchChunks,
-            }),
-          });
+          // Retry up to 2 times per batch for transient failures (timeouts, 429s)
+          let res: Response | null = null;
+          let lastBatchError = "";
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              res = await fetch("/api/ingest/batch", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  fileId,
+                  batchIndex: batchIdx,
+                  totalBatches,
+                  chunks: batchChunks,
+                }),
+              });
 
-          if (!res.ok) {
-            const errJson = await res.json().catch(() => ({ error: "Unknown error" }));
-            throw new Error(
-              errJson.error || `Batch ${batchIdx + 1} failed with status ${res.status}`
-            );
+              if (res.ok) break; // Success — exit retry loop
+
+              const errJson = await res.json().catch(() => ({ error: `HTTP ${res!.status}` }));
+              lastBatchError = errJson.error || `Batch ${batchIdx + 1} failed (status ${res.status})`;
+
+              // Don't retry 4xx client errors (validation, auth, quota)
+              if (res.status >= 400 && res.status < 500) {
+                throw new Error(lastBatchError);
+              }
+            } catch (fetchErr) {
+              if (fetchErr instanceof Error && fetchErr.message === lastBatchError) throw fetchErr;
+              lastBatchError = fetchErr instanceof Error ? fetchErr.message : "Network error";
+            }
+
+            // Wait before retrying (3 seconds)
+            if (attempt < 2) {
+              console.log(`[Pipeline] Batch ${batchIdx + 1} attempt ${attempt + 1} failed, retrying in 3s...`);
+              await new Promise((r) => setTimeout(r, 3000));
+            }
+          }
+
+          if (!res || !res.ok) {
+            throw new Error(lastBatchError || `Batch ${batchIdx + 1} failed after 3 attempts`);
           }
 
           // Save progress to localStorage for resumability
@@ -186,7 +209,7 @@ export function useIngestionPipeline() {
           totalChunks: chunks.length,
           error: null,
         });
-        return true;
+        return { success: true, error: null };
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Pipeline failed";
@@ -195,7 +218,7 @@ export function useIngestionPipeline() {
           status: "error",
           error: message,
         }));
-        return false;
+        return { success: false, error: message };
       }
     },
     []
@@ -206,15 +229,13 @@ export function useIngestionPipeline() {
    * Returns true if a resume was found and started, false otherwise.
    */
   const checkAndResume = useCallback(
-    async (fileId: number): Promise<boolean> => {
+    async (fileId: number): Promise<{ success: boolean; error: string | null }> => {
       const stored = getStoredProgress(fileId);
       if (!stored || stored.lastBatchIndex >= stored.totalBatches - 1) {
-        // No incomplete upload or already finished
         clearProgress(fileId);
-        return false;
+        return { success: false, error: null };
       }
 
-      // Resume from the next unfinished batch
       return runPipeline(
         stored.fileId,
         stored.chunks,
