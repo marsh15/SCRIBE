@@ -39,7 +39,7 @@ export const PLAN_CATALOG: Record<PlanCode, PlanDefinition> = {
     monthlyPrice: { INR: 99, USD: 2 },
     description: "For solo professionals with metered overage support.",
     limits: {
-      maxFileSizeMb: 25,
+      maxFileSizeMb: 100,
       storageGb: 5,
       includedModelInputTokens: 5_000_000,
       includedModelOutputTokens: 1_000_000,
@@ -53,7 +53,7 @@ export const PLAN_CATALOG: Record<PlanCode, PlanDefinition> = {
     monthlyPrice: { INR: 299, USD: 4 },
     description: "For teams that need higher quotas and faster throughput.",
     limits: {
-      maxFileSizeMb: 25,
+      maxFileSizeMb: 100,
       storageGb: 25,
       includedModelInputTokens: 20_000_000,
       includedModelOutputTokens: 5_000_000,

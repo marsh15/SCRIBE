@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
 import { db, sql } from "@/lib/db-config";
 import { files, ingestionJobs } from "@/lib/db-schema";
 import { getUserId } from "@/lib/auth";
@@ -209,6 +210,29 @@ export async function POST(req: Request) {
       sourceId: String(insertedFile.id),
       isEstimated: true,
     });
+
+    // ---- Browser-orchestrated pipeline: skip server-side ingestion ----
+    const skipIngestion = String(formData.get("skipIngestion") ?? "") === "true";
+    if (skipIngestion) {
+      // Mark as 'processing' — the browser will upload chunks via /api/ingest/batch
+      await withDatabaseRetry("markFileProcessingForBrowser", () =>
+        db
+          .update(files)
+          .set({ status: "processing" })
+          .where(eq(files.id, insertedFile.id))
+      );
+
+      return NextResponse.json({
+        ok: true,
+        file: {
+          id: insertedFile.id,
+          name: insertedFile.name,
+          size: insertedFile.size,
+          status: "processing",
+        },
+        ingestionMode: "browser",
+      });
+    }
 
     if (flags.asyncIngestionEnabled) {
       try {

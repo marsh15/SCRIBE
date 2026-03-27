@@ -18,6 +18,11 @@ import {
   X,
 } from "lucide-react";
 import { ThreePaneLayout } from "@/components/three-pane-layout";
+import { useClientExtract } from "@/hooks/useClientExtract";
+import { useIngestionPipeline } from "@/hooks/useIngestionPipeline";
+import { chunkContentClient } from "@/lib/chunking-client";
+
+const FILE_SIZE_THRESHOLD = 5 * 1024 * 1024; // 5MB — files above this use browser pipeline
 
 function getFileIcon(type: string, name: string) {
   const ext = name.split(".").pop()?.toLowerCase();
@@ -57,7 +62,10 @@ export default function DocumentUpload() {
   const [files, setFiles] = useState<any[]>([]);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const hasPendingIngestion = isLoading || files.some((file) => file.status === "queued" || file.status === "processing");
+  const { extractText, isExtracting } = useClientExtract();
+  const { state: pipelineState, runPipeline, reset: resetPipeline } = useIngestionPipeline();
+  const isBrowserPipeline = pipelineState.status !== "idle" && pipelineState.status !== "done";
+  const hasPendingIngestion = isLoading || isBrowserPipeline || files.some((file) => file.status === "queued" || file.status === "processing");
 
   const fetchFiles = useCallback(async () => {
     const data = await getFiles();
@@ -81,7 +89,8 @@ export default function DocumentUpload() {
     return () => clearInterval(interval);
   }, [files, fetchFiles]);
 
-  const processFile = async (file: File) => {
+  const processFileLegacy = async (file: File) => {
+    // ---- Server-side pipeline for small files (≤ 5MB) ----
     setIsLoading(true);
     setMessage(null);
 
@@ -127,7 +136,7 @@ export default function DocumentUpload() {
           id?: number;
           processingError?: string;
         };
-        ingestionMode?: "async" | "direct";
+        ingestionMode?: "async" | "direct" | "browser";
         chunks?: number;
       };
 
@@ -204,6 +213,121 @@ export default function DocumentUpload() {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const processFileBrowser = async (file: File) => {
+    // ---- Browser-orchestrated pipeline for large files (> 5MB) ----
+    setIsLoading(true);
+    setMessage(null);
+    resetPipeline();
+
+    try {
+      // Step 1: Client-side text extraction
+      setMessage({ type: "success", text: "Extracting text from document..." });
+      const extraction = await extractText(file);
+      if (!extraction) {
+        setMessage({ type: "error", text: "Failed to extract text from the document. It may be a scanned/image-only PDF." });
+        return;
+      }
+
+      // Step 2: Client-side chunking
+      setMessage({ type: "success", text: "Splitting document into chunks..." });
+      const chunks = await chunkContentClient(extraction.extractedText, {
+        fileName: file.name,
+        numPages: extraction.numPages,
+      });
+
+      setMessage({
+        type: "success",
+        text: `Created ${chunks.length} chunks. Uploading file to storage...`,
+      });
+
+      // Step 3: Upload file to storage (sign + complete with skipIngestion)
+      const signRes = await fetch("/api/uploads/sign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type || "application/octet-stream",
+        }),
+      });
+
+      const signJson = (await signRes.json()) as {
+        ok?: boolean;
+        uploadToken?: string;
+        error?: string;
+      };
+
+      if (!signRes.ok || !signJson.uploadToken) {
+        setMessage({ type: "error", text: signJson.error || "Upload signing failed" });
+        return;
+      }
+
+      const uploadForm = new FormData();
+      uploadForm.append("file", file);
+      uploadForm.append("uploadToken", signJson.uploadToken);
+      uploadForm.append("skipIngestion", "true");
+
+      const completeRes = await fetch("/api/uploads/complete", {
+        method: "POST",
+        body: uploadForm,
+      });
+
+      const completeJson = (await completeRes.json()) as {
+        ok?: boolean;
+        error?: string;
+        file?: { id?: number; name?: string; size?: number; status?: string };
+        ingestionMode?: string;
+      };
+
+      if (!completeRes.ok || !completeJson.ok || !completeJson.file?.id) {
+        setMessage({ type: "error", text: completeJson.error || "Failed to upload file" });
+        return;
+      }
+
+      const fileId = completeJson.file.id;
+
+      // Step 4: Run the batch pipeline
+      setMessage({ type: "success", text: "Processing embeddings..." });
+      setIsLoading(false); // Pipeline hook manages its own loading state
+
+      const success = await runPipeline(
+        fileId,
+        chunks,
+        extraction.extractedText.length
+      );
+
+      if (success) {
+        setMessage({
+          type: "success",
+          text: `File uploaded and indexed successfully (${chunks.length} chunks)!`,
+        });
+      } else {
+        setMessage({
+          type: "error",
+          text: pipelineState.error || "Processing failed. Please try again.",
+        });
+      }
+
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      await fetchFiles();
+    } catch (err) {
+      setMessage({
+        type: "error",
+        text: err instanceof Error ? err.message : "An error occurred while processing the document",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const processFile = async (file: File) => {
+    if (file.size > FILE_SIZE_THRESHOLD) {
+      await processFileBrowser(file);
+    } else {
+      await processFileLegacy(file);
     }
   };
 
@@ -301,22 +425,32 @@ export default function DocumentUpload() {
                   className="hidden"
                 />
 
-                {isLoading ? (
+                {(isLoading || isBrowserPipeline) ? (
                   <div className="flex flex-col items-center gap-4 py-4">
                     <Loader2 className="w-8 h-8 animate-spin text-[#00C4A0]" />
                     <div>
                       <p className="font-mono text-xs uppercase tracking-wider text-foreground">
-                        Processing Document
+                        {isBrowserPipeline
+                          ? `Processing — Batch ${pipelineState.currentBatch}/${pipelineState.totalBatches}`
+                          : "Processing Document"}
                       </p>
                       <p className="font-mono text-[10px] text-muted-foreground mt-1">
-                        Extracting → Chunking → Embedding → Indexing
+                        {isBrowserPipeline
+                          ? `${pipelineState.totalChunks} chunks · ${pipelineState.status}`
+                          : "Extracting → Chunking → Embedding → Indexing"}
                       </p>
                     </div>
-                    {/* Progress animation */}
+                    {/* Progress bar — real percentage for browser pipeline */}
                     <div className="w-48 h-1 bg-muted rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-[#00C4A0] rounded-full animate-pulse"
-                        style={{ width: "60%" }}
+                        className={`h-full bg-[#00C4A0] rounded-full transition-all duration-500 ${
+                          isBrowserPipeline ? "" : "animate-pulse"
+                        }`}
+                        style={{
+                          width: isBrowserPipeline
+                            ? `${pipelineState.progress}%`
+                            : "60%",
+                        }}
                       />
                     </div>
                   </div>
@@ -343,7 +477,7 @@ export default function DocumentUpload() {
                         PDF • TXT • MD • CSV • DOCX
                       </p>
                       <p className="text-[11px] text-muted-foreground mt-3 max-w-sm mx-auto bg-muted/50 p-2 rounded border border-border/50">
-                        <strong className="text-foreground">MVP Limit:</strong> Optimized for articles and essays. Files over ~25 pages may fail due to free-tier processing timeouts.
+                        <strong className="text-foreground">Pro:</strong> Upload documents up to 100MB. Large files are processed in your browser for maximum speed.
                       </p>
                     </div>
                   </div>
