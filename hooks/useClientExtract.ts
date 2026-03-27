@@ -11,15 +11,18 @@ export interface ExtractionResult {
  * Client-side document text extraction hook.
  * Uses pdfjs-dist for PDFs and FileReader for text-based formats.
  * All processing happens in the browser — zero server resources used.
+ *
+ * extractText() returns { result, error } synchronously — does NOT rely
+ * on React state for the error, avoiding the async state flush bug.
  */
 export function useClientExtract() {
   const [isExtracting, setIsExtracting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const extractText = useCallback(
-    async (file: File): Promise<ExtractionResult | null> => {
+    async (
+      file: File
+    ): Promise<{ result: ExtractionResult | null; error: string | null }> => {
       setIsExtracting(true);
-      setError(null);
 
       try {
         const ext = file.name.split(".").pop()?.toLowerCase();
@@ -27,22 +30,18 @@ export function useClientExtract() {
 
         // ---- PDF: use pdfjs-dist ----
         if (type === "application/pdf" || ext === "pdf") {
-          // Dynamic import to avoid SSR issues and keep bundle small
           const pdfjsLib = await import("pdfjs-dist");
 
-          // Disable the web worker — runs on the main thread instead.
-          // This avoids CDN/bundle issues with pdfjs-dist v5 in Next.js.
-          // For document text extraction (not rendering), main thread is fine.
-          pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+          // Use the worker file copied to public/ during build.
+          // This is the most reliable approach for pdfjs-dist v5 + Next.js.
+          pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
           const arrayBuffer = await file.arrayBuffer();
-          const pdf = await pdfjsLib.getDocument({
+          const loadingTask = pdfjsLib.getDocument({
             data: new Uint8Array(arrayBuffer),
-            useWorkerFetch: false,
-            isEvalSupported: false,
-            useSystemFonts: true,
-          }).promise;
+          });
 
+          const pdf = await loadingTask.promise;
           const numPages = pdf.numPages;
           const pages: string[] = [];
 
@@ -50,7 +49,7 @@ export function useClientExtract() {
             const page = await pdf.getPage(i);
             const textContent = await page.getTextContent();
             const pageText = textContent.items
-              .filter((item: any) => "str" in item)
+              .filter((item: any) => typeof item.str === "string")
               .map((item: any) => item.str)
               .join(" ");
             pages.push(pageText);
@@ -59,12 +58,14 @@ export function useClientExtract() {
           const extractedText = pages.join("\n\n");
 
           if (!extractedText.trim()) {
-            throw new Error(
-              "No text found in this PDF. It may be a scanned/image-only document that requires OCR."
-            );
+            return {
+              result: null,
+              error:
+                "No text found in this PDF. It appears to be a scanned/image-only document that requires OCR.",
+            };
           }
 
-          return { extractedText, numPages };
+          return { result: { extractedText, numPages }, error: null };
         }
 
         // ---- Text / Markdown ----
@@ -76,9 +77,9 @@ export function useClientExtract() {
         ) {
           const extractedText = await file.text();
           if (!extractedText.trim()) {
-            throw new Error("File is empty.");
+            return { result: null, error: "File is empty." };
           }
-          return { extractedText };
+          return { result: { extractedText }, error: null };
         }
 
         // ---- CSV ----
@@ -96,28 +97,30 @@ export function useClientExtract() {
             .join("\n");
 
           if (!extractedText.trim()) {
-            throw new Error("CSV file is empty.");
+            return { result: null, error: "CSV file is empty." };
           }
-          return { extractedText };
+          return { result: { extractedText }, error: null };
         }
 
-        // ---- DOCX: not supported client-side for now ----
+        // ---- DOCX: not supported client-side ----
         if (
           type ===
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
           ext === "docx"
         ) {
-          throw new Error(
-            "DOCX files over 5MB are not supported in browser mode. Please use a smaller file or convert to PDF."
-          );
+          return {
+            result: null,
+            error:
+              "DOCX files over 5MB are not supported in browser mode. Please convert to PDF first.",
+          };
         }
 
-        throw new Error(`Unsupported file type: .${ext || type}`);
+        return { result: null, error: `Unsupported file type: .${ext || type}` };
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Text extraction failed";
-        setError(message);
-        return null;
+        console.error("[useClientExtract] Extraction failed:", err);
+        return { result: null, error: message };
       } finally {
         setIsExtracting(false);
       }
@@ -125,5 +128,5 @@ export function useClientExtract() {
     []
   );
 
-  return { extractText, isExtracting, error };
+  return { extractText, isExtracting };
 }

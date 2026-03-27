@@ -62,7 +62,7 @@ export default function DocumentUpload() {
   const [files, setFiles] = useState<any[]>([]);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { extractText, isExtracting, error: extractionError } = useClientExtract();
+  const { extractText, isExtracting } = useClientExtract();
   const { state: pipelineState, runPipeline, reset: resetPipeline } = useIngestionPipeline();
   const isBrowserPipeline = pipelineState.status !== "idle" && pipelineState.status !== "done";
   const hasPendingIngestion = isLoading || isBrowserPipeline || files.some((file) => file.status === "queued" || file.status === "processing");
@@ -225,9 +225,9 @@ export default function DocumentUpload() {
     try {
       // Step 1: Client-side text extraction
       setMessage({ type: "success", text: "Extracting text from document..." });
-      const extraction = await extractText(file);
+      const { result: extraction, error: extractError } = await extractText(file);
       if (!extraction) {
-        setMessage({ type: "error", text: extractionError || "Failed to extract text from the document. It may be a scanned/image-only PDF." });
+        setMessage({ type: "error", text: extractError || "Failed to extract text from the document." });
         return;
       }
 
