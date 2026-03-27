@@ -240,11 +240,12 @@ export default function DocumentUpload() {
 
       setMessage({
         type: "success",
-        text: `Created ${chunks.length} chunks. Uploading file to storage...`,
+        text: `Created ${chunks.length} chunks. Initializing file record...`,
       });
 
-      // Step 3: Upload file to storage (sign + complete with skipIngestion)
-      const signRes = await fetch("/api/uploads/sign", {
+      // Step 3: Create file record via lightweight init endpoint (NO raw file upload)
+      // This avoids Vercel's 4.5MB body size limit for large files.
+      const initRes = await fetch("/api/ingest/batch/init", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -254,40 +255,20 @@ export default function DocumentUpload() {
         }),
       });
 
-      const signJson = (await signRes.json()) as {
-        ok?: boolean;
-        uploadToken?: string;
-        error?: string;
-      };
-
-      if (!signRes.ok || !signJson.uploadToken) {
-        setMessage({ type: "error", text: signJson.error || "Upload signing failed" });
+      let initJson: any;
+      try {
+        initJson = await initRes.json();
+      } catch {
+        setMessage({ type: "error", text: `Server error (${initRes.status}). Please try again.` });
         return;
       }
 
-      const uploadForm = new FormData();
-      uploadForm.append("file", file);
-      uploadForm.append("uploadToken", signJson.uploadToken);
-      uploadForm.append("skipIngestion", "true");
-
-      const completeRes = await fetch("/api/uploads/complete", {
-        method: "POST",
-        body: uploadForm,
-      });
-
-      const completeJson = (await completeRes.json()) as {
-        ok?: boolean;
-        error?: string;
-        file?: { id?: number; name?: string; size?: number; status?: string };
-        ingestionMode?: string;
-      };
-
-      if (!completeRes.ok || !completeJson.ok || !completeJson.file?.id) {
-        setMessage({ type: "error", text: completeJson.error || "Failed to upload file" });
+      if (!initRes.ok || !initJson.ok || !initJson.file?.id) {
+        setMessage({ type: "error", text: initJson.error || "Failed to initialize file record" });
         return;
       }
 
-      const fileId = completeJson.file.id;
+      const fileId = initJson.file.id;
 
       // Step 4: Run the batch pipeline
       setMessage({ type: "success", text: "Processing embeddings..." });
