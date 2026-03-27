@@ -32,9 +32,8 @@ interface BatchRequestBody {
 
 /**
  * Validate a batch of chunks. Returns an error message string or null if valid.
- * Exported for testing.
  */
-export function validateBatch(
+function validateBatch(
   chunks: BatchChunk[]
 ): string | null {
   if (!Array.isArray(chunks) || chunks.length === 0) {
