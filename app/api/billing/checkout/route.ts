@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     let body;
     try {
       body = await req.json();
-    } catch (e) {
+    } catch {
       return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
     }
 
@@ -46,7 +46,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    const { planCode, gateway, currency, successUrl, cancelUrl } = parsed.data;
+    const { planCode, gateway, currency } = parsed.data;
 
     if (planCode === "free") {
       return NextResponse.json(
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
 
     const plan = PLAN_CATALOG[planCode];
     const price = plan.monthlyPrice[currency];
-    const priceId = getGatewayPriceId(planCode, gateway, currency);
+    getGatewayPriceId(planCode, gateway, currency);
 
     const email = user?.primaryEmailAddress?.emailAddress ?? null;
 

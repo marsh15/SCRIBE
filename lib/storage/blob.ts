@@ -1,21 +1,8 @@
 import { put } from "@vercel/blob";
 
-const DEFAULT_BLOB_BASE = "https://blob.vercel-storage.com";
-
 function blobToken() {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   return token ?? null;
-}
-
-function blobBase() {
-  return process.env.BLOB_API_BASE_URL ?? DEFAULT_BLOB_BASE;
-}
-
-function normalizePathname(pathname: string) {
-  return pathname
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
 }
 
 export async function uploadBufferToBlob(input: {

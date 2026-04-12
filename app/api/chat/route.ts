@@ -15,6 +15,9 @@ import { getUsageSummary, recordUsageEvent } from "@/lib/billing/usage";
 
 export type ChatMessage = UIMessage;
 
+const CHAT_MODEL_ID = process.env.GOOGLE_CHAT_MODEL || "gemini-2.5-flash";
+const SUPERMEMORY_ENABLED = process.env.ENABLE_SUPERMEMORY === "true";
+
 type TextPart = {
   type: "text";
   text: string;
@@ -99,6 +102,35 @@ function ensureStructuredAnswer(text: string, hadKnowledgeLookup: boolean) {
   return updated;
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return "Unknown error";
+  }
+}
+
+function formatChatError(error: unknown) {
+  const message = getErrorMessage(error);
+
+  if (/api[_\s-]?key|API_KEY_INVALID|unauthorized|authentication/i.test(message)) {
+    return "Gemini is not responding because the configured Google Generative AI API key is missing or invalid. Add a valid GOOGLE_GENERATIVE_AI_API_KEY and retry.";
+  }
+
+  if (/quota|rate.?limit|429/i.test(message)) {
+    return "Gemini is temporarily unavailable because the API quota or rate limit was reached. Please retry after the provider limit resets.";
+  }
+
+  if (/model.*not.*found|not found.*model|404/i.test(message)) {
+    return `Gemini model ${CHAT_MODEL_ID} is not available for this API key. Set GOOGLE_CHAT_MODEL to an enabled Gemini model and retry.`;
+  }
+
+  return "The AI provider failed before a response could be completed. Please retry after checking the server logs.";
+}
+
 export async function POST(req: Request) {
   try {
     const userId = await getUserId();
@@ -113,13 +145,26 @@ export async function POST(req: Request) {
         { status: 402 }
       );
     }
+    if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim()) {
+      return new Response(
+        "Gemini is not configured. Set GOOGLE_GENERATIVE_AI_API_KEY and retry.",
+        { status: 503 }
+      );
+    }
+
     const { messages }: { messages: ChatMessage[] } = await req.json();
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return new Response("No chat messages were provided.", { status: 400 });
+    }
 
     const url = new URL(req.url);
     const chatId = url.searchParams.get("chatId") || undefined;
 
     const sanitizedMessages = sanitizeMessages(messages);
-    const modelWithMemory = withSupermemory(google("gemini-2.5-flash"), userId);
+    const baseModel = google(CHAT_MODEL_ID);
+    const model = SUPERMEMORY_ENABLED
+      ? withSupermemory(baseModel, userId, { conversationId: chatId ?? userId })
+      : baseModel;
 
     // Save user message to DB immediately — BEFORE starting the stream.
     // If we save only in onFinish and Gemini crashes mid-stream, the message is lost forever.
@@ -194,7 +239,7 @@ export async function POST(req: Request) {
     };
 
     const result = streamText({
-      model: modelWithMemory,
+      model,
       messages: await convertToModelMessages(sanitizedMessages),
       tools: userTools,
       system: `You are Scribe AI, an assistant that answers questions using the user's uploaded documents.
@@ -321,9 +366,15 @@ Citation rules:
       },
     });
 
-    return result.toUIMessageStreamResponse();
+    return result.toUIMessageStreamResponse({
+      onError: (error) => {
+        const formatted = formatChatError(error);
+        console.error("[Chat] Stream failed:", error);
+        return formatted;
+      },
+    });
   } catch (error) {
     console.error("Error streaming chat completion:", error);
-    return new Response("Failed to stream chat completion", { status: 500 });
+    return new Response(formatChatError(error), { status: 500 });
   }
 }

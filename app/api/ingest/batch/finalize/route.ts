@@ -9,13 +9,14 @@ interface FinalizeBody {
   fileId: number;
   totalChunks: number;
   textBytes: number;
+  extractedText?: string;
 }
 
 export async function POST(req: Request) {
   try {
     const userId = await getUserId();
     const body: FinalizeBody = await req.json();
-    const { fileId, totalChunks, textBytes } = body;
+    const { fileId, totalChunks, textBytes, extractedText } = body;
 
     if (!fileId) {
       return NextResponse.json(
@@ -49,7 +50,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // ---- Mark file as ready ----
+    // ---- Mark file as ready + save extracted text for preview ----
     await withDatabaseRetry("finalizeMarkReady", () =>
       db
         .update(files)
@@ -57,6 +58,10 @@ export async function POST(req: Request) {
           status: "ready",
           processingError: null,
           textBytes: textBytes || 0,
+          // Save extracted text (truncated to first 100K chars to avoid DB bloat)
+          ...(extractedText
+            ? { extractedText: extractedText.substring(0, 100_000) }
+            : {}),
         })
         .where(eq(files.id, fileId))
     );

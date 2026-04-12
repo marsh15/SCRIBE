@@ -16,7 +16,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Billing is currently disabled" }, { status: 503 });
     }
 
-    const userId = await getUserId();
+    await getUserId();
     const parsed = schema.safeParse(await req.json());
 
     if (!parsed.success) {
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
 
     const portalUrl = await createRazorpayPortalLink();
 
-    return NextResponse.json({ ok: true, url: portalUrl });
+    return NextResponse.json({ ok: true, url: portalUrl || returnUrl });
   } catch (error) {
     console.error("Billing portal error:", error);
     return NextResponse.json({ error: "Failed to create billing portal link" }, { status: 500 });

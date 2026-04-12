@@ -86,7 +86,8 @@ export function useIngestionPipeline() {
       fileId: number,
       chunks: ClientChunk[],
       textBytes: number,
-      startFromBatch = 0
+      startFromBatch = 0,
+      extractedText?: string
     ): Promise<{ success: boolean; error: string | null }> => {
       abortRef.current = false;
 
@@ -189,6 +190,7 @@ export function useIngestionPipeline() {
             fileId,
             totalChunks: chunks.length,
             textBytes,
+            extractedText,
           }),
         });
 

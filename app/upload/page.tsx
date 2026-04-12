@@ -62,7 +62,7 @@ export default function DocumentUpload() {
   const [files, setFiles] = useState<any[]>([]);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { extractText, isExtracting } = useClientExtract();
+  const { extractText } = useClientExtract();
   const { state: pipelineState, runPipeline, reset: resetPipeline } = useIngestionPipeline();
   const isBrowserPipeline = pipelineState.status !== "idle" && pipelineState.status !== "done";
   const hasPendingIngestion = isLoading || isBrowserPipeline || files.some((file) => file.status === "queued" || file.status === "processing");
@@ -277,7 +277,9 @@ export default function DocumentUpload() {
       const { success, error: pipelineError } = await runPipeline(
         fileId,
         chunks,
-        extraction.extractedText.length
+        extraction.extractedText.length,
+        0,
+        extraction.extractedText
       );
 
       if (success) {

@@ -84,8 +84,6 @@ describe("Batch ingest validation", () => {
 // ---- Resumability state management tests ----
 
 describe("Resumability localStorage state", () => {
-  const STORAGE_PREFIX = "scribe:ingest:";
-
   it("should serialize and deserialize progress correctly", () => {
     const progress = {
       fileId: 42,

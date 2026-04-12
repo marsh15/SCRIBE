@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, BookOpen, Database, MessageSquare, Shield, Zap } from "lucide-react";
+import { ArrowRight, Database, MessageSquare, Shield, Zap } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { flags } from "@/lib/flags";
 import { redirect } from "next/navigation";

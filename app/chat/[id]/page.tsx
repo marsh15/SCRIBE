@@ -16,6 +16,13 @@ type StoredPart = {
   text?: string;
 };
 
+function getChatErrorText(error: unknown) {
+  if (!error) return null;
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  return "The AI response failed. Please try again.";
+}
+
 export default function DynamicRagChatbot() {
   const params = useParams();
   const chatId = params.id as string;
@@ -103,7 +110,7 @@ function ChatInterface({
     [chatId],
   );
 
-  const { messages, status, sendMessage } = useChat({
+  const { messages, status, sendMessage, error, clearError } = useChat({
     messages: initialMessages,
     transport,
   });
@@ -135,13 +142,14 @@ function ChatInterface({
     if (q && initialMessages.length === 0 && !initialSendDone.current) {
       initialSendDone.current = true;
       setSubmitError(null);
+      clearError();
       void sendMessage({ text: q }).catch((error) => {
         console.error("Failed to send initial chat message:", error);
-        setSubmitError("Could not send the first message. Please try again.");
+        setSubmitError(getChatErrorText(error));
       });
       router.replace(`/chat/${chatId}`);
     }
-  }, [searchParams, initialMessages.length, sendMessage, chatId, router]);
+  }, [searchParams, initialMessages.length, sendMessage, chatId, router, clearError]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) =>
     setInput(e.target.value);
@@ -151,12 +159,13 @@ function ChatInterface({
     if (!trimmedText || isLoading) return;
 
     setSubmitError(null);
+    clearError();
 
     try {
       await sendMessage({ text: trimmedText });
     } catch (error) {
       console.error("Failed to send chat message:", error);
-      setSubmitError("The message could not be sent. Please try again.");
+      setSubmitError(getChatErrorText(error));
     }
   };
 
@@ -349,9 +358,9 @@ function ChatInterface({
             </button>
           </form>
 
-          {submitError ? (
+          {submitError || error ? (
             <p className="mt-2 text-xs font-sans text-destructive px-1">
-              {submitError}
+              {submitError || getChatErrorText(error)}
             </p>
           ) : null}
 

@@ -1,4 +1,3 @@
-import { db } from "../lib/db-config";
 import { processQueuedIngestionJobs } from "../lib/ingestion/worker";
 import * as dotenv from "dotenv";
 
