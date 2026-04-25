@@ -35,10 +35,17 @@ export const documents = pgTable(
     fileId: integer("file_id")
       .references(() => files.id, { onDelete: "cascade" })
       .notNull(),
+    chunkIndex: integer("chunk_index").notNull(),
     content: text("content").notNull(),
     metadata: jsonb("metadata"),
     embeddings: vector("embeddings", { dimensions: 3072 }).notNull(),
-  }
+  },
+  (table) => ({
+    fileChunkUnique: uniqueIndex("documents_file_id_chunk_index_unique").on(
+      table.fileId,
+      table.chunkIndex
+    ),
+  })
 );
 
 export const chats = pgTable("chats", {
@@ -66,7 +73,7 @@ export const billingCustomers = pgTable(
     id: serial("id").primaryKey(),
     userId: text("user_id").notNull(),
     razorpayCustomerId: text("razorpay_customer_id"),
-    defaultGateway: text("default_gateway"), // stripe | razorpay
+    defaultGateway: text("default_gateway"), // razorpay
     billingCountry: text("billing_country"),
     currency: text("currency").default("INR").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -81,7 +88,7 @@ export const subscriptions = pgTable("subscriptions", {
   id: serial("id").primaryKey(),
   userId: text("user_id").notNull(),
   planCode: text("plan_code").notNull(), // free | pro | team
-  gateway: text("gateway").notNull(), // stripe | razorpay
+  gateway: text("gateway").notNull(), // razorpay
   providerSubscriptionId: text("provider_subscription_id"),
   status: text("status").default("inactive").notNull(), // active | trialing | past_due | canceled | inactive
   currentPeriodStart: timestamp("current_period_start"),
@@ -121,7 +128,7 @@ export const paymentEvents = pgTable(
   "payment_events",
   {
     id: serial("id").primaryKey(),
-    gateway: text("gateway").notNull(), // stripe | razorpay
+    gateway: text("gateway").notNull(), // razorpay
     eventId: text("event_id").notNull(),
     eventType: text("event_type"),
     payload: jsonb("payload"),

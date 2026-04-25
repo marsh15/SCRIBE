@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getUserId } from "@/lib/auth";
+import { getUserId, isNotAuthenticatedError } from "@/lib/auth";
 import { flags } from "@/lib/flags";
-
 import { createRazorpayPortalLink } from "@/lib/billing/gateways/razorpay";
+import { isBillingPortalAvailable } from "@/lib/billing/portal";
 
 const schema = z.object({
   gateway: z.enum(["razorpay"]),
@@ -17,20 +17,25 @@ export async function POST(req: Request) {
     }
 
     await getUserId();
+    if (!isBillingPortalAvailable()) {
+      return NextResponse.json(
+        { error: "Billing portal is not configured for this deployment." },
+        { status: 503 }
+      );
+    }
     const parsed = schema.safeParse(await req.json());
 
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    const requestUrl = new URL(req.url);
-    const appOrigin = process.env.NEXT_PUBLIC_APP_URL ?? requestUrl.origin;
-    const returnUrl = parsed.data.returnUrl ?? `${appOrigin}/settings/billing`;
-
     const portalUrl = await createRazorpayPortalLink();
 
-    return NextResponse.json({ ok: true, url: portalUrl || returnUrl });
+    return NextResponse.json({ ok: true, url: portalUrl });
   } catch (error) {
+    if (isNotAuthenticatedError(error)) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
     console.error("Billing portal error:", error);
     return NextResponse.json({ error: "Failed to create billing portal link" }, { status: 500 });
   }

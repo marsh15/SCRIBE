@@ -22,6 +22,27 @@
       "when": 1771758091839,
       "tag": "0002_ollama_embeddings_768",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1771758091840,
+      "tag": "0003_saas_billing_async_ingest",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1771758091841,
+      "tag": "0004_userid_notnull",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1771758091842,
+      "tag": "0005_batch_idempotency_cleanup",
+      "breakpoints": true
     }
   ]
 }

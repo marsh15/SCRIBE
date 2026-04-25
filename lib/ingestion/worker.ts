@@ -77,6 +77,7 @@ export async function ingestFile(fileId: number) {
           db.insert(documents).values(
             chunks.map((chunk, index) => ({
               fileId: file.id,
+              chunkIndex: chunk.metadata.chunkIndex,
               content: chunk.content,
               metadata: chunk.metadata,
               embeddings: embeddings[index],

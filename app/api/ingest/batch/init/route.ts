@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getUserId } from "@/lib/auth";
+import { getUserId, isNotAuthenticatedError } from "@/lib/auth";
 import { db } from "@/lib/db-config";
 import { files } from "@/lib/db-schema";
 import { getUsageSummary } from "@/lib/billing/usage";
@@ -78,6 +78,9 @@ export async function POST(req: Request) {
       },
     });
   } catch (error) {
+    if (isNotAuthenticatedError(error)) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
     console.error("Batch init error:", error);
     const message =
       error instanceof Error ? error.message : "Failed to initialize file";

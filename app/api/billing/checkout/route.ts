@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@clerk/nextjs/server";
-import { getUserId } from "@/lib/auth";
+import { getUserId, isNotAuthenticatedError } from "@/lib/auth";
 import { flags } from "@/lib/flags";
 import {
   PLAN_CATALOG,
@@ -87,11 +87,14 @@ export async function POST(req: Request) {
       order,
     });
   } catch (error) {
+    if (isNotAuthenticatedError(error)) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
     const message = error instanceof Error ? error.message : String(error);
     const stack = error instanceof Error ? error.stack : undefined;
     console.error("Billing checkout error:", { message, stack });
     return NextResponse.json(
-      { error: "Failed to create checkout session", detail: message },
+      { error: "Failed to create checkout order", detail: message },
       { status: 500 }
     );
   }

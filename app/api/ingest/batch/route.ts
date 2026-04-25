@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getUserId } from "@/lib/auth";
+import { getUserId, isNotAuthenticatedError } from "@/lib/auth";
 import { db } from "@/lib/db-config";
 import { files, documents } from "@/lib/db-schema";
 import { eq } from "drizzle-orm";
@@ -7,55 +7,13 @@ import { generateEmbeddings } from "@/lib/embeddings";
 import { recordUsageEvent } from "@/lib/billing/usage";
 import { getUsageSummary } from "@/lib/billing/usage";
 import { withDatabaseRetry } from "@/lib/db-retry";
-
-// ---- Validation constants ----
-const MAX_CHUNKS_PER_BATCH = 100;
-const MAX_CHUNK_CHARS = 5000;
-const MAX_PAYLOAD_BYTES = 2 * 1024 * 1024; // 2MB
-
-/** Estimate tokens from text (same formula as worker.ts) */
-function estimateTokens(text: string) {
-  return Math.ceil(text.length / 4);
-}
-
-interface BatchChunk {
-  content: string;
-  metadata: Record<string, unknown>;
-}
-
-interface BatchRequestBody {
-  fileId: number;
-  batchIndex: number;
-  totalBatches: number;
-  chunks: BatchChunk[];
-}
-
-/**
- * Validate a batch of chunks. Returns an error message string or null if valid.
- */
-function validateBatch(
-  chunks: BatchChunk[]
-): string | null {
-  if (!Array.isArray(chunks) || chunks.length === 0) {
-    return "Chunks array is empty or not an array.";
-  }
-
-  if (chunks.length > MAX_CHUNKS_PER_BATCH) {
-    return `Too many chunks: ${chunks.length}. Maximum is ${MAX_CHUNKS_PER_BATCH}.`;
-  }
-
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i];
-    if (!chunk.content || typeof chunk.content !== "string") {
-      return `Chunk ${i} has invalid or missing content.`;
-    }
-    if (chunk.content.length > MAX_CHUNK_CHARS) {
-      return `Chunk ${i} exceeds max length: ${chunk.content.length} chars (max ${MAX_CHUNK_CHARS}).`;
-    }
-  }
-
-  return null;
-}
+import {
+  MAX_PAYLOAD_BYTES,
+  estimateTokens,
+  summarizeInsertedChunks,
+  type BatchRequestBody,
+  validateBatchRequest,
+} from "@/lib/ingestion/batch";
 
 export const maxDuration = 60;
 
@@ -74,21 +32,11 @@ export async function POST(req: Request) {
     }
 
     // ---- Parse body ----
-    const body: BatchRequestBody = await req.json();
-    const { fileId, batchIndex, totalBatches, chunks } = body;
-
-    if (!fileId || batchIndex == null || !totalBatches || !chunks) {
-      return NextResponse.json(
-        { error: "Missing required fields: fileId, batchIndex, totalBatches, chunks." },
-        { status: 400 }
-      );
+    const parsed = validateBatchRequest((await req.json()) as BatchRequestBody);
+    if (!parsed.ok) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
-
-    // ---- Validate chunks ----
-    const validationError = validateBatch(chunks);
-    if (validationError) {
-      return NextResponse.json({ error: validationError }, { status: 400 });
-    }
+    const { fileId, batchIndex, chunks } = parsed.value;
 
     // ---- File ownership check ----
     const file = await withDatabaseRetry("batchLoadFile", () =>
@@ -125,39 +73,58 @@ export async function POST(req: Request) {
     }
 
     // ---- Generate embeddings (single batchEmbedContents call) ----
-    const chunkTexts = chunks.map((c) => c.content);
+    const chunkTexts = chunks.map((chunk) => chunk.content);
     const embeddings = await generateEmbeddings(chunkTexts);
 
-    // ---- Insert document rows ----
-    await withDatabaseRetry("batchInsertDocuments", () =>
-      db.insert(documents).values(
-        chunks.map((chunk, index) => ({
-          fileId,
-          content: chunk.content,
-          metadata: chunk.metadata,
-          embeddings: embeddings[index],
-        }))
-      )
+    // ---- Insert document rows idempotently ----
+    const insertedRows = await withDatabaseRetry("batchInsertDocuments", () =>
+      db
+        .insert(documents)
+        .values(
+          chunks.map((chunk, index) => ({
+            fileId,
+            chunkIndex: chunk.metadata.chunkIndex,
+            content: chunk.content,
+            metadata: chunk.metadata,
+            embeddings: embeddings[index],
+          }))
+        )
+        .onConflictDoNothing({
+          target: [documents.fileId, documents.chunkIndex],
+        })
+        .returning({
+          chunkIndex: documents.chunkIndex,
+        })
     );
 
-    // ---- Record usage ----
-    const totalChars = chunkTexts.reduce((sum, t) => sum + t.length, 0);
-    await recordUsageEvent({
-      userId,
-      metric: "embedding_input_tokens",
-      quantity: estimateTokens(totalChars.toString().length > 0 ? chunkTexts.join("") : ""),
-      unit: "tokens",
-      sourceType: "ingest",
-      sourceId: String(fileId),
-      isEstimated: true,
-    });
+    const insertedSummary = summarizeInsertedChunks(
+      chunks,
+      insertedRows.map((row) => row.chunkIndex)
+    );
+
+    // ---- Record usage for newly inserted chunks only ----
+    if (insertedSummary.insertedChunkCount > 0) {
+      await recordUsageEvent({
+        userId,
+        metric: "embedding_input_tokens",
+        quantity: estimateTokens(insertedSummary.insertedText),
+        unit: "tokens",
+        sourceType: "ingest",
+        sourceId: String(fileId),
+        isEstimated: true,
+      });
+    }
 
     return NextResponse.json({
       ok: true,
       batchIndex,
-      processedChunks: chunks.length,
+      processedChunks: insertedSummary.insertedChunkCount,
+      replayedChunks: chunks.length - insertedSummary.insertedChunkCount,
     });
   } catch (error) {
+    if (isNotAuthenticatedError(error)) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
     console.error("Batch ingest error:", error);
     const message =
       error instanceof Error ? error.message : "Batch ingestion failed";

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import crypto from "node:crypto";
-import { getUserId } from "@/lib/auth";
+import { getUserId, isNotAuthenticatedError } from "@/lib/auth";
 import { setUserSubscription } from "@/lib/billing/store";
 import type { PlanCode, BillingGateway } from "@/lib/billing/plans";
 
@@ -88,6 +88,9 @@ export async function POST(req: Request) {
 
         return NextResponse.json({ ok: true, verified: true });
     } catch (error) {
+        if (isNotAuthenticatedError(error)) {
+            return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+        }
         console.error("Payment verify error:", error);
         return NextResponse.json({ error: "Verification failed" }, { status: 500 });
     }

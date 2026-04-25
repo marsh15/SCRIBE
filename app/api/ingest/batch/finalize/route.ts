@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { getUserId } from "@/lib/auth";
+import { getUserId, isNotAuthenticatedError } from "@/lib/auth";
 import { db } from "@/lib/db-config";
-import { files } from "@/lib/db-schema";
+import { documents, files } from "@/lib/db-schema";
 import { eq } from "drizzle-orm";
 import { withDatabaseRetry } from "@/lib/db-retry";
+import { analyzeFinalizeState } from "@/lib/ingestion/batch";
 
 interface FinalizeBody {
   fileId: number;
@@ -18,9 +19,16 @@ export async function POST(req: Request) {
     const body: FinalizeBody = await req.json();
     const { fileId, totalChunks, textBytes, extractedText } = body;
 
-    if (!fileId) {
+    if (!Number.isInteger(fileId) || fileId <= 0) {
       return NextResponse.json(
-        { error: "Missing fileId." },
+        { error: "Missing or invalid fileId." },
+        { status: 400 }
+      );
+    }
+
+    if (!Number.isInteger(totalChunks) || totalChunks <= 0) {
+      return NextResponse.json(
+        { error: "Missing or invalid totalChunks." },
         { status: 400 }
       );
     }
@@ -41,6 +49,40 @@ export async function POST(req: Request) {
         { error: "You do not own this file." },
         { status: 403 }
       );
+    }
+
+    const storedChunks = await withDatabaseRetry("finalizeLoadChunkIndexes", () =>
+      db
+        .select({ chunkIndex: documents.chunkIndex })
+        .from(documents)
+        .where(eq(documents.fileId, fileId))
+        .orderBy(documents.chunkIndex)
+    );
+
+    const finalizeState = analyzeFinalizeState(
+      storedChunks.map((chunk) => chunk.chunkIndex),
+      totalChunks
+    );
+
+    if (!finalizeState.isComplete) {
+      return NextResponse.json(
+        {
+          error: "File ingestion is incomplete. Some chunk batches are still missing.",
+          storedChunkCount: finalizeState.storedChunkCount,
+          expectedChunkCount: totalChunks,
+          missingChunkIndexes: finalizeState.missingChunkIndexes.slice(0, 20),
+        },
+        { status: 409 }
+      );
+    }
+
+    if (file.status === "ready") {
+      return NextResponse.json({
+        ok: true,
+        fileId,
+        status: "ready",
+        totalChunks,
+      });
     }
 
     if (file.status !== "processing") {
@@ -70,9 +112,12 @@ export async function POST(req: Request) {
       ok: true,
       fileId,
       status: "ready",
-      totalChunks: totalChunks || 0,
+      totalChunks,
     });
   } catch (error) {
+    if (isNotAuthenticatedError(error)) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
     console.error("Batch finalize error:", error);
     const message =
       error instanceof Error ? error.message : "Finalization failed";

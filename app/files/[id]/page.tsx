@@ -19,6 +19,10 @@ import {
     Eye,
     ExternalLink,
 } from "lucide-react";
+import {
+    canOpenOriginalPdfFile,
+    getMissingOriginalFileMessage,
+} from "@/lib/files/preview";
 
 function getFileIcon(type: string, name: string) {
     const ext = name.split(".").pop()?.toLowerCase();
@@ -123,6 +127,12 @@ export default function FileViewer() {
     const { file, chunks, extractedText } = data;
     const fileStatus = file.status || "ready";
     const canPreview = isPdfFile(file.type, file.name) || isTextViewable(file.type, file.name);
+    const canOpenOriginalPdf = canOpenOriginalPdfFile({
+        isPdf: isPdfFile(file.type, file.name),
+        hasFileData: data.hasFileData,
+        hasStorageUrl: data.hasStorageUrl,
+    });
+    const previewText = extractedText || chunks.map((c: any) => c.content).join("\n\n");
 
     return (
         <ThreePaneLayout>
@@ -171,7 +181,7 @@ export default function FileViewer() {
                     </div>
 
                     {/* Open in new tab */}
-                    {isPdfFile(file.type, file.name) && (
+                    {canOpenOriginalPdf && (
                         <a
                             href={`/api/files/${fileId}/view`}
                             target="_blank"
@@ -239,34 +249,44 @@ export default function FileViewer() {
                                         </p>
                                     </div>
                                 ) : isPdfFile(file.type, file.name) ? (
-                                    /* PDF Viewer — with fallback if no stored data */
-                                    extractedText || chunks.length > 0 ? (
-                                        <div className="h-full flex flex-col">
+                                    previewText ? (
+                                        canOpenOriginalPdf ? (
+                                            <div className="h-full flex flex-col">
                                             <iframe
                                                 src={`/api/files/${fileId}/view`}
                                                 className="w-full flex-1 rounded-sm border border-border/50 bg-white"
                                                 title={`Preview: ${file.name}`}
                                                 onError={() => { }}
                                             />
-                                            {/* Fallback text view in case iframe shows nothing */}
-                                            {!data.hasFileData && (
+                                            {!data.hasFileData && data.hasStorageUrl && (
                                                 <div className="mt-3 p-4 rounded-sm border border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20">
                                                     <p className="font-mono text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-2">
-                                                        ⚠ Original file not available — showing extracted text
-                                                    </p>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        This file was uploaded before file preview was enabled. Re-upload to see the full PDF.
-                                                        You can still view all indexed chunks in the Chunks tab.
+                                                        Preview streamed from object storage
                                                     </p>
                                                 </div>
                                             )}
                                         </div>
+                                        ) : (
+                                            <div className="h-full overflow-y-auto rounded-sm border border-border/50 bg-card p-6">
+                                                <div className="mb-4 rounded-sm border border-amber-500/30 bg-amber-50/50 p-4 dark:bg-amber-950/20">
+                                                    <p className="font-mono text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                                                        Original PDF not available
+                                                    </p>
+                                                    <p className="mt-2 text-xs text-muted-foreground">
+                                                        {getMissingOriginalFileMessage(file.name)}
+                                                    </p>
+                                                </div>
+                                                <pre className="font-mono text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">
+                                                    {previewText}
+                                                </pre>
+                                            </div>
+                                        )
                                     ) : null
                                 ) : (
                                     /* Text Viewer */
                                     <div className="h-full overflow-y-auto rounded-sm border border-border/50 bg-card p-6">
                                         <pre className="font-mono text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">
-                                            {extractedText || chunks.map((c: any) => c.content).join("\n\n")}
+                                            {previewText}
                                         </pre>
                                     </div>
                                 )}

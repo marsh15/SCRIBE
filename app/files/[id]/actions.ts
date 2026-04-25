@@ -32,12 +32,13 @@ export async function getFileWithChunks(fileId: number) {
     const chunks = await db
         .select({
             id: documents.id,
+            chunkIndex: documents.chunkIndex,
             content: documents.content,
             metadata: documents.metadata,
         })
         .from(documents)
         .where(eq(documents.fileId, fileId))
-        .orderBy(documents.id);
+        .orderBy(documents.chunkIndex);
 
     return {
         file: {

@@ -8,6 +8,7 @@ import { PLAN_CATALOG, type PlanCode } from "@/lib/billing/plans";
 type UsageResponse = {
   ok: boolean;
   planCode: PlanCode;
+  billingPortalAvailable: boolean;
   usage: {
     modelInputTokens: number;
     modelOutputTokens: number;
@@ -261,12 +262,14 @@ export default function BillingSettingsPage() {
                 <option value="INR">INR</option>
                 <option value="USD">USD</option>
               </select>
-              <button
-                onClick={openPortal}
-                className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wider hover:bg-muted"
-              >
-                Manage Billing
-              </button>
+              {usage?.billingPortalAvailable ? (
+                <button
+                  onClick={openPortal}
+                  className="rounded-sm border border-border px-3 py-1.5 text-xs font-mono uppercase tracking-wider hover:bg-muted"
+                >
+                  Manage Billing
+                </button>
+              ) : null}
             </div>
           </div>
 
@@ -290,6 +293,11 @@ export default function BillingSettingsPage() {
               <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
                 Projected overage: ₹{usage.projectedOverageInr.toFixed(2)}
               </p>
+              {!usage.billingPortalAvailable && (
+                <p className="text-xs text-muted-foreground">
+                  Billing self-service is not configured for this deployment.
+                </p>
+              )}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">Loading usage...</p>

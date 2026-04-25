@@ -27,7 +27,7 @@ SCRIBE is an intelligent document management and chatbot application that lets y
 
 ### Infrastructure
 - **Async Ingestion Queue** — Uploads are queued and processed in the background with retry support.
-- **SaaS Billing** — INR-first pricing with dual gateways (Stripe + Razorpay), plan limits, and usage metering.
+- **SaaS Billing** — Razorpay-backed pricing, plan limits, and usage metering.
 - **User Session Isolation** — Each Clerk-authenticated user has a fully isolated workspace (files, chats, search results, billing).
 
 ### UI/UX
@@ -51,7 +51,7 @@ SCRIBE is an intelligent document management and chatbot application that lets y
 | **AI / ML** | Google Gemini 2.5 Flash, Gemini Embeddings (3072-dim), Vercel AI SDK |
 | **Doc Processing** | pdf-parse, mammoth, csv-parse, LangChain text splitters |
 | **Layout** | react-resizable-panels |
-| **Payments** | Stripe, Razorpay |
+| **Payments** | Razorpay |
 | **Storage** | Vercel Blob |
 | **Deployment** | Vercel |
 
@@ -86,14 +86,14 @@ components/
 └── ui/                            # Radix primitives (Button, ScrollArea, Alert, etc.)
 
 lib/
-├── auth.ts                        # getUserId() helper (Clerk)
+├── auth.ts                        # Auth helpers (Clerk)
 ├── chunking.ts                    # Text splitting with page/section metadata
 ├── db-config.ts                   # Drizzle + Neon connection
-├── db-schema.ts                   # Tables: files, documents, chats, chatMessages
+├── db-schema.ts                   # Tables: files, documents, chats, billing, usage
 ├── embeddings.ts                  # Google AI embeddings (with retry)
 ├── search.ts                      # Cosine similarity vector search (user-scoped)
 ├── flags.ts                       # Feature flags
-└── uploads.ts                     # Upload token signing/verification
+└── uploads/                       # Upload token signing + plan limits
 ```
 
 ---
@@ -138,7 +138,8 @@ Create a `.env.local` file:
 | `GOOGLE_GENERATIVE_AI_API_KEY` | API key for Gemini Chat & Embeddings | ✅ |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk publishable key | ✅ |
 | `CLERK_SECRET_KEY` | Clerk secret key | ✅ |
-| `SUPERMEMORY_API_KEY` | Supermemory AI context tool | ✅ |
+| `SUPERMEMORY_API_KEY` | Supermemory API key when optional context memory is enabled | Optional |
+| `ENABLE_SUPERMEMORY` | Enables Supermemory wrapping in chat (`true`/`false`) | Optional |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob token for file storage | Recommended |
 | `UPLOAD_SIGNING_SECRET` | HMAC secret for upload token signing | Recommended |
 | `INTERNAL_CRON_SECRET` | Auth secret for `/api/internal/ingest/run` | Recommended |
@@ -146,10 +147,12 @@ Create a `.env.local` file:
 | `FEATURE_BILLING_ENABLED` | Enable billing APIs/UI (`true`/`false`) | Optional |
 | `FEATURE_ASYNC_INGESTION_ENABLED` | Enable async ingestion queue | Optional |
 | `FEATURE_PUBLIC_LANDING_ENABLED` | Enable public landing page | Optional |
-| `STRIPE_SECRET_KEY` | Stripe API secret | Optional |
-| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret | Optional |
 | `RAZORPAY_KEY_ID` | Razorpay key id | Optional |
 | `RAZORPAY_KEY_SECRET` | Razorpay key secret | Optional |
+| `RAZORPAY_WEBHOOK_SECRET` | Razorpay webhook signing secret | Optional |
+| `RAZORPAY_PLAN_PRO_INR` | Razorpay plan identifier for Pro billing | Optional |
+| `RAZORPAY_PLAN_TEAM_INR` | Razorpay plan identifier for Team billing | Optional |
+| `RAZORPAY_MANAGE_BILLING_URL` | Hosted billing-management URL shown in Settings | Optional |
 
 ---
 
@@ -161,7 +164,7 @@ Create a `.env.local` file:
 | `build` | `npm run build` | Create optimized production build |
 | `start` | `npm start` | Start production server |
 | `lint` | `npm run lint` | Run ESLint |
-| `test` | `npx vitest run` | Run unit tests |
+| `test` | `npm run test` | Run unit tests |
 
 ---
 

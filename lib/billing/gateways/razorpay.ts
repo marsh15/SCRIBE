@@ -2,6 +2,7 @@ import { db } from "@/lib/db-config";
 import { billingCustomers } from "@/lib/db-schema";
 import { eq } from "drizzle-orm";
 import { upsertGatewayCustomerId } from "@/lib/billing/store";
+import { resolveBillingPortalUrl } from "@/lib/billing/portal";
 
 type RazorpayOrderInput = {
   userId: string;
@@ -124,5 +125,5 @@ export async function createRazorpayOrder(input: RazorpayOrderInput) {
 }
 
 export async function createRazorpayPortalLink() {
-  return process.env.RAZORPAY_MANAGE_BILLING_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "/pricing";
+  return resolveBillingPortalUrl();
 }
