@@ -7,7 +7,7 @@ import { Sidebar } from "@/components/sidebar";
 import { RAGInspector } from "@/components/rag-inspector";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { LayoutPanelLeft, RotateCcw } from "lucide-react";
+import { Files, LayoutPanelLeft, MessageSquare, Quote, RotateCcw } from "lucide-react";
 
 interface ThreePaneLayoutProps {
   children: ReactNode;
@@ -100,6 +100,7 @@ export function ThreePaneLayout({
   const groupRef = useGroupRef();
   const [layout, setLayout] = useState(DEFAULT_LAYOUT);
   const [mounted, setMounted] = useState(false);
+  const [mobilePane, setMobilePane] = useState<"sources" | "chat" | "evidence">("chat");
 
   const resetLayout = () => {
     groupRef.current?.setLayout(DEFAULT_LAYOUT);
@@ -157,6 +158,27 @@ export function ThreePaneLayout({
 
   return (
     <div className="h-screen w-full bg-background text-foreground overflow-hidden">
+      <div className="flex h-full flex-col lg:hidden">
+        <main className="min-h-0 flex-1">
+          {mobilePane === "sources" && <Sidebar />}
+          {mobilePane === "chat" && children}
+          {mobilePane === "evidence" && <RAGInspector messages={messages} status={status} />}
+        </main>
+        <nav aria-label="Workspace" className="grid h-16 shrink-0 grid-cols-3 border-t bg-card">
+          {([
+            ["sources", Files, "Sources"],
+            ["chat", MessageSquare, "Ask"],
+            ["evidence", Quote, "Evidence"],
+          ] as const).map(([pane, Icon, label]) => (
+            <button key={pane} type="button" aria-current={mobilePane === pane ? "page" : undefined}
+              onClick={() => setMobilePane(pane)}
+              className={`flex min-h-11 flex-col items-center justify-center gap-1 text-xs ${mobilePane === pane ? "text-foreground" : "text-muted-foreground"}`}>
+              <Icon className="h-4 w-4" aria-hidden="true" />{label}
+            </button>
+          ))}
+        </nav>
+      </div>
+      <div className="hidden h-full lg:block">
       <div className="pointer-events-none absolute top-3 right-3 z-20">
         <Button
           type="button"
@@ -219,6 +241,7 @@ export function ThreePaneLayout({
           </div>
         </Panel>
       </Group>
+      </div>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import type { UIMessage } from "@ai-sdk/react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, CheckCircle2, Circle, Zap, Brain } from "lucide-react";
+import { Loader2, CheckCircle2, Circle, Zap, Brain, ExternalLink } from "lucide-react";
 import { useState, useEffect } from "react";
 import {
   countKnowledgeBaseInvocations,
@@ -56,7 +56,7 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
       >
         <div className="flex items-center justify-between w-full">
           <span className="font-mono text-[10px] uppercase tracking-widest text-foreground/80">
-            Vector Inspector
+            Evidence
           </span>
           <div
             className={`flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest transition-colors duration-300 ${isActive ? "text-[#00C4A0]" : "text-muted-foreground"
@@ -161,8 +161,9 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
                         .replace("Content: ", "");
 
                       // Extract source name for display
-                      const sourceMatch = sourceLine.match(/Source:\s*\[([^\]]+)\]/);
+                      const sourceMatch = sourceLine.match(/Source:\s*\[([^\]]+)\]\((\/files\/\d+)\)/);
                       const sourceName = sourceMatch ? sourceMatch[1] : sourceLine.replace(/^\[Citation \d+\]\s*/, "");
+                      const sourceHref = sourceMatch?.[2];
 
                       return (
                         <div
@@ -171,9 +172,11 @@ export function RAGInspector({ messages, status }: RAGInspectorProps) {
                           style={{ animation: `stagger-in 0.4s ease-out ${i * 100}ms both` }}
                         >
                           <div className="flex justify-between items-center text-xs">
-                            <span className="font-mono text-[9px] text-[#B07D62] truncate mr-2">
-                              {sourceName}
-                            </span>
+                            {sourceHref ? (
+                              <a href={sourceHref} className="inline-flex min-h-11 items-center gap-1 truncate text-xs font-medium text-rag hover:underline">
+                                {sourceName}<ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
+                              </a>
+                            ) : <span className="text-xs font-medium">{sourceName}</span>}
                             <span className="font-mono text-[9px] bg-[#00C4A0]/15 text-[#00C4A0] px-1.5 py-0.5 rounded-sm shrink-0">
                               Chunk {i + 1}
                             </span>

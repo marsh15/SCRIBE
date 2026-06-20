@@ -32,7 +32,7 @@
 }
 
 :root {
-  --radius: 0;
+  --radius: 0.5rem;
 
   /* Alabaster ground */
   --background: #F4F1EB;
@@ -99,6 +99,18 @@
 
   body {
     @apply bg-background text-foreground;
+    min-width: 320px;
+  }
+}
+
+:focus-visible { outline: 3px solid var(--ring); outline-offset: 3px; }
+button, a, input, select, textarea { touch-action: manipulation; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

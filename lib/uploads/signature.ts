@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { requireEnv } from "@/lib/env";
 
 interface UploadTokenPayload {
   userId: string;
@@ -9,7 +10,7 @@ interface UploadTokenPayload {
 }
 
 function signingSecret() {
-  return process.env.UPLOAD_SIGNING_SECRET ?? process.env.CLERK_SECRET_KEY ?? "dev-upload-secret";
+  return requireEnv("UPLOAD_SIGNING_SECRET");
 }
 
 export function createUploadToken(payload: UploadTokenPayload) {
@@ -39,8 +40,15 @@ export function verifyUploadToken(token: string): UploadTokenPayload | null {
     return null;
   }
 
-  const payload = JSON.parse(Buffer.from(rawPayload, "base64url").toString("utf-8")) as UploadTokenPayload;
-
-  if (Date.now() > payload.expiresAt) return null;
-  return payload;
+  try {
+    const payload = JSON.parse(Buffer.from(rawPayload, "base64url").toString("utf-8")) as Partial<UploadTokenPayload>;
+    if (
+      typeof payload.userId !== "string" || typeof payload.fileName !== "string" ||
+      typeof payload.fileSize !== "number" || typeof payload.fileType !== "string" ||
+      typeof payload.expiresAt !== "number" || Date.now() > payload.expiresAt
+    ) return null;
+    return payload as UploadTokenPayload;
+  } catch {
+    return null;
+  }
 }
