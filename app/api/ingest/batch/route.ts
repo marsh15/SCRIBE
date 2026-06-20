@@ -14,6 +14,7 @@ import {
   type BatchRequestBody,
   validateBatchRequest,
 } from "@/lib/ingestion/batch";
+import { internalError } from "@/lib/api-errors";
 
 export const maxDuration = 60;
 
@@ -125,9 +126,6 @@ export async function POST(req: Request) {
     if (isNotAuthenticatedError(error)) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
-    console.error("Batch ingest error:", error);
-    const message =
-      error instanceof Error ? error.message : "Batch ingestion failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return internalError("batch-ingest", error);
   }
 }

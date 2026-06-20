@@ -20,7 +20,6 @@ export async function GET() {
       {
         ok: false,
         db: "unreachable",
-        error: error instanceof Error ? error.message : "Unknown error",
         timestamp: new Date().toISOString(),
       },
       { status: 503 }

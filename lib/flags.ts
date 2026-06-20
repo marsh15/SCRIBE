@@ -4,7 +4,7 @@ function parseFlag(value: string | undefined, defaultValue = false) {
 }
 
 export const flags = {
-  billingEnabled: parseFlag(process.env.FEATURE_BILLING_ENABLED, true),
+  billingEnabled: parseFlag(process.env.FEATURE_BILLING_ENABLED, false),
   asyncIngestionEnabled: parseFlag(process.env.FEATURE_ASYNC_INGESTION_ENABLED, true),
   publicLandingEnabled: parseFlag(process.env.FEATURE_PUBLIC_LANDING_ENABLED, true),
 };
