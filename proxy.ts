@@ -5,6 +5,7 @@ const isPublicRoute = createRouteMatcher([
     "/sign-in(.*)",
     "/sign-up(.*)",
     "/api/webhooks/razorpay",
+    "/api/sources/upload-complete",
     "/api/internal/ingest/run",
     "/api/health",
 ]);

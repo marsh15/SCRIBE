@@ -14,3 +14,7 @@ export function verifyRazorpaySignature(rawBody: string, signatureHeader: string
     return false;
   }
 }
+
+export function razorpayEventId(rawBody: string) {
+  return crypto.createHash("sha256").update(rawBody).digest("hex");
+}

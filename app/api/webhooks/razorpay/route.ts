@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
-import { verifyRazorpaySignature } from "@/lib/billing/webhooks";
+import { razorpayEventId, verifyRazorpaySignature } from "@/lib/billing/webhooks";
 import {
   markPaymentEventIfNew,
   markPaymentEventProcessed,
   setUserSubscription,
 } from "@/lib/billing/store";
 import { planFromProviderId } from "@/lib/billing/mapper";
-import crypto from "node:crypto";
 
 function toDate(ts: unknown) {
   if (typeof ts !== "number") return undefined;
@@ -35,7 +34,7 @@ export async function POST(req: Request) {
     // This guarantees one record per unique payload — different events for the same
     // subscription (e.g. subscription.activated vs subscription.charged) have different
     // bodies and will NOT be incorrectly deduplicated.
-    const eventId = crypto.createHash("sha256").update(rawBody).digest("hex");
+    const eventId = razorpayEventId(rawBody);
 
     const marker = await markPaymentEventIfNew({
       gateway: "razorpay",

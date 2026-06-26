@@ -6,7 +6,7 @@ const schema = z.object({
   GOOGLE_GENERATIVE_AI_API_KEY: optionalSecret,
   BLOB_READ_WRITE_TOKEN: optionalSecret,
   UPLOAD_SIGNING_SECRET: optionalSecret,
-  INTERNAL_CRON_SECRET: optionalSecret,
+  CRON_SECRET: optionalSecret,
   RAZORPAY_KEY_ID: optionalSecret,
   RAZORPAY_KEY_SECRET: optionalSecret,
   RAZORPAY_WEBHOOK_SECRET: optionalSecret,

@@ -43,6 +43,13 @@
       "when": 1771758091842,
       "tag": "0005_batch_idempotency_cleanup",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782259200000,
+      "tag": "0006_deepen_source_intake",
+      "breakpoints": true
     }
   ]
 }

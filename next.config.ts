@@ -5,12 +5,6 @@ const projectRoot = path.resolve(process.cwd());
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["pdf-parse"],
-  experimental: {
-    proxyClientMaxBodySize: "120mb",
-    serverActions: {
-      bodySizeLimit: "120mb",
-    },
-  },
   turbopack: {
     root: projectRoot,
   },

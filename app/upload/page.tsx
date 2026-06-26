@@ -18,11 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { ThreePaneLayout } from "@/components/three-pane-layout";
-import { useClientExtract } from "@/hooks/useClientExtract";
-import { useIngestionPipeline } from "@/hooks/useIngestionPipeline";
-import { chunkContentClient } from "@/lib/chunking-client";
-
-const FILE_SIZE_THRESHOLD = 5 * 1024 * 1024; // 5MB — files above this use browser pipeline
+import { useSourceUpload } from "@/hooks/useSourceUpload";
 
 function getFileIcon(type: string, name: string) {
   const ext = name.split(".").pop()?.toLowerCase();
@@ -53,7 +49,6 @@ function formatDate(dateStr: string) {
 }
 
 export default function DocumentUpload() {
-  const [isLoading, setIsLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [message, setMessage] = useState<{
     type: "error" | "success";
@@ -62,10 +57,11 @@ export default function DocumentUpload() {
   const [files, setFiles] = useState<any[]>([]);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { extractText } = useClientExtract();
-  const { state: pipelineState, runPipeline, reset: resetPipeline } = useIngestionPipeline();
-  const isBrowserPipeline = pipelineState.status !== "idle" && pipelineState.status !== "done";
-  const hasPendingIngestion = isLoading || isBrowserPipeline || files.some((file) => file.status === "queued" || file.status === "processing");
+  const { state: sourceUpload, uploadSource, reset: resetUpload } = useSourceUpload();
+  const isUploading = sourceUpload.status === "reserving" || sourceUpload.status === "uploading";
+  const hasPendingIngestion = isUploading || files.some((file) =>
+    ["uploading", "queued", "processing", "retrying"].includes(file.status)
+  );
 
   const fetchFiles = useCallback(async () => {
     const data = await getFiles();
@@ -77,7 +73,9 @@ export default function DocumentUpload() {
   }, [fetchFiles]);
 
   useEffect(() => {
-    const hasPending = files.some((file) => file.status === "queued" || file.status === "processing");
+    const hasPending = files.some((file) =>
+      ["uploading", "queued", "processing", "retrying"].includes(file.status)
+    );
     if (!hasPending) return;
 
     const interval = setInterval(() => {
@@ -89,228 +87,20 @@ export default function DocumentUpload() {
     return () => clearInterval(interval);
   }, [files, fetchFiles]);
 
-  const processFileLegacy = async (file: File) => {
-    // ---- Server-side pipeline for small files (≤ 5MB) ----
-    setIsLoading(true);
-    setMessage(null);
-
-    try {
-      const signRes = await fetch("/api/uploads/sign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileName: file.name,
-          fileSize: file.size,
-          fileType: file.type || "application/octet-stream",
-        }),
-      });
-
-      const signJson = (await signRes.json()) as {
-        ok?: boolean;
-        uploadToken?: string;
-        error?: string;
-      };
-
-      if (!signRes.ok || !signJson.uploadToken) {
-        setMessage({
-          type: "error",
-          text: signJson.error || "Upload signing failed",
-        });
-        return;
-      }
-
-      const uploadForm = new FormData();
-      uploadForm.append("file", file);
-      uploadForm.append("uploadToken", signJson.uploadToken);
-
-      const completeRes = await fetch("/api/uploads/complete", {
-        method: "POST",
-        body: uploadForm,
-      });
-
-      const completeJson = (await completeRes.json()) as {
-        ok?: boolean;
-        error?: string;
-        file?: {
-          status?: string;
-          id?: number;
-          processingError?: string;
-        };
-        ingestionMode?: "async" | "direct" | "browser";
-        chunks?: number;
-      };
-
-      if (!completeRes.ok || !completeJson.ok) {
-        setMessage({
-          type: "error",
-          text: completeJson.error || "Failed to queue upload",
-        });
-        await fetchFiles();
-        return;
-      }
-
-      if (completeJson.file?.status === "ready") {
-        setMessage({
-          type: "success",
-          text:
-            completeJson.ingestionMode === "direct"
-              ? `File uploaded and indexed successfully${completeJson.chunks ? ` (${completeJson.chunks} chunks)` : ""}!`
-              : "File uploaded and indexed successfully!",
-        });
-        if (fileInputRef.current) fileInputRef.current.value = "";
-        await fetchFiles();
-        return;
-      }
-
-      // File is queued — now trigger ingestion and wait for it
-      setMessage({
-        type: "success",
-        text: "File uploaded. Processing document...",
-      });
-
-      try {
-        const ingestRes = await fetch("/api/internal/ingest/run?limit=1", {
-          method: "POST",
-        });
-        const ingestJson = (await ingestRes.json()) as {
-          ok?: boolean;
-          results?: Array<{ processed?: boolean; reason?: string }>;
-        };
-
-        if (ingestRes.ok && ingestJson.ok) {
-          const firstResult = ingestJson.results?.[0];
-          if (firstResult?.processed) {
-            setMessage({
-              type: "success",
-              text: "File uploaded and indexed successfully!",
-            });
-          } else {
-            setMessage({
-              type: "error",
-              text: firstResult?.reason || "Processing failed. The document may be unsupported.",
-            });
-          }
-        } else {
-          setMessage({
-            type: "error",
-            text: "Document processing failed. Please try again.",
-          });
-        }
-      } catch {
-        // Ingestion trigger failed — file is still queued, polling will pick it up
-        setMessage({
-          type: "success",
-          text: "File uploaded and queued for indexing. Processing will continue in the background.",
-        });
-      }
-
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      await fetchFiles();
-    } catch {
-      setMessage({
-        type: "error",
-        text: "An error occurred while processing the document",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const processFileBrowser = async (file: File) => {
-    // ---- Browser-orchestrated pipeline for large files (> 5MB) ----
-    setIsLoading(true);
-    setMessage(null);
-    resetPipeline();
-
-    try {
-      // Step 1: Client-side text extraction
-      setMessage({ type: "success", text: "Extracting text from document..." });
-      const { result: extraction, error: extractError } = await extractText(file);
-      if (!extraction) {
-        setMessage({ type: "error", text: extractError || "Failed to extract text from the document." });
-        return;
-      }
-
-      // Step 2: Client-side chunking
-      setMessage({ type: "success", text: "Splitting document into chunks..." });
-      const chunks = await chunkContentClient(extraction.extractedText, {
-        fileName: file.name,
-        numPages: extraction.numPages,
-      });
-
-      setMessage({
-        type: "success",
-        text: `Created ${chunks.length} chunks. Initializing file record...`,
-      });
-
-      // Step 3: Create file record via lightweight init endpoint (NO raw file upload)
-      // This avoids Vercel's 4.5MB body size limit for large files.
-      const initRes = await fetch("/api/ingest/batch/init", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileName: file.name,
-          fileSize: file.size,
-          fileType: file.type || "application/octet-stream",
-        }),
-      });
-
-      let initJson: any;
-      try {
-        initJson = await initRes.json();
-      } catch {
-        setMessage({ type: "error", text: `Server error (${initRes.status}). Please try again.` });
-        return;
-      }
-
-      if (!initRes.ok || !initJson.ok || !initJson.file?.id) {
-        setMessage({ type: "error", text: initJson.error || "Failed to initialize file record" });
-        return;
-      }
-
-      const fileId = initJson.file.id;
-
-      // Step 4: Run the batch pipeline
-      setMessage({ type: "success", text: "Processing embeddings..." });
-      setIsLoading(false); // Pipeline hook manages its own loading state
-
-      const { success, error: pipelineError } = await runPipeline(
-        fileId,
-        chunks,
-        extraction.extractedText.length,
-        0,
-        extraction.extractedText
-      );
-
-      if (success) {
-        setMessage({
-          type: "success",
-          text: `File uploaded and indexed successfully (${chunks.length} chunks)!`,
-        });
-      } else {
-        setMessage({
-          type: "error",
-          text: pipelineError || "Processing failed. Please try again.",
-        });
-      }
-
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      await fetchFiles();
-    } catch (err) {
-      setMessage({
-        type: "error",
-        text: err instanceof Error ? err.message : "An error occurred while processing the document",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const processFile = async (file: File) => {
-    if (file.size > FILE_SIZE_THRESHOLD) {
-      await processFileBrowser(file);
+    setMessage(null);
+    resetUpload();
+    const result = await uploadSource(file);
+    if (result.success) {
+      setMessage({
+        type: "success",
+        text: "Source uploaded securely and queued for indexing.",
+      });
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      await fetchFiles();
     } else {
-      await processFileLegacy(file);
+      setMessage({ type: "error", text: result.error });
+      await fetchFiles();
     }
   };
 
@@ -388,14 +178,24 @@ export default function DocumentUpload() {
                 }}
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={handleDrop}
-                onClick={() => !isLoading && fileInputRef.current?.click()}
+                onClick={() => !isUploading && fileInputRef.current?.click()}
+                onKeyDown={(event) => {
+                  if (!isUploading && (event.key === "Enter" || event.key === " ")) {
+                    event.preventDefault();
+                    fileInputRef.current?.click();
+                  }
+                }}
+                role="button"
+                tabIndex={isUploading ? -1 : 0}
+                aria-disabled={isUploading}
+                aria-label="Upload a Source document"
                 className={`
                                     relative border-2 border-dashed rounded-md p-10 text-center cursor-pointer transition-all duration-300
                                     ${isDragging
                     ? "border-[#00C4A0] bg-[#00C4A0]/5 scale-[1.01]"
                     : "border-border/60 hover:border-[#00C4A0]/40 hover:bg-muted/30"
                   }
-                                    ${isLoading ? "pointer-events-none opacity-60" : ""}
+                                    ${isUploading ? "pointer-events-none opacity-60" : ""}
                                 `}
               >
                 <input
@@ -404,35 +204,31 @@ export default function DocumentUpload() {
                   accept=".pdf,.txt,.md,.csv,.docx"
                   onChange={handleFileUpload}
                   onClick={(e) => e.stopPropagation()}
-                  disabled={isLoading}
+                  disabled={isUploading}
                   className="hidden"
                 />
 
-                {(isLoading || isBrowserPipeline) ? (
+                {isUploading ? (
                   <div className="flex flex-col items-center gap-4 py-4">
                     <Loader2 className="w-8 h-8 animate-spin text-[#00C4A0]" />
                     <div>
                       <p className="font-mono text-xs uppercase tracking-wider text-foreground">
-                        {isBrowserPipeline
-                          ? `Processing — Batch ${pipelineState.currentBatch}/${pipelineState.totalBatches}`
-                          : "Processing Document"}
+                        {sourceUpload.status === "reserving"
+                          ? "Reserving private upload"
+                          : `Uploading Source — ${sourceUpload.progress}%`}
                       </p>
                       <p className="font-mono text-[10px] text-muted-foreground mt-1">
-                        {isBrowserPipeline
-                          ? `${pipelineState.totalChunks} chunks · ${pipelineState.status}`
-                          : "Extracting → Chunking → Embedding → Indexing"}
+                        Private Blob → Queue → Extract → Embed
                       </p>
                     </div>
-                    {/* Progress bar — real percentage for browser pipeline */}
+                    {/* Vercel Blob upload progress */}
                     <div className="w-48 h-1 bg-muted rounded-full overflow-hidden">
                       <div
-                        className={`h-full bg-[#00C4A0] rounded-full transition-all duration-500 ${
-                          isBrowserPipeline ? "" : "animate-pulse"
-                        }`}
+                        className={`h-full bg-[#00C4A0] rounded-full transition-all duration-500 ${sourceUpload.status === "reserving" ? "animate-pulse" : ""}`}
                         style={{
-                          width: isBrowserPipeline
-                            ? `${pipelineState.progress}%`
-                            : "60%",
+                          width: sourceUpload.status === "reserving"
+                            ? "20%"
+                            : `${sourceUpload.progress}%`,
                         }}
                       />
                     </div>
@@ -460,7 +256,7 @@ export default function DocumentUpload() {
                         PDF • TXT • MD • CSV • DOCX
                       </p>
                       <p className="text-[11px] text-muted-foreground mt-3 max-w-sm mx-auto bg-muted/50 p-2 rounded border border-border/50">
-                        <strong className="text-foreground">Pro:</strong> Upload documents up to 100MB. Large files are processed in your browser for maximum speed.
+                        <strong className="text-foreground">Private by default:</strong> Originals upload directly to secure storage, then index in the background.
                       </p>
                     </div>
                   </div>
@@ -485,8 +281,8 @@ export default function DocumentUpload() {
                       <div className="flex-1 min-w-0">
                         <AlertTitle className="font-mono text-[10px] uppercase tracking-widest">
                           {message.type === "error"
-                            ? "Ingestion Error"
-                            : "Indexed Successfully"}
+                            ? "Source intake error"
+                            : "Source queued"}
                         </AlertTitle>
                         <AlertDescription className="font-sans text-sm mt-1 break-words">
                           {message.text}
@@ -495,6 +291,7 @@ export default function DocumentUpload() {
                       <button
                         onClick={() => setMessage(null)}
                         className="shrink-0 opacity-50 hover:opacity-100 transition-opacity"
+                        aria-label="Dismiss upload message"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -596,7 +393,7 @@ export default function DocumentUpload() {
             )}
 
             {/* Empty State — only show when no files AND no loading */}
-            {files.length === 0 && !isLoading && (
+            {files.length === 0 && !isUploading && (
               <section className="text-center py-10 opacity-40">
                 <Database className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
                 <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
