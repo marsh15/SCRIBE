@@ -21,7 +21,10 @@ export async function chunkContent(content: string, options: ChunkOptions = {}) 
 
     return rawChunks.map((chunk, index) => {
         const chunkStart = content.indexOf(chunk, searchOffset);
-        if (chunkStart >= 0) searchOffset = chunkStart + chunk.length;
+        // Chunks overlap, so the next chunk can begin before this chunk ends.
+        // Advancing one character past the current start preserves overlap while
+        // still preventing repeated text from resolving to the same occurrence.
+        if (chunkStart >= 0) searchOffset = chunkStart + 1;
 
         const positionPercent = chunkStart >= 0 ? Math.round((chunkStart / totalLength) * 100) : 0;
 

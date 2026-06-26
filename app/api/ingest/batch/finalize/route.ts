@@ -100,6 +100,7 @@ export async function POST(req: Request) {
           status: "ready",
           processingError: null,
           textBytes: textBytes || 0,
+          updatedAt: new Date(),
           // Save extracted text (truncated to first 100K chars to avoid DB bloat)
           ...(extractedText
             ? { extractedText: extractedText.substring(0, 100_000) }

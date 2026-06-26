@@ -1,4 +1,4 @@
-import { put } from "@vercel/blob";
+import { del, get, head, put } from "@vercel/blob";
 
 function blobToken() {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
@@ -36,18 +36,36 @@ export async function uploadBufferToBlob(input: {
 
 export async function downloadBlobToBuffer(url: string) {
   const token = blobToken();
-  const res = await fetch(url, {
-    method: "GET",
-    headers: token
-      ? {
-        Authorization: `Bearer ${token}`,
-      }
-      : undefined,
-  });
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch blob (${res.status})`);
+  if (!token) {
+    throw new Error("Missing BLOB_READ_WRITE_TOKEN");
   }
 
-  return res.arrayBuffer();
+  const result = await get(url, {
+    access: "private",
+    token,
+    useCache: false,
+  });
+
+  if (!result || result.statusCode !== 200 || !result.stream) {
+    throw new Error("Blob not found");
+  }
+
+  return new Response(result.stream).arrayBuffer();
+}
+
+export async function deleteBlob(urlOrPathname: string) {
+  const token = blobToken();
+  if (!token) {
+    throw new Error("Missing BLOB_READ_WRITE_TOKEN");
+  }
+
+  await del(urlOrPathname, { token });
+}
+
+export async function getBlobMetadata(urlOrPathname: string) {
+  const token = blobToken();
+  if (!token) {
+    throw new Error("Missing BLOB_READ_WRITE_TOKEN");
+  }
+  return head(urlOrPathname, { token });
 }

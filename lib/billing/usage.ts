@@ -21,21 +21,26 @@ export async function recordUsageEvent(input: {
   sourceId?: string;
   isEstimated?: boolean;
   occurredAt?: Date;
+  idempotencyKey?: string;
 }) {
   if (!flags.billingEnabled) return;
 
   try {
     await withDatabaseRetry("recordUsageEvent", () =>
-      db.insert(usageEvents).values({
-        userId: input.userId,
-        metric: input.metric,
-        quantity: Math.max(0, Math.round(input.quantity)),
-        unit: input.unit,
-        sourceType: input.sourceType,
-        sourceId: input.sourceId,
-        isEstimated: input.isEstimated ?? false,
-        occurredAt: input.occurredAt ?? new Date(),
-      })
+      db
+        .insert(usageEvents)
+        .values({
+          userId: input.userId,
+          metric: input.metric,
+          quantity: Math.max(0, Math.round(input.quantity)),
+          unit: input.unit,
+          sourceType: input.sourceType,
+          sourceId: input.sourceId,
+          idempotencyKey: input.idempotencyKey,
+          isEstimated: input.isEstimated ?? false,
+          occurredAt: input.occurredAt ?? new Date(),
+        })
+        .onConflictDoNothing({ target: usageEvents.idempotencyKey })
     );
   } catch (error) {
     console.error("Failed to record usage event:", error);

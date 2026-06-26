@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { requireEnv } from "@/lib/env";
 
-interface UploadTokenPayload {
+export interface UploadTokenPayload {
   userId: string;
   fileName: string;
   fileSize: number;

@@ -140,9 +140,9 @@ Create a `.env.local` file:
 | `CLERK_SECRET_KEY` | Clerk secret key | ✅ |
 | `SUPERMEMORY_API_KEY` | Supermemory API key when optional context memory is enabled | Optional |
 | `ENABLE_SUPERMEMORY` | Enables Supermemory wrapping in chat (`true`/`false`) | Optional |
-| `BLOB_READ_WRITE_TOKEN` | Vercel Blob token for file storage | Recommended |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob token for private Source uploads | Required for uploads |
 | `UPLOAD_SIGNING_SECRET` | HMAC secret for upload token signing | Recommended |
-| `INTERNAL_CRON_SECRET` | Auth secret for `/api/internal/ingest/run` | Recommended |
+| `CRON_SECRET` | Bearer secret used by Vercel Cron for Source intake | Required in production |
 | `NEXT_PUBLIC_APP_URL` | Public app URL for checkout redirects | Recommended |
 | `FEATURE_BILLING_ENABLED` | Enable billing APIs/UI (`true`/`false`) | Optional |
 | `FEATURE_ASYNC_INGESTION_ENABLED` | Enable async ingestion queue | Optional |

@@ -9,24 +9,46 @@ import {
   boolean,
   bigint,
   doublePrecision,
+  index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
-export const files = pgTable("files", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  type: text("type").notNull(),
-  size: integer("size").notNull(),
-  userId: text("user_id").notNull(),
-  fileData: text("file_data"), // base64-encoded original file for viewing
-  extractedText: text("extracted_text"), // full extracted text
-  storageKey: text("storage_key"),
-  storageUrl: text("storage_url"),
-  status: text("status").default("ready").notNull(), // queued | processing | ready | failed
-  processingError: text("processing_error"),
-  textBytes: integer("text_bytes"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const SOURCE_STATUSES = [
+  "uploading",
+  "queued",
+  "processing",
+  "retrying",
+  "ready",
+  "failed",
+] as const;
+
+export type SourceStatus = (typeof SOURCE_STATUSES)[number];
+
+export const files = pgTable(
+  "files",
+  {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    type: text("type").notNull(),
+    size: integer("size").notNull(),
+    userId: text("user_id").notNull(),
+    fileData: text("file_data"), // legacy base64-encoded original
+    extractedText: text("extracted_text"),
+    storageKey: text("storage_key"),
+    storageUrl: text("storage_url"),
+    status: text("status", { enum: SOURCE_STATUSES }).default("ready").notNull(),
+    processingError: text("processing_error"),
+    textBytes: integer("text_bytes"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    statusUpdatedIndex: index("files_status_updated_at_index").on(
+      table.status,
+      table.updatedAt
+    ),
+  })
+);
 
 export const documents = pgTable(
   "documents",
@@ -106,6 +128,7 @@ export const usageEvents = pgTable("usage_events", {
   unit: text("unit").notNull(), // tokens | gb_day
   sourceType: text("source_type"), // chat | upload | ingest | storage_rollup
   sourceId: text("source_id"),
+  idempotencyKey: text("idempotency_key").unique(),
   isEstimated: boolean("is_estimated").default(false).notNull(),
   occurredAt: timestamp("occurred_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -144,20 +167,31 @@ export const paymentEvents = pgTable(
   })
 );
 
-export const ingestionJobs = pgTable("ingestion_jobs", {
-  id: serial("id").primaryKey(),
-  fileId: integer("file_id")
-    .references(() => files.id, { onDelete: "cascade" })
-    .notNull(),
-  status: text("status").default("queued").notNull(), // queued | processing | completed | failed
-  attempts: integer("attempts").default(0).notNull(),
-  lastError: text("last_error"),
-  nextRetryAt: timestamp("next_retry_at"),
-  startedAt: timestamp("started_at"),
-  finishedAt: timestamp("finished_at"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+export const ingestionJobs = pgTable(
+  "ingestion_jobs",
+  {
+    id: serial("id").primaryKey(),
+    fileId: integer("file_id")
+      .references(() => files.id, { onDelete: "cascade" })
+      .notNull(),
+    status: text("status").default("queued").notNull(),
+    attempts: integer("attempts").default(0).notNull(),
+    lastError: text("last_error"),
+    nextRetryAt: timestamp("next_retry_at"),
+    startedAt: timestamp("started_at"),
+    finishedAt: timestamp("finished_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    fileUnique: uniqueIndex("ingestion_jobs_file_id_unique").on(table.fileId),
+    queueIndex: index("ingestion_jobs_queue_index").on(
+      table.status,
+      table.nextRetryAt,
+      table.createdAt
+    ),
+  })
+);
 
 export type InsertFile = typeof files.$inferInsert;
 export type SelectFile = typeof files.$inferSelect;

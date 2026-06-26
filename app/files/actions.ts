@@ -2,9 +2,10 @@
 
 import { db } from "@/lib/db-config";
 import { files } from "@/lib/db-schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getUserId } from "@/lib/auth";
+import { deleteSource } from "@/lib/ingestion/source-intake";
 
 export async function getFiles() {
     try {
@@ -23,8 +24,8 @@ export async function getFiles() {
 export async function deleteFile(fileId: number) {
     try {
         const userId = await getUserId();
-        // Only allow deleting own files
-        await db.delete(files).where(and(eq(files.id, fileId), eq(files.userId, userId)));
+        const deleted = await deleteSource(userId, fileId);
+        if (!deleted) return { success: false, error: "Source not found" };
         revalidatePath("/upload");
         return { success: true };
     } catch (error) {
