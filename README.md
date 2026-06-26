@@ -172,6 +172,10 @@ Create a `.env.local` file:
 
 Deployed on **Vercel**. Push to `main` to trigger auto-deploy.
 
+The background Source intake worker is configured as a daily Vercel Cron Job
+(`0 0 * * *`) so deployments remain compatible with Vercel Hobby limits. Upgrade
+the project to Pro before changing this schedule to once per minute.
+
 > **Note:** For reliable ingestion on the free tier, documents should be under ~25 pages.
 
 ---
