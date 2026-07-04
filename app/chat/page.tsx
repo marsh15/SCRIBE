@@ -3,7 +3,7 @@
 import { useChat, type UIMessage } from "@ai-sdk/react";
 import { useEffect, useRef, useState } from "react";
 import { useChatState } from "@/components/chat-context";
-import { ArrowUp, CornerDownLeft, Database } from "lucide-react";
+import { ArrowUp, CornerDownLeft, Database, Loader2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { createChat } from "@/app/chat/actions";
 import { useRouter } from "next/navigation";
@@ -73,7 +73,10 @@ export default function Ragchatbot() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    messagesEndRef.current?.scrollIntoView({
+      behavior: prefersReducedMotion ? "auto" : "smooth",
+    });
   }, [messages]);
 
   return (
@@ -107,7 +110,7 @@ export default function Ragchatbot() {
                 retrieve relevant chunks and synthesize a response with exact
                 citations.
               </p>
-              <div className="w-full max-w-xl rounded-sm border border-border bg-card p-4 text-left animate-scale-in [animation-delay:400ms] opacity-0 glow-hover">
+                <div className="w-full max-w-xl rounded-sm border border-border bg-card p-4 text-left animate-scale-in [animation-delay:400ms] opacity-0">
                 <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
                   Onboarding Checklist
                 </p>
@@ -121,7 +124,7 @@ export default function Ragchatbot() {
                     <button
                       key={prompt}
                       type="button"
-                      className="w-full text-left rounded-sm border border-border px-3 py-2 text-xs font-sans hover:border-[#00C4A0]/40 hover:bg-muted/40 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                      className="w-full text-left rounded-sm border border-border px-3 py-2 text-xs font-sans hover:border-rag/40 hover:bg-muted/40 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                       onClick={() => void startChat(prompt)}
                       disabled={isBusy}
                     >
@@ -150,12 +153,12 @@ export default function Ragchatbot() {
                     <div className="font-mono text-[10px] uppercase tracking-widest text-[#B07D62] mb-2 flex items-center gap-2">
                       Scribe AI
                       {messageUsesKnowledgeBase(m) ? (
-                        <span className="text-[#00C4A0]">• RAG Active</span>
+                        <span className="text-rag">• RAG active</span>
                       ) : null}
                     </div>
                   )}
 
-                  <div className="prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-pre:bg-primary prose-pre:text-primary-foreground max-w-none prose-a:text-[#00C4A0] prose-a:no-underline hover:prose-a:underline">
+                    <div className="prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-pre:bg-primary prose-pre:text-primary-foreground max-w-none prose-a:text-rag prose-a:no-underline hover:prose-a:underline">
                     <ReactMarkdown
                       components={{
                         a: ({ href, children, ...props }) => {
@@ -165,7 +168,7 @@ export default function Ragchatbot() {
                               href={href}
                               target={isInternal ? undefined : "_blank"}
                               rel={isInternal ? undefined : "noopener noreferrer"}
-                              className="text-[#00C4A0] hover:underline font-medium inline-flex items-center gap-1"
+                              className="text-rag hover:underline font-medium inline-flex items-center gap-1"
                               {...props}
                             >
                               {children}
@@ -188,10 +191,11 @@ export default function Ragchatbot() {
           {/* Loading Indicator */}
           {isLoading && messages[messages.length - 1]?.role === "user" && (
             <div className="flex justify-start">
-              <div className="bg-card border border-border/50 rounded-sm p-4 flex gap-1 items-center h-12">
-                <div className="w-1.5 h-1.5 bg-[#00C4A0] rounded-full animate-bounce [animation-delay:-0.3s]" />
-                <div className="w-1.5 h-1.5 bg-[#00C4A0] rounded-full animate-bounce [animation-delay:-0.15s]" />
-                <div className="w-1.5 h-1.5 bg-[#00C4A0] rounded-full animate-bounce" />
+              <div className="bg-card border border-border/50 rounded-sm px-4 py-3 flex gap-2 items-center min-h-12">
+                <Loader2 className="h-4 w-4 animate-spin text-rag" />
+                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Retrieving evidence
+                </span>
               </div>
             </div>
           )}
@@ -224,6 +228,7 @@ export default function Ragchatbot() {
             />
             <button
               type="submit"
+              aria-label="Send message"
               disabled={!input || isBusy}
               className="absolute right-2 bottom-2 p-2 rounded-sm bg-primary text-primary-foreground disabled:opacity-50 transition-opacity hover:opacity-90 flex items-center justify-center"
             >
@@ -240,12 +245,12 @@ export default function Ragchatbot() {
           <div className="mt-2 flex items-center justify-between text-[10px] font-mono uppercase tracking-widest text-muted-foreground px-1">
             <span className="flex items-center gap-1.5">
               <div
-                className={`w-1.5 h-1.5 rounded-full ${isRAGActive ? "bg-[#00C4A0] animate-pulse" : "bg-border"}`}
+                className={`w-1.5 h-1.5 rounded-full ${isRAGActive ? "bg-rag animate-pulse" : "bg-border"}`}
               />
-              {isRAGActive ? "RAG Action Active" : "RAG Standby"}
+              {isRAGActive ? "Evidence active" : "Evidence standby"}
             </span>
             <span className="flex items-center gap-1 opacity-50">
-              Returns to submit <CornerDownLeft className="w-3 h-3 ml-0.5" />
+              Enter to send <CornerDownLeft className="w-3 h-3 ml-0.5" />
             </span>
           </div>
         </div>

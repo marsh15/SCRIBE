@@ -240,9 +240,9 @@ export function Sidebar() {
         <Link href="/chat">
           <Button
             variant="outline"
-            className="w-full justify-start gap-2 font-mono text-xs uppercase tracking-wider mb-4 bg-background border-border hover:bg-muted/50 hover:border-[#00C4A0]/30 transition-all h-10 rounded-sm group"
+            className="w-full justify-start gap-2 font-mono text-xs uppercase tracking-wider mb-4 bg-background border-border hover:bg-muted/50 hover:border-rag/30 transition-all h-10 rounded-sm group"
           >
-            <MessageSquarePlus className="w-4 h-4 text-[#00C4A0] group-hover:scale-110 transition-transform" />
+            <MessageSquarePlus className="w-4 h-4 text-rag group-hover:scale-110 transition-transform" />
             New Chat
           </Button>
         </Link>
@@ -304,7 +304,7 @@ export function Sidebar() {
                         className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden mr-2 group/link"
                       >
                         <MessageSquare
-                          className={`w-3.5 h-3.5 shrink-0 transition-transform group-hover/link:scale-110 ${isActive ? "text-[#00C4A0]" : "text-muted-foreground"}`}
+                          className={`w-3.5 h-3.5 shrink-0 transition-transform group-hover/link:scale-110 ${isActive ? "text-rag" : "text-muted-foreground"}`}
                         />
                         <span className={`truncate font-sans text-sm transition-colors group-hover/link:text-foreground ${isActive ? "font-medium" : ""}`}>
                           {chat.title || "Untitled Chat"}
@@ -324,7 +324,7 @@ export function Sidebar() {
           </ScrollArea>
         </Panel>
 
-        <Separator className="h-[3px] w-full bg-border hover:bg-[#00C4A0]/50 active:bg-[#00C4A0] transition-colors cursor-row-resize relative my-2" />
+        <Separator className="h-[3px] w-full bg-border hover:bg-rag/50 active:bg-rag transition-colors cursor-row-resize relative my-2" />
 
         <Panel defaultSize={40} minSize={25} id="sidebar-kb" className="flex flex-col min-h-0 px-4 pb-2">
           <div className="flex items-center justify-between mb-2">
@@ -359,7 +359,7 @@ export function Sidebar() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-5 w-5 rounded-sm opacity-60 hover:opacity-100 hover:text-[#00C4A0] transition-all"
+                  className="h-5 w-5 rounded-sm opacity-60 hover:opacity-100 hover:text-rag transition-all"
                   title="Upload"
                 >
                   <Plus className="h-3 w-3" />
@@ -397,7 +397,7 @@ export function Sidebar() {
                         className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden mr-2 group/link"
                         title="View document"
                       >
-                        <span className="text-muted-foreground shrink-0 group-hover/link:text-[#00C4A0] transition-colors group-hover/link:scale-110">
+                        <span className="text-muted-foreground shrink-0 group-hover/link:text-rag transition-colors group-hover/link:scale-110">
                           {getFileIcon(file.type, file.name)}
                         </span>
                         <span className="truncate font-sans text-foreground/80 text-sm group-hover/link:text-foreground transition-colors">
@@ -405,7 +405,7 @@ export function Sidebar() {
                         </span>
                         <span
                           className={`text-[9px] font-mono uppercase px-1 rounded-sm shrink-0 ${status === "ready"
-                            ? "bg-[#00C4A0]/15 text-[#00C4A0]"
+                            ? "bg-rag/15 text-rag"
                             : status === "failed"
                               ? "bg-destructive/15 text-destructive"
                               : "bg-muted text-muted-foreground"

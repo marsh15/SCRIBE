@@ -13,6 +13,7 @@ interface ThreePaneLayoutProps {
   children: ReactNode;
   messages?: UIMessage[];
   status?: string;
+  chatId?: string;
 }
 
 const DEFAULT_LAYOUT = {
@@ -28,12 +29,12 @@ type LayoutMap = typeof DEFAULT_LAYOUT;
 
 function ResizeHandle() {
   return (
-    <Separator className="group relative w-[2px] bg-border/60 hover:bg-[#00C4A0]/40 active:bg-[#00C4A0] transition-all duration-200 cursor-col-resize">
+    <Separator className="group relative w-[2px] bg-border/60 hover:bg-rag/40 active:bg-rag transition-all duration-200 cursor-col-resize">
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
         <div className="flex flex-col gap-[3px]">
-          <div className="w-[3px] h-[3px] rounded-full bg-[#00C4A0]" />
-          <div className="w-[3px] h-[3px] rounded-full bg-[#00C4A0]" />
-          <div className="w-[3px] h-[3px] rounded-full bg-[#00C4A0]" />
+          <div className="w-[3px] h-[3px] rounded-full bg-rag" />
+          <div className="w-[3px] h-[3px] rounded-full bg-rag" />
+          <div className="w-[3px] h-[3px] rounded-full bg-rag" />
         </div>
       </div>
     </Separator>
@@ -96,6 +97,7 @@ export function ThreePaneLayout({
   children,
   messages = [],
   status = "ready",
+  chatId,
 }: ThreePaneLayoutProps) {
   const groupRef = useGroupRef();
   const [layout, setLayout] = useState(DEFAULT_LAYOUT);
@@ -162,7 +164,7 @@ export function ThreePaneLayout({
         <main className="min-h-0 flex-1">
           {mobilePane === "sources" && <Sidebar />}
           {mobilePane === "chat" && children}
-          {mobilePane === "evidence" && <RAGInspector messages={messages} status={status} />}
+          {mobilePane === "evidence" && <RAGInspector messages={messages} status={status} chatId={chatId} />}
         </main>
         <nav aria-label="Workspace" className="grid h-16 shrink-0 grid-cols-3 border-t bg-card">
           {([
@@ -237,7 +239,7 @@ export function ThreePaneLayout({
           maxSize="38%"
         >
           <div className="h-full bg-card border-l border-border/40 overflow-hidden">
-            <RAGInspector messages={messages} status={status} />
+            <RAGInspector messages={messages} status={status} chatId={chatId} />
           </div>
         </Panel>
       </Group>
