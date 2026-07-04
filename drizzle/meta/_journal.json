@@ -50,6 +50,13 @@
       "when": 1782259200000,
       "tag": "0006_deepen_source_intake",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1783209600000,
+      "tag": "0007_rag_observability",
+      "breakpoints": true
     }
   ]
 }

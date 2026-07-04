@@ -1,7 +1,7 @@
 "use client";
 
 import { useChat, type UIMessage } from "@ai-sdk/react";
-import { ArrowUp, CornerDownLeft, Database, Sparkles } from "lucide-react";
+import { ArrowUp, CornerDownLeft, Database, Loader2, PenLine, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useChatState } from "@/components/chat-context";
 import ReactMarkdown from "react-markdown";
@@ -182,7 +182,10 @@ function ChatInterface({
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    messagesEndRef.current?.scrollIntoView({
+      behavior: prefersReducedMotion ? "auto" : "smooth",
+    });
   }, [messages]);
 
   return (
@@ -204,7 +207,7 @@ function ChatInterface({
             <div className="flex flex-col items-center justify-center text-center mt-24 space-y-8">
               <div className="animate-fade-up">
                 <div className="w-16 h-16 rounded-full bg-primary/5 border border-border/50 flex items-center justify-center mx-auto mb-6">
-                  <Sparkles className="w-7 h-7 text-[#00C4A0]" />
+                  <Sparkles className="w-7 h-7 text-rag" />
                 </div>
                 <h1 className="font-serif text-4xl text-foreground tracking-tight">
                   Query the knowledge base.
@@ -214,9 +217,9 @@ function ChatInterface({
                 Ask questions about your indexed documents. The engine retrieves
                 relevant chunks and synthesizes a response with exact citations.
               </p>
-              <div className="w-full max-w-xl rounded-sm border border-border bg-card p-5 text-left animate-scale-in [animation-delay:200ms] opacity-0 glow-hover">
+              <div className="w-full max-w-xl rounded-sm border border-border bg-card p-5 text-left animate-scale-in [animation-delay:200ms] opacity-0">
                 <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#00C4A0]"></span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-rag"></span>
                   Try a sample prompt
                 </p>
                 <div className="space-y-2">
@@ -224,7 +227,7 @@ function ChatInterface({
                     <button
                       key={prompt}
                       type="button"
-                      className="w-full text-left rounded-sm border border-border px-4 py-2.5 text-sm font-sans hover:border-[#00C4A0]/40 hover:bg-muted/40 transition-all duration-200 hover:translate-x-0.5"
+                      className="w-full text-left rounded-sm border border-border px-4 py-2.5 text-sm font-sans hover:border-rag/40 hover:bg-muted/40 transition-colors duration-200"
                       onClick={() => void submitMessage(prompt)}
                       disabled={isLoading}
                     >
@@ -243,9 +246,7 @@ function ChatInterface({
                 {/* AI Avatar */}
                 {m.role === "assistant" && (
                   <div className="w-7 h-7 rounded-full bg-card border border-border/50 flex items-center justify-center shrink-0 mt-1">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#00C4A0]">
-                      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                    </svg>
+                    <PenLine className="h-3.5 w-3.5 text-rag" />
                   </div>
                 )}
                 <div
@@ -261,12 +262,12 @@ function ChatInterface({
                     <div className="font-mono text-[10px] uppercase tracking-widest text-[#B07D62] mb-2 flex items-center gap-2">
                       Scribe AI
                       {messageUsesKnowledgeBase(m) ? (
-                        <span className="text-[#00C4A0]">• RAG Active</span>
+                        <span className="text-rag">• RAG active</span>
                       ) : null}
                     </div>
                   )}
 
-                  <div className="prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-pre:bg-primary prose-pre:text-primary-foreground max-w-none prose-a:text-[#00C4A0] prose-a:no-underline hover:prose-a:underline">
+                  <div className="prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-pre:bg-primary prose-pre:text-primary-foreground max-w-none prose-a:text-rag prose-a:no-underline hover:prose-a:underline">
                     <ReactMarkdown
                       components={{
                         a: ({ href, children, ...props }) => {
@@ -276,7 +277,7 @@ function ChatInterface({
                               href={href}
                               target={isInternal ? undefined : "_blank"}
                               rel={isInternal ? undefined : "noopener noreferrer"}
-                              className="text-[#00C4A0] hover:underline font-medium inline-flex items-center gap-1"
+                              className="text-rag hover:underline font-medium inline-flex items-center gap-1"
                               {...props}
                             >
                               {children}
@@ -308,17 +309,13 @@ function ChatInterface({
           {isLoading && messages[messages.length - 1]?.role === "user" && (
             <div className="flex justify-start gap-3">
               <div className="w-7 h-7 rounded-full bg-card border border-border/50 flex items-center justify-center shrink-0 mt-1">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#00C4A0] animate-pulse">
-                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                </svg>
+                <PenLine className="h-3.5 w-3.5 text-rag" />
               </div>
-              <div className="bg-card border border-border/50 rounded-sm p-4 flex items-center gap-2 h-12">
-                <div className="flex gap-1">
-                  <div className="w-1.5 h-1.5 bg-[#00C4A0] rounded-full animate-bounce [animation-delay:-0.3s]" />
-                  <div className="w-1.5 h-1.5 bg-[#00C4A0] rounded-full animate-bounce [animation-delay:-0.15s]" />
-                  <div className="w-1.5 h-1.5 bg-[#00C4A0] rounded-full animate-bounce" />
-                </div>
-                <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground ml-1">Thinking</span>
+              <div className="bg-card border border-border/50 rounded-sm px-4 py-3 flex items-center gap-2 min-h-12">
+                <Loader2 className="h-4 w-4 animate-spin text-rag" />
+                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Retrieving evidence
+                </span>
               </div>
             </div>
           )}
@@ -333,7 +330,7 @@ function ChatInterface({
         <div className="max-w-3xl mx-auto relative">
           <form
             onSubmit={handleSubmit}
-            className="relative bg-card border border-border/50 rounded-md shadow-sm overflow-hidden focus-within:ring-1 focus-within:ring-[#00C4A0]/30 focus-within:border-[#00C4A0]/40 transition-all duration-300 hover:border-border/80"
+            className="relative bg-card border border-border/50 rounded-md shadow-sm overflow-hidden focus-within:ring-1 focus-within:ring-rag/30 focus-within:border-rag/40 transition-all duration-300 hover:border-border/80"
           >
             <textarea
               value={input}
@@ -351,6 +348,7 @@ function ChatInterface({
             />
             <button
               type="submit"
+              aria-label="Send message"
               disabled={!input || isLoading}
               className="absolute right-2 bottom-2 p-2 rounded-sm bg-primary text-primary-foreground disabled:opacity-50 transition-opacity hover:opacity-90 flex items-center justify-center"
             >
@@ -367,12 +365,12 @@ function ChatInterface({
           <div className="mt-2 flex items-center justify-between text-[10px] font-mono uppercase tracking-widest text-muted-foreground px-1">
             <span className="flex items-center gap-1.5">
               <div
-                className={`w-1.5 h-1.5 rounded-full ${isRAGActive ? "bg-[#00C4A0] animate-pulse" : "bg-border"}`}
+                className={`w-1.5 h-1.5 rounded-full ${isRAGActive ? "bg-rag animate-pulse" : "bg-border"}`}
               />
-              {isRAGActive ? "RAG Action Active" : "RAG Standby"}
+              {isRAGActive ? "Evidence active" : "Evidence standby"}
             </span>
             <span className="flex items-center gap-1 opacity-50">
-              Returns to submit <CornerDownLeft className="w-3 h-3 ml-0.5" />
+              Enter to send <CornerDownLeft className="w-3 h-3 ml-0.5" />
             </span>
           </div>
         </div>

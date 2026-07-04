@@ -350,8 +350,13 @@ async function processClaimedSource(job: {
   }
 }
 
-export async function runQueuedSourceIntake(limit = 1) {
+export async function runQueuedSourceIntake(
+  limit = 1,
+  scope: { userId?: string; sourceId?: number } = {}
+) {
   const safeLimit = Math.max(1, Math.min(limit, 5));
+  const scopedUserId = scope.userId ?? null;
+  const scopedSourceId = scope.sourceId ?? null;
 
   const staleUploads = await sql`
     UPDATE "files"
@@ -360,6 +365,8 @@ export async function runQueuedSourceIntake(limit = 1) {
       "processing_error" = 'Upload did not complete within 24 hours',
       "updated_at" = now()
     WHERE "status" = 'uploading'
+      AND (${scopedUserId}::text IS NULL OR "user_id" = ${scopedUserId})
+      AND (${scopedSourceId}::int IS NULL OR "id" = ${scopedSourceId})
       AND "updated_at" <= now() - (${UPLOAD_STALE_HOURS} * interval '1 hour')
     RETURNING "id"
   `;
@@ -373,6 +380,8 @@ export async function runQueuedSourceIntake(limit = 1) {
     WHERE source."status" = 'processing'
       AND source."storage_url" IS NULL
       AND source."file_data" IS NULL
+      AND (${scopedUserId}::text IS NULL OR source."user_id" = ${scopedUserId})
+      AND (${scopedSourceId}::int IS NULL OR source."id" = ${scopedSourceId})
       AND source."updated_at" <= now() - (${UPLOAD_STALE_HOURS} * interval '1 hour')
       AND NOT EXISTS (
         SELECT 1 FROM "ingestion_jobs" AS job WHERE job."file_id" = source."id"
@@ -382,15 +391,19 @@ export async function runQueuedSourceIntake(limit = 1) {
 
   const recovered = await sql`
     WITH recovered_jobs AS (
-      UPDATE "ingestion_jobs"
+      UPDATE "ingestion_jobs" AS jobs
       SET
         "status" = 'queued',
         "next_retry_at" = now(),
         "last_error" = 'Recovered after worker timeout',
         "updated_at" = now()
-      WHERE "status" = 'processing'
-        AND "started_at" <= now() - (${PROCESSING_STALE_MINUTES} * interval '1 minute')
-      RETURNING "file_id"
+      FROM "files" AS source
+      WHERE jobs."file_id" = source."id"
+        AND jobs."status" = 'processing'
+        AND jobs."started_at" <= now() - (${PROCESSING_STALE_MINUTES} * interval '1 minute')
+        AND (${scopedUserId}::text IS NULL OR source."user_id" = ${scopedUserId})
+        AND (${scopedSourceId}::int IS NULL OR source."id" = ${scopedSourceId})
+      RETURNING jobs."file_id"
     )
     UPDATE "files"
     SET
@@ -403,11 +416,14 @@ export async function runQueuedSourceIntake(limit = 1) {
 
   const claimed = await sql`
     WITH candidates AS (
-      SELECT "id"
-      FROM "ingestion_jobs"
-      WHERE "status" = 'queued'
-        AND ("next_retry_at" IS NULL OR "next_retry_at" <= now())
-      ORDER BY "created_at" ASC
+      SELECT jobs."id"
+      FROM "ingestion_jobs" AS jobs
+      INNER JOIN "files" AS source ON source."id" = jobs."file_id"
+      WHERE jobs."status" = 'queued'
+        AND (jobs."next_retry_at" IS NULL OR jobs."next_retry_at" <= now())
+        AND (${scopedUserId}::text IS NULL OR source."user_id" = ${scopedUserId})
+        AND (${scopedSourceId}::int IS NULL OR source."id" = ${scopedSourceId})
+      ORDER BY jobs."created_at" ASC
       FOR UPDATE SKIP LOCKED
       LIMIT ${safeLimit}
     )

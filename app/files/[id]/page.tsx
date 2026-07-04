@@ -91,7 +91,7 @@ export default function FileViewer() {
             <ThreePaneLayout>
                 <div className="flex h-full items-center justify-center">
                     <div className="flex flex-col items-center gap-3">
-                        <div className="w-8 h-8 border-2 border-[#00C4A0] border-t-transparent rounded-full animate-spin" />
+                        <div className="w-8 h-8 border-2 border-rag border-t-transparent rounded-full animate-spin" />
                         <p className="font-mono text-xs text-muted-foreground uppercase tracking-wider">
                             Loading document...
                         </p>
@@ -186,7 +186,7 @@ export default function FileViewer() {
                             href={`/api/files/${fileId}/view`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-[#00C4A0] transition-colors"
+                            className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-rag transition-colors"
                         >
                             <ExternalLink className="w-3 h-3" />
                             Open PDF
@@ -219,7 +219,7 @@ export default function FileViewer() {
                                         {chunks.length} chunk{chunks.length !== 1 ? "s" : ""}
                                     </span>
                                     <span className={`px-1.5 py-0.5 rounded-sm uppercase ${fileStatus === "ready"
-                                        ? "bg-[#00C4A0]/15 text-[#00C4A0]"
+                                        ? "bg-rag/15 text-rag"
                                         : fileStatus === "failed"
                                             ? "bg-destructive/10 text-destructive"
                                             : "bg-muted text-muted-foreground"
@@ -299,7 +299,7 @@ export default function FileViewer() {
                             <div className="max-w-3xl mx-auto space-y-3 pt-2">
                                 {/* Section Header */}
                                 <div className="flex items-center gap-2 mb-4">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-[#00C4A0]" />
+                                    <div className="w-1.5 h-1.5 rounded-full bg-rag" />
                                     <h2 className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                                         Indexed Chunks
                                     </h2>
@@ -317,7 +317,7 @@ export default function FileViewer() {
                                     return (
                                         <div
                                             key={chunk.id}
-                                            className="group rounded-sm border border-border/50 bg-card hover:border-[#00C4A0]/20 transition-all duration-200 cursor-pointer animate-in fade-in slide-in-from-bottom-1 duration-200"
+                                            className="group rounded-sm border border-border/50 bg-card hover:border-rag/20 transition-all duration-200 cursor-pointer animate-in fade-in slide-in-from-bottom-1 duration-200"
                                             style={{ animationDelay: `${Math.min(index * 30, 300)}ms` }}
                                             onClick={() =>
                                                 setExpandedChunk(isExpanded ? null : index)
@@ -327,7 +327,7 @@ export default function FileViewer() {
                                             <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/30">
                                                 <div className="flex items-center gap-3">
                                                     <div className="flex items-center gap-1.5">
-                                                        <Hash className="w-3 h-3 text-[#00C4A0]" />
+                                                        <Hash className="w-3 h-3 text-rag" />
                                                         <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                                                             Chunk {index + 1} of {chunks.length}
                                                         </span>
@@ -354,7 +354,7 @@ export default function FileViewer() {
                                                     {displayContent}
                                                 </p>
                                                 {content.length > 300 && (
-                                                    <button className="mt-2 font-mono text-[10px] uppercase tracking-wider text-[#00C4A0] hover:text-[#00C4A0]/80 transition-colors">
+                                                    <button className="mt-2 font-mono text-[10px] uppercase tracking-wider text-rag hover:text-rag/80 transition-colors">
                                                         {isExpanded ? "Show less" : "Show more"}
                                                     </button>
                                                 )}

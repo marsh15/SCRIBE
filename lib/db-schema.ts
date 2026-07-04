@@ -89,6 +89,93 @@ export const chatMessages = pgTable("chat_messages", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const ragTraces = pgTable(
+  "rag_traces",
+  {
+    id: text("id").primaryKey(),
+    chatId: text("chat_id")
+      .references(() => chats.id, { onDelete: "cascade" })
+      .notNull(),
+    userId: text("user_id").notNull(),
+    userMessageId: text("user_message_id").references(() => chatMessages.id, {
+      onDelete: "set null",
+    }),
+    assistantMessageId: text("assistant_message_id").references(
+      () => chatMessages.id,
+      { onDelete: "set null" }
+    ),
+    query: text("query").notNull(),
+    status: text("status").default("retrieved").notNull(),
+    embeddingMs: integer("embedding_ms").default(0).notNull(),
+    retrievalMs: integer("retrieval_ms").default(0).notNull(),
+    generationMs: integer("generation_ms"),
+    totalMs: integer("total_ms"),
+    topK: integer("top_k").notNull(),
+    threshold: doublePrecision("threshold").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    chatCreatedIndex: index("rag_traces_chat_created_at_index").on(
+      table.chatId,
+      table.createdAt
+    ),
+    userCreatedIndex: index("rag_traces_user_created_at_index").on(
+      table.userId,
+      table.createdAt
+    ),
+    assistantMessageIndex: index("rag_traces_assistant_message_id_index").on(
+      table.assistantMessageId
+    ),
+  })
+);
+
+export const ragTraceChunks = pgTable(
+  "rag_trace_chunks",
+  {
+    id: serial("id").primaryKey(),
+    traceId: text("trace_id")
+      .references(() => ragTraces.id, { onDelete: "cascade" })
+      .notNull(),
+    documentId: integer("document_id").notNull(),
+    fileId: integer("file_id").notNull(),
+    fileName: text("file_name").notNull(),
+    chunkIndex: integer("chunk_index").notNull(),
+    similarity: doublePrecision("similarity").notNull(),
+    rank: integer("rank").notNull(),
+    contentPreview: text("content_preview").notNull(),
+    metadata: jsonb("metadata"),
+  },
+  (table) => ({
+    traceRankIndex: index("rag_trace_chunks_trace_rank_index").on(
+      table.traceId,
+      table.rank
+    ),
+  })
+);
+
+export const ragEvaluations = pgTable(
+  "rag_evaluations",
+  {
+    id: serial("id").primaryKey(),
+    traceId: text("trace_id")
+      .references(() => ragTraces.id, { onDelete: "cascade" })
+      .notNull(),
+    status: text("status").default("completed").notNull(),
+    judgeModel: text("judge_model").notNull(),
+    groundednessScore: doublePrecision("groundedness_score"),
+    answerRelevanceScore: doublePrecision("answer_relevance_score"),
+    citationSupportScore: doublePrecision("citation_support_score"),
+    overallScore: doublePrecision("overall_score"),
+    verdict: text("verdict"),
+    rationale: text("rationale"),
+    error: text("error"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    traceUnique: uniqueIndex("rag_evaluations_trace_id_unique").on(table.traceId),
+  })
+);
+
 export const billingCustomers = pgTable(
   "billing_customers",
   {
@@ -201,6 +288,12 @@ export type InsertChat = typeof chats.$inferInsert;
 export type SelectChat = typeof chats.$inferSelect;
 export type InsertChatMessage = typeof chatMessages.$inferInsert;
 export type SelectChatMessage = typeof chatMessages.$inferSelect;
+export type InsertRagTrace = typeof ragTraces.$inferInsert;
+export type SelectRagTrace = typeof ragTraces.$inferSelect;
+export type InsertRagTraceChunk = typeof ragTraceChunks.$inferInsert;
+export type SelectRagTraceChunk = typeof ragTraceChunks.$inferSelect;
+export type InsertRagEvaluation = typeof ragEvaluations.$inferInsert;
+export type SelectRagEvaluation = typeof ragEvaluations.$inferSelect;
 export type InsertBillingCustomer = typeof billingCustomers.$inferInsert;
 export type SelectBillingCustomer = typeof billingCustomers.$inferSelect;
 export type InsertSubscription = typeof subscriptions.$inferInsert;

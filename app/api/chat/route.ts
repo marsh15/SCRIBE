@@ -9,9 +9,18 @@ import { NextResponse } from "next/server";
 import { google } from "@ai-sdk/google";
 import { withSupermemory } from "@supermemory/tools/ai-sdk";
 import { z } from "zod";
+import { nanoid } from "nanoid";
 import { searchDocuments } from "@/lib/search";
 import { getUserId } from "@/lib/auth";
 import { getUsageSummary, recordUsageEvent } from "@/lib/billing/usage";
+import {
+  buildRagToolResult,
+  completeRagTrace,
+  recordRagEvaluation,
+  recordRagTrace,
+} from "@/lib/rag-observability";
+import { evaluateRagAnswer } from "@/lib/rag-eval";
+import { extractRagToolResult, type RagToolResult } from "@/lib/rag-types";
 
 export type ChatMessage = UIMessage;
 
@@ -132,6 +141,7 @@ function formatChatError(error: unknown) {
 }
 
 export async function POST(req: Request) {
+  const requestStart = Date.now();
   try {
     const userId = await getUserId();
     const usageSummary = await getUsageSummary(userId);
@@ -159,6 +169,8 @@ export async function POST(req: Request) {
 
     const url = new URL(req.url);
     const chatId = url.searchParams.get("chatId") || undefined;
+    const lastUserMessage = messages[messages.length - 1];
+    const userMessageId = lastUserMessage.id || nanoid();
 
     const sanitizedMessages = sanitizeMessages(messages);
     const baseModel = google(CHAT_MODEL_ID);
@@ -171,11 +183,9 @@ export async function POST(req: Request) {
     if (chatId) {
       const { db: dbInstance } = await import("@/lib/db-config");
       const { chatMessages: chatMessagesTable } = await import("@/lib/db-schema");
-      const { nanoid } = await import("nanoid");
-      const lastUserMessage = messages[messages.length - 1];
       try {
         await dbInstance.insert(chatMessagesTable).values({
-          id: lastUserMessage.id || nanoid(),
+          id: userMessageId,
           chatId,
           role: lastUserMessage.role,
           content: extractTextFromMessage(lastUserMessage),
@@ -187,6 +197,8 @@ export async function POST(req: Request) {
       }
     }
 
+    const ragToolResults: RagToolResult[] = [];
+
     const userTools = {
       searchKnowledgeBase: tool({
         description: "Search the knowledge base for relevant information",
@@ -195,44 +207,37 @@ export async function POST(req: Request) {
         }),
         execute: async ({ query }) => {
           try {
-            const results = await searchDocuments(query, userId, 10, 0.3);
+            const search = await searchDocuments(query, userId, 10, 0.3);
+            let toolResult = buildRagToolResult(search);
 
-            if (results.length === 0) {
-              return "No relevant information found in the knowledge base. The knowledge base may be empty — please upload documents first.";
+            if (chatId) {
+              try {
+                toolResult = await recordRagTrace({
+                  chatId,
+                  userId,
+                  userMessageId,
+                  search,
+                });
+              } catch (traceError) {
+                console.error("[RAG] Failed to record retrieval trace:", traceError);
+              }
             }
 
-            const formattedResults = results
-              .map((result, index) => {
-                const metadata = result.metadata as
-                  | {
-                    estimatedPage?: number;
-                    totalPages?: number;
-                    chunkIndex?: number;
-                    totalChunks?: number;
-                    section?: number;
-                  }
-                  | undefined;
-
-                const location = [
-                  metadata?.estimatedPage
-                    ? `Page ~${metadata.estimatedPage}${metadata.totalPages ? `/${metadata.totalPages}` : ""}`
-                    : null,
-                  metadata?.chunkIndex !== undefined
-                    ? `Chunk ${metadata.chunkIndex + 1}/${metadata.totalChunks ?? "?"}`
-                    : null,
-                  metadata?.section ? `Section ${metadata.section}` : null,
-                ]
-                  .filter(Boolean)
-                  .join(", ");
-
-                return `[Citation ${index + 1}] Source: [${result.file.name}](/files/${result.file.id}) | ${location}\nContent: ${result.content}`;
-              })
-              .join("\n\n---\n\n");
-
-            return formattedResults;
+            ragToolResults.push(toolResult);
+            return toolResult;
           } catch (error) {
             console.error("Search error:", error);
-            return "Error searching the knowledge base.";
+            return {
+              type: "rag_search_result",
+              query,
+              status: "failed",
+              message: "Error searching the knowledge base.",
+              context: "Error searching the knowledge base.",
+              timings: { embeddingMs: 0, retrievalMs: 0, totalMs: 0 },
+              topK: 10,
+              threshold: 0.3,
+              chunks: [],
+            };
           }
         },
       }),
@@ -249,6 +254,7 @@ CRITICAL RULE: You MUST call the searchKnowledgeBase tool on EVERY user message 
 - For vague queries, use a broad search query like "summary overview introduction main topic".
 - NEVER respond with "I need more information" or "please specify". ALWAYS search first, then answer based on what you find.
 - If the search returns no results, tell the user their knowledge base appears empty and suggest uploading documents.
+- The searchKnowledgeBase tool returns a structured object. Use its "context" field as the retrieved evidence text and its "chunks" array only as supporting metadata.
 
 HALLUCINATION PREVENTION (CRITICAL):
 - ONLY answer based on the retrieved context from the knowledge base.
@@ -272,7 +278,6 @@ Citation rules:
 
         const { db } = await import("@/lib/db-config");
         const { chatMessages } = await import("@/lib/db-schema");
-        const { nanoid } = await import("nanoid");
 
         try {
           // User message was already saved before the stream started — only save assistant response here
@@ -311,7 +316,14 @@ Citation rules:
               ]),
           );
 
-          const hadKnowledgeLookup = toolCalls.some((call) => call.toolName === "searchKnowledgeBase");
+          const ragResultsFromResponse = Array.from(toolResults.values())
+            .map(extractRagToolResult)
+            .filter((result): result is RagToolResult => result !== null);
+          const completedRagResults =
+            ragResultsFromResponse.length > 0 ? ragResultsFromResponse : ragToolResults;
+          const hadKnowledgeLookup =
+            toolCalls.some((call) => call.toolName === "searchKnowledgeBase") ||
+            completedRagResults.length > 0;
           const finalText = ensureStructuredAnswer(text ?? "", hadKnowledgeLookup);
 
           if (finalText) {
@@ -328,13 +340,42 @@ Citation rules:
             });
           }
 
+          const assistantMessageId = nanoid();
           await db.insert(chatMessages).values({
-            id: nanoid(),
+            id: assistantMessageId,
             chatId,
             role: "assistant",
             content: finalText,
             parts: assistantParts as never,
           });
+
+          const totalRequestMs = Math.max(0, Date.now() - requestStart);
+          for (const ragResult of completedRagResults) {
+            if (!ragResult.traceId) continue;
+
+            try {
+              const generationMs = Math.max(
+                0,
+                totalRequestMs - ragResult.timings.totalMs
+              );
+              await completeRagTrace({
+                traceId: ragResult.traceId,
+                assistantMessageId,
+                generationMs,
+                totalMs: totalRequestMs,
+              });
+
+              const evaluation = await evaluateRagAnswer({
+                traceId: ragResult.traceId,
+                question: ragResult.query,
+                answer: finalText,
+                chunks: ragResult.chunks,
+              });
+              await recordRagEvaluation(evaluation);
+            } catch (traceError) {
+              console.error("[RAG] Failed to complete trace or evaluation:", traceError);
+            }
+          }
 
           if (usage?.inputTokens && usage.inputTokens > 0) {
             await recordUsageEvent({

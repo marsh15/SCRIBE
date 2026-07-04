@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   AlertCircle,
   X,
+  RefreshCw,
 } from "lucide-react";
 import { ThreePaneLayout } from "@/components/three-pane-layout";
 import { useSourceUpload } from "@/hooks/useSourceUpload";
@@ -48,6 +49,47 @@ function formatDate(dateStr: string) {
   });
 }
 
+function getStatusCopy(status: string) {
+  switch (status) {
+    case "uploading":
+      return {
+        label: "Uploading",
+        tone: "bg-muted text-muted-foreground",
+        description: "Waiting for the private upload to complete.",
+      };
+    case "queued":
+      return {
+        label: "Queued",
+        tone: "bg-muted text-muted-foreground",
+        description: "Ready for indexing. You can start it now.",
+      };
+    case "processing":
+      return {
+        label: "Indexing",
+        tone: "bg-rag/15 text-rag",
+        description: "Extracting text, chunking, and embedding.",
+      };
+    case "retrying":
+      return {
+        label: "Retrying",
+        tone: "bg-accent/15 text-accent",
+        description: "A previous attempt failed. Scribe will try again.",
+      };
+    case "failed":
+      return {
+        label: "Failed",
+        tone: "bg-destructive/10 text-destructive",
+        description: "Indexing stopped. Check the error below.",
+      };
+    default:
+      return {
+        label: "Ready",
+        tone: "bg-rag/15 text-rag",
+        description: "Available for retrieval and citation.",
+      };
+  }
+}
+
 export default function DocumentUpload() {
   const [isDragging, setIsDragging] = useState(false);
   const [message, setMessage] = useState<{
@@ -56,8 +98,14 @@ export default function DocumentUpload() {
   } | null>(null);
   const [files, setFiles] = useState<any[]>([]);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [processingNowId, setProcessingNowId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { state: sourceUpload, uploadSource, reset: resetUpload } = useSourceUpload();
+  const {
+    state: sourceUpload,
+    uploadSource,
+    processSourceNow,
+    reset: resetUpload,
+  } = useSourceUpload();
   const isUploading = sourceUpload.status === "reserving" || sourceUpload.status === "uploading";
   const hasPendingIngestion = isUploading || files.some((file) =>
     ["uploading", "queued", "processing", "retrying"].includes(file.status)
@@ -94,7 +142,12 @@ export default function DocumentUpload() {
     if (result.success) {
       setMessage({
         type: "success",
-        text: "Source uploaded securely and queued for indexing.",
+        text:
+          result.status === "ready"
+            ? "Source indexed and ready to cite."
+            : result.status === "processing"
+              ? "Source uploaded securely. Indexing has started."
+              : "Source uploaded securely and queued for indexing.",
       });
       if (fileInputRef.current) fileInputRef.current.value = "";
       await fetchFiles();
@@ -123,6 +176,31 @@ export default function DocumentUpload() {
     await deleteFile(id);
     await fetchFiles();
     setDeletingId(null);
+  };
+
+  const handleProcessNow = async (id: number) => {
+    setProcessingNowId(id);
+    setMessage(null);
+    try {
+      const result = await processSourceNow(id);
+      await fetchFiles();
+      setMessage({
+        type: "success",
+        text:
+          (result.ready ?? 0) > 0
+            ? "Source indexed and ready to cite."
+            : (result.claimed ?? 0) > 0
+              ? "Indexing started. The Source list will refresh while it finishes."
+              : "No queued work was ready yet. Scribe will keep checking.",
+      });
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Could not start indexing",
+      });
+    } finally {
+      setProcessingNowId(null);
+    }
   };
 
   const handleClearAll = async () => {
@@ -157,20 +235,16 @@ export default function DocumentUpload() {
         {/* Main Content */}
         <div className="flex-1 overflow-y-auto px-6 sm:px-12">
           <div className="max-w-2xl mx-auto py-10 space-y-10">
-            {/* Upload Section */}
             <section>
               <div className="text-center mb-8">
-                <h1 className="font-serif text-3xl text-foreground mb-2 tracking-tight">
-                  Knowledge Base
+                <h1 className="font-serif text-3xl text-foreground mb-2 tracking-tight text-balance">
+                  Sources
                 </h1>
                 <p className="font-sans text-sm text-muted-foreground max-w-md mx-auto">
-                  Upload documents to build your searchable knowledge base.
-                  Files are chunked, embedded, and indexed for semantic
-                  retrieval.
+                  Add documents, index them, and make every answer traceable to evidence.
                 </p>
               </div>
 
-              {/* Drag & Drop Zone */}
               <div
                 onDragOver={(e) => {
                   e.preventDefault();
@@ -190,10 +264,10 @@ export default function DocumentUpload() {
                 aria-disabled={isUploading}
                 aria-label="Upload a Source document"
                 className={`
-                                    relative border-2 border-dashed rounded-md p-10 text-center cursor-pointer transition-all duration-300
+                                    relative border-2 border-dashed rounded-md p-8 sm:p-10 text-center cursor-pointer transition-all duration-200
                                     ${isDragging
-                    ? "border-[#00C4A0] bg-[#00C4A0]/5 scale-[1.01]"
-                    : "border-border/60 hover:border-[#00C4A0]/40 hover:bg-muted/30"
+                    ? "border-rag bg-rag/5"
+                    : "border-border/60 hover:border-rag/40 hover:bg-muted/30"
                   }
                                     ${isUploading ? "pointer-events-none opacity-60" : ""}
                                 `}
@@ -210,21 +284,28 @@ export default function DocumentUpload() {
 
                 {isUploading ? (
                   <div className="flex flex-col items-center gap-4 py-4">
-                    <Loader2 className="w-8 h-8 animate-spin text-[#00C4A0]" />
+                    <Loader2 className="w-8 h-8 animate-spin text-rag" />
                     <div>
                       <p className="font-mono text-xs uppercase tracking-wider text-foreground">
                         {sourceUpload.status === "reserving"
                           ? "Reserving private upload"
-                          : `Uploading Source — ${sourceUpload.progress}%`}
+                          : `Uploading Source, ${sourceUpload.progress}%`}
                       </p>
                       <p className="font-mono text-[10px] text-muted-foreground mt-1">
-                        Private Blob → Queue → Extract → Embed
+                        Private upload, queue, extract, embed
                       </p>
                     </div>
-                    {/* Vercel Blob upload progress */}
-                    <div className="w-48 h-1 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="w-48 h-1 bg-muted rounded-full overflow-hidden"
+                      role="progressbar"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={
+                        sourceUpload.status === "reserving" ? 20 : sourceUpload.progress
+                      }
+                    >
                       <div
-                        className={`h-full bg-[#00C4A0] rounded-full transition-all duration-500 ${sourceUpload.status === "reserving" ? "animate-pulse" : ""}`}
+                        className={`h-full bg-rag rounded-full transition-all duration-500 ${sourceUpload.status === "reserving" ? "animate-pulse" : ""}`}
                         style={{
                           width: sourceUpload.status === "reserving"
                             ? "20%"
@@ -237,17 +318,17 @@ export default function DocumentUpload() {
                   <div className="flex flex-col items-center gap-3 py-4">
                     <div
                       className={`
-                        w-14 h-14 rounded-full border-2 flex items-center justify-center transition-all animate-float
-                        ${isDragging ? "border-[#00C4A0] bg-[#00C4A0]/10" : "border-border bg-card"}
+                        w-14 h-14 rounded-full border-2 flex items-center justify-center transition-all
+                        ${isDragging ? "border-rag bg-rag/10" : "border-border bg-card"}
                       `}
                     >
                       <UploadCloud
-                        className={`w-6 h-6 transition-colors ${isDragging ? "text-[#00C4A0]" : "text-muted-foreground"}`}
+                        className={`w-6 h-6 transition-colors ${isDragging ? "text-rag" : "text-muted-foreground"}`}
                       />
                     </div>
                     <div>
                       <p className="font-sans text-sm text-foreground">
-                        <span className="text-[#00C4A0] font-medium">
+                        <span className="text-rag font-medium">
                           Click to upload
                         </span>{" "}
                         or drag and drop
@@ -256,7 +337,7 @@ export default function DocumentUpload() {
                         PDF • TXT • MD • CSV • DOCX
                       </p>
                       <p className="text-[11px] text-muted-foreground mt-3 max-w-sm mx-auto bg-muted/50 p-2 rounded border border-border/50">
-                        <strong className="text-foreground">Private by default:</strong> Originals upload directly to secure storage, then index in the background.
+                        <strong className="text-foreground">Private by default:</strong> Originals upload to secure storage, then index in the background.
                       </p>
                     </div>
                   </div>
@@ -270,11 +351,11 @@ export default function DocumentUpload() {
                     variant={
                       message.type === "error" ? "destructive" : "default"
                     }
-                    className={`rounded-sm border relative ${message.type === "success" ? "border-[#00C4A0]/30 bg-[#00C4A0]/5" : ""}`}
+                    className={`rounded-sm border relative ${message.type === "success" ? "border-rag/30 bg-rag/5" : ""}`}
                   >
                     <div className="flex items-start gap-2 w-full">
                       {message.type === "success" ? (
-                        <CheckCircle2 className="w-4 h-4 text-[#00C4A0] shrink-0 mt-0.5" />
+                        <CheckCircle2 className="w-4 h-4 text-rag shrink-0 mt-0.5" />
                       ) : (
                         <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                       )}
@@ -306,8 +387,8 @@ export default function DocumentUpload() {
               <section className="animate-in fade-in duration-300">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-[#00C4A0]" />
-                    Indexed Documents
+                    <div className="w-1.5 h-1.5 rounded-full bg-rag" />
+                    Source library
                   </h2>
                   <Button
                     variant="ghost"
@@ -316,7 +397,7 @@ export default function DocumentUpload() {
                     onClick={handleClearAll}
                   >
                     <Trash2 className="w-3 h-3 mr-1.5" />
-                    Clear All
+                    Clear all
                   </Button>
                 </div>
 
@@ -324,6 +405,8 @@ export default function DocumentUpload() {
                   {files.map((file) => {
                     const isDeleting = deletingId === file.id;
                     const status = file.status || "ready";
+                    const statusCopy = getStatusCopy(status);
+                    const canProcessNow = ["queued", "retrying"].includes(status);
                     return (
                       <div
                         key={file.id}
@@ -331,7 +414,7 @@ export default function DocumentUpload() {
                                                     group flex items-center gap-3 p-3.5 rounded-sm border transition-all
                                                     ${isDeleting
                             ? "opacity-40 scale-[0.98] border-border/30"
-                            : "border-border/50 bg-card hover:border-[#00C4A0]/20 hover:bg-card/80"
+                            : "border-border/50 bg-card hover:border-rag/20 hover:bg-card/80"
                           }
                                                 `}
                       >
@@ -353,16 +436,17 @@ export default function DocumentUpload() {
                               {formatDate(file.createdAt)}
                             </span>
                             <span
-                              className={`font-mono text-[10px] uppercase px-1.5 py-0.5 rounded-sm ${status === "ready"
-                                ? "bg-[#00C4A0]/15 text-[#00C4A0]"
-                                : status === "failed"
-                                  ? "bg-destructive/10 text-destructive"
-                                  : "bg-muted text-muted-foreground"
-                                }`}
+                              className={`font-mono text-[10px] uppercase px-1.5 py-0.5 rounded-sm ${statusCopy.tone}`}
+                              title={statusCopy.description}
                             >
-                              {status}
+                              {statusCopy.label}
                             </span>
                           </div>
+                          {status !== "ready" && status !== "failed" && (
+                            <p className="mt-1 text-[11px] text-muted-foreground truncate">
+                              {statusCopy.description}
+                            </p>
+                          )}
                           {status === "failed" && file.processingError && (
                             <p className="mt-1 text-[10px] font-mono text-destructive/80 truncate">
                               {file.processingError}
@@ -370,7 +454,23 @@ export default function DocumentUpload() {
                           )}
                         </div>
 
-                        {/* Delete Button */}
+                        {canProcessNow && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 shrink-0 rounded-sm px-2 text-[10px] font-mono uppercase tracking-wider"
+                            onClick={() => handleProcessNow(file.id)}
+                            disabled={processingNowId === file.id || isDeleting}
+                          >
+                            {processingNowId === file.id ? (
+                              <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                            ) : (
+                              <RefreshCw className="mr-1.5 h-3 w-3" />
+                            )}
+                            Process now
+                          </Button>
+                        )}
+
                         <Button
                           variant="ghost"
                           size="icon"
@@ -392,15 +492,14 @@ export default function DocumentUpload() {
               </section>
             )}
 
-            {/* Empty State — only show when no files AND no loading */}
             {files.length === 0 && !isUploading && (
-              <section className="text-center py-10 opacity-40">
-                <Database className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+              <section className="text-center py-10 text-muted-foreground">
+                <Database className="w-10 h-10 mx-auto mb-3 opacity-50" />
                 <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                  Knowledge base empty
+                  No Sources yet
                 </p>
                 <p className="font-sans text-xs text-muted-foreground mt-1">
-                  Upload your first document to get started
+                  Upload a document to make the first cited answer possible.
                 </p>
               </section>
             )}
