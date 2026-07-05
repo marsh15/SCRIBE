@@ -7,6 +7,7 @@ import { generateEmbeddings } from "@/lib/embeddings";
 import { recordUsageEvent } from "@/lib/billing/usage";
 import { getUsageSummary } from "@/lib/billing/usage";
 import { withDatabaseRetry } from "@/lib/db-retry";
+import { ensureDocumentsChunkIndexSchema } from "@/lib/db-compat";
 import {
   MAX_PAYLOAD_BYTES,
   estimateTokens,
@@ -75,6 +76,7 @@ export async function POST(req: Request) {
 
     // ---- Generate embeddings (single batchEmbedContents call) ----
     const chunkTexts = chunks.map((chunk) => chunk.content);
+    await ensureDocumentsChunkIndexSchema();
     const embeddings = await generateEmbeddings(chunkTexts);
 
     // ---- Insert document rows idempotently ----

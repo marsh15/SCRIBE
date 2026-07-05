@@ -5,6 +5,7 @@ import { documents, files } from "@/lib/db-schema";
 import { eq } from "drizzle-orm";
 import { withDatabaseRetry } from "@/lib/db-retry";
 import { analyzeFinalizeState } from "@/lib/ingestion/batch";
+import { ensureDocumentsChunkIndexSchema } from "@/lib/db-compat";
 
 interface FinalizeBody {
   fileId: number;
@@ -50,6 +51,8 @@ export async function POST(req: Request) {
         { status: 403 }
       );
     }
+
+    await ensureDocumentsChunkIndexSchema();
 
     const storedChunks = await withDatabaseRetry("finalizeLoadChunkIndexes", () =>
       db

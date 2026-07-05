@@ -7,6 +7,7 @@ import { extractTextFromBuffer } from "@/lib/ingestion/extract";
 import { downloadBlobToBuffer } from "@/lib/storage/blob";
 import { recordUsageEvent } from "@/lib/billing/usage";
 import { withDatabaseRetry } from "@/lib/db-retry";
+import { ensureDocumentsChunkIndexSchema } from "@/lib/db-compat";
 
 const MAX_ATTEMPTS = 5;
 
@@ -64,6 +65,7 @@ export async function ingestFile(fileId: number) {
     });
 
     const chunkTexts = chunks.map((chunk) => chunk.content);
+    await ensureDocumentsChunkIndexSchema();
     const embeddings = await generateEmbeddings(chunkTexts);
 
     // ATOMIC: delete old embeddings and insert new ones in a single batch over HTTP.
