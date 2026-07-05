@@ -151,6 +151,12 @@ export default function FileViewer() {
 
         try {
             const result = await getFileWithChunks(fileId);
+            if (result && "error" in result) {
+                setData(null);
+                setLoadError(result.error ?? "Could not load this document.");
+                return null;
+            }
+
             setData(result);
             setLoadError(null);
 
