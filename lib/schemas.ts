@@ -1,5 +1,5 @@
 import { z } from "zod";
-export const fileStatusSchema = z.enum(["queued", "processing", "ready", "failed", "deleting"]);
+export const fileStatusSchema = z.enum(["uploading", "queued", "processing", "retrying", "ready", "failed", "deleting"]);
 export type FileStatus = z.infer<typeof fileStatusSchema>;
 export const citationSchema = z.object({
   id: z.string().min(1), fileId: z.string().min(1), fileName: z.string().min(1),

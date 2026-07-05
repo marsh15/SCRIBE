@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getFileWithChunks } from "./actions";
 import { ThreePaneLayout } from "@/components/three-pane-layout";
@@ -18,6 +18,9 @@ import {
     Layers,
     Eye,
     ExternalLink,
+    AlertCircle,
+    Loader2,
+    RefreshCw,
 } from "lucide-react";
 import {
     canOpenOriginalPdfFile,
@@ -63,6 +66,61 @@ function isTextViewable(type: string, name: string) {
         type.startsWith("text/");
 }
 
+function isPendingStatus(status: string) {
+    return ["uploading", "queued", "processing", "retrying"].includes(status);
+}
+
+function canProcessStatus(status: string) {
+    return status === "queued" || status === "retrying";
+}
+
+function getStatusCopy(status: string) {
+    switch (status) {
+        case "uploading":
+            return {
+                title: "Upload still settling",
+                body: "Scribe is waiting for the private upload to finish before indexing can begin.",
+                action: "Refresh status",
+            };
+        case "queued":
+            return {
+                title: "Ready to index",
+                body: "This Source is queued for extraction, chunking, and embeddings.",
+                action: "Process now",
+            };
+        case "processing":
+            return {
+                title: "Indexing in progress",
+                body: "Scribe is extracting text, chunking the document, and creating embeddings. This view refreshes while it works.",
+                action: "Refresh status",
+            };
+        case "retrying":
+            return {
+                title: "Indexing will retry",
+                body: "A previous attempt failed. You can start the next attempt now or wait for the queue.",
+                action: "Process now",
+            };
+        case "failed":
+            return {
+                title: "Indexing failed",
+                body: "Scribe could not finish indexing this Source. Check the error below, then re-upload if the file is invalid or unsupported.",
+                action: "Refresh status",
+            };
+        default:
+            return {
+                title: "Document ready",
+                body: "This Source is indexed and available for retrieval.",
+                action: "Refresh status",
+            };
+    }
+}
+
+function getNoticeClass(tone: "success" | "error" | "muted") {
+    if (tone === "success") return "text-rag";
+    if (tone === "error") return "text-destructive/80";
+    return "text-muted-foreground";
+}
+
 export default function FileViewer() {
     const params = useParams();
     const router = useRouter();
@@ -70,21 +128,112 @@ export default function FileViewer() {
 
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
+    const [statusNotice, setStatusNotice] = useState<{
+        text: string;
+        tone: "success" | "error" | "muted";
+    } | null>(null);
+    const [processingNow, setProcessingNow] = useState(false);
     const [expandedChunk, setExpandedChunk] = useState<number | null>(null);
     const [activeTab, setActiveTab] = useState<"preview" | "chunks">("preview");
 
-    useEffect(() => {
-        async function load() {
+    const loadFile = useCallback(async (options?: { silent?: boolean }) => {
+        if (!Number.isInteger(fileId) || fileId <= 0) {
+            setData(null);
+            setLoadError("Invalid file id.");
+            setLoading(false);
+            return null;
+        }
+
+        if (!options?.silent) {
+            setLoading(true);
+        }
+
+        try {
             const result = await getFileWithChunks(fileId);
             setData(result);
-            setLoading(false);
-            // Default to chunks tab if no preview available
-            if (result?.file && !isPdfFile(result.file.type, result.file.name) && !isTextViewable(result.file.type, result.file.name)) {
+            setLoadError(null);
+
+            if (
+                result?.file &&
+                !isPdfFile(result.file.type, result.file.name) &&
+                !isTextViewable(result.file.type, result.file.name)
+            ) {
                 setActiveTab("chunks");
             }
+
+            return result;
+        } catch (error) {
+            const message = error instanceof Error
+                ? error.message
+                : "Could not load this document.";
+            setLoadError(message);
+            setData(null);
+            return null;
+        } finally {
+            setLoading(false);
         }
-        load();
     }, [fileId]);
+
+    useEffect(() => {
+        void loadFile();
+    }, [loadFile]);
+
+    useEffect(() => {
+        const status = data?.file?.status || "ready";
+        if (!isPendingStatus(status)) return;
+
+        const interval = setInterval(() => {
+            void loadFile({ silent: true });
+        }, 5000);
+
+        return () => clearInterval(interval);
+    }, [data?.file?.status, loadFile]);
+
+    async function handleProcessNow() {
+        setProcessingNow(true);
+        setStatusNotice(null);
+
+        try {
+            const response = await fetch("/api/sources/process-now", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ sourceId: fileId }),
+            });
+            const result = (await response.json()) as {
+                error?: string;
+                claimed?: number;
+                ready?: number;
+                retrying?: number;
+                failed?: number;
+            };
+
+            if (!response.ok) {
+                throw new Error(result.error || "Could not start indexing.");
+            }
+
+            const notice =
+                (result.ready ?? 0) > 0
+                    ? { text: "Source indexed and ready to cite.", tone: "success" as const }
+                    : (result.failed ?? 0) > 0
+                        ? { text: "Indexing ran but failed. The latest error is shown below.", tone: "error" as const }
+                        : (result.retrying ?? 0) > 0
+                            ? { text: "Indexing ran but will retry after the current error.", tone: "muted" as const }
+                            : (result.claimed ?? 0) > 0
+                                ? { text: "Indexing started. This page will refresh while it finishes.", tone: "muted" as const }
+                                : { text: "No queued work was ready yet. Scribe will keep checking.", tone: "muted" as const };
+
+            setStatusNotice(notice);
+            await loadFile({ silent: true });
+        } catch (error) {
+            setStatusNotice({
+                text: error instanceof Error ? error.message : "Could not start indexing.",
+                tone: "error",
+            });
+        } finally {
+            setProcessingNow(false);
+        }
+    }
 
     if (loading) {
         return (
@@ -106,12 +255,31 @@ export default function FileViewer() {
             <ThreePaneLayout>
                 <div className="flex h-full items-center justify-center">
                     <div className="text-center space-y-3">
-                        <Database className="w-10 h-10 mx-auto text-muted-foreground/40" />
+                        {loadError ? (
+                            <AlertCircle className="w-10 h-10 mx-auto text-destructive/70" />
+                        ) : (
+                            <Database className="w-10 h-10 mx-auto text-muted-foreground/40" />
+                        )}
                         <p className="font-mono text-xs text-muted-foreground uppercase tracking-wider">
-                            File not found
+                            {loadError ? "Could not load document" : "File not found"}
                         </p>
+                        {loadError && (
+                            <p className="max-w-md text-sm text-muted-foreground">
+                                {loadError}
+                            </p>
+                        )}
+                        {loadError && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="font-mono text-xs uppercase tracking-wider"
+                                onClick={() => void loadFile()}
+                            >
+                                <RefreshCw className="w-3 h-3 mr-2" /> Retry
+                            </Button>
+                        )}
                         <Button
-                            variant="outline"
+                            variant={loadError ? "ghost" : "outline"}
                             size="sm"
                             className="font-mono text-xs uppercase tracking-wider"
                             onClick={() => router.back()}
@@ -126,6 +294,7 @@ export default function FileViewer() {
 
     const { file, chunks, extractedText } = data;
     const fileStatus = file.status || "ready";
+    const statusCopy = getStatusCopy(fileStatus);
     const canPreview = isPdfFile(file.type, file.name) || isTextViewable(file.type, file.name);
     const canOpenOriginalPdf = canOpenOriginalPdfFile({
         isPdf: isPdfFile(file.type, file.name),
@@ -222,15 +391,52 @@ export default function FileViewer() {
                                         ? "bg-rag/15 text-rag"
                                         : fileStatus === "failed"
                                             ? "bg-destructive/10 text-destructive"
+                                            : fileStatus === "retrying"
+                                                ? "bg-accent/15 text-accent"
                                             : "bg-muted text-muted-foreground"
                                         }`}>
                                         {fileStatus}
                                     </span>
                                 </div>
-                                {fileStatus === "failed" && file.processingError && (
-                                    <p className="mt-2 text-xs text-destructive/80">{file.processingError}</p>
+                                {fileStatus !== "ready" && (
+                                    <p className="mt-2 text-xs text-muted-foreground">
+                                        {statusCopy.body}
+                                    </p>
+                                )}
+                                {fileStatus !== "ready" && file.processingError && (
+                                    <p className={`mt-2 text-xs ${fileStatus === "failed"
+                                        ? "text-destructive/80"
+                                        : "text-muted-foreground"
+                                        }`}>
+                                        {file.processingError}
+                                    </p>
+                                )}
+                                {statusNotice && (
+                                    <p className={`mt-2 text-xs ${getNoticeClass(statusNotice.tone)}`}>
+                                        {statusNotice.text}
+                                    </p>
                                 )}
                             </div>
+                            {fileStatus !== "ready" && (
+                                <Button
+                                    variant={canProcessStatus(fileStatus) ? "outline" : "ghost"}
+                                    size="sm"
+                                    className="h-8 shrink-0 rounded-sm px-2 text-[10px] font-mono uppercase tracking-wider"
+                                    onClick={
+                                        canProcessStatus(fileStatus)
+                                            ? handleProcessNow
+                                            : () => void loadFile({ silent: true })
+                                    }
+                                    disabled={processingNow}
+                                >
+                                    {processingNow ? (
+                                        <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                                    ) : (
+                                        <RefreshCw className="mr-1.5 h-3 w-3" />
+                                    )}
+                                    {statusCopy.action}
+                                </Button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -242,11 +448,47 @@ export default function FileViewer() {
                             <div className="max-w-5xl mx-auto h-full">
                                 {fileStatus !== "ready" ? (
                                     <div className="h-full rounded-sm border border-border/50 bg-card p-6 flex items-center justify-center">
-                                        <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-                                            {fileStatus === "failed"
-                                                ? "Indexing failed. Please retry upload."
-                                                : "File is being indexed. Preview will be available when processing completes."}
-                                        </p>
+                                        <div className="max-w-md text-center space-y-3">
+                                            {fileStatus === "processing" ? (
+                                                <Loader2 className="w-8 h-8 mx-auto animate-spin text-rag" />
+                                            ) : (
+                                                <AlertCircle className={`w-8 h-8 mx-auto ${fileStatus === "failed"
+                                                    ? "text-destructive/70"
+                                                    : "text-muted-foreground/60"
+                                                    }`} />
+                                            )}
+                                            <div>
+                                                <p className="font-mono text-xs uppercase tracking-wider text-foreground">
+                                                    {statusCopy.title}
+                                                </p>
+                                                <p className="mt-2 text-sm text-muted-foreground">
+                                                    {statusCopy.body}
+                                                </p>
+                                            </div>
+                                            {file.processingError && (
+                                                <p className="rounded-sm border border-border/50 bg-muted/40 p-3 text-left font-mono text-[11px] text-muted-foreground">
+                                                    {file.processingError}
+                                                </p>
+                                            )}
+                                            <Button
+                                                variant={canProcessStatus(fileStatus) ? "outline" : "ghost"}
+                                                size="sm"
+                                                className="h-8 rounded-sm px-2 text-[10px] font-mono uppercase tracking-wider"
+                                                onClick={
+                                                    canProcessStatus(fileStatus)
+                                                        ? handleProcessNow
+                                                        : () => void loadFile({ silent: true })
+                                                }
+                                                disabled={processingNow}
+                                            >
+                                                {processingNow ? (
+                                                    <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                                                ) : (
+                                                    <RefreshCw className="mr-1.5 h-3 w-3" />
+                                                )}
+                                                {statusCopy.action}
+                                            </Button>
+                                        </div>
                                     </div>
                                 ) : isPdfFile(file.type, file.name) ? (
                                     previewText ? (
