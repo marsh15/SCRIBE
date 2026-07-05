@@ -136,20 +136,38 @@ function ChatInterface({
   const searchParams = useSearchParams();
   const router = useRouter();
   const initialSendDone = useRef(false);
+  const initialQuery = searchParams.get("q");
 
   useEffect(() => {
-    const q = searchParams.get("q");
-    if (q && initialMessages.length === 0 && !initialSendDone.current) {
-      initialSendDone.current = true;
-      setSubmitError(null);
-      clearError();
-      void sendMessage({ text: q }).catch((error) => {
-        console.error("Failed to send initial chat message:", error);
-        setSubmitError(getChatErrorText(error));
-      });
-      router.replace(`/chat/${chatId}`);
+    if (!initialQuery || initialMessages.length > 0 || initialSendDone.current) {
+      return;
     }
-  }, [searchParams, initialMessages.length, sendMessage, chatId, router, clearError]);
+
+    let cancelled = false;
+    initialSendDone.current = true;
+    setSubmitError(null);
+    clearError();
+
+    const sendInitialQuery = async () => {
+      try {
+        await sendMessage({ text: initialQuery });
+        if (!cancelled) {
+          router.replace(`/chat/${chatId}`);
+        }
+      } catch (error) {
+        console.error("Failed to send initial chat message:", error);
+        if (!cancelled) {
+          setSubmitError(getChatErrorText(error));
+        }
+      }
+    };
+
+    void sendInitialQuery();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialQuery, initialMessages.length, sendMessage, chatId, router, clearError]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) =>
     setInput(e.target.value);
