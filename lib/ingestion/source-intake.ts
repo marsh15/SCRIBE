@@ -9,6 +9,7 @@ import { chunkContent } from "@/lib/chunking";
 import { generateEmbeddings } from "@/lib/embeddings";
 import { deleteBlob, downloadBlobToBuffer } from "@/lib/storage/blob";
 import { requireEnv } from "@/lib/env";
+import { ensureDocumentsChunkIndexSchema } from "@/lib/db-compat";
 import {
   completeReservedSourceUpload,
   deleteOwnedSource,
@@ -252,6 +253,7 @@ async function processClaimedSource(job: {
       fileName: source.name,
       numPages: extraction.numPages,
     });
+    await ensureDocumentsChunkIndexSchema();
     const embeddings = await generateEmbeddings(chunks.map((chunk) => chunk.content));
 
     const queries: any[] = [

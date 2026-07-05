@@ -4,6 +4,7 @@ import { db } from "@/lib/db-config";
 import { files, documents } from "@/lib/db-schema";
 import { eq, and, sql } from "drizzle-orm";
 import { getUserId, isNotAuthenticatedError } from "@/lib/auth";
+import { ensureDocumentsChunkIndexSchema } from "@/lib/db-compat";
 
 export async function getFileWithChunks(fileId: number) {
     try {
@@ -49,6 +50,8 @@ export async function getFileWithChunks(fileId: number) {
                 hasStorageUrl: file.hasStorageUrl,
             };
         }
+
+        await ensureDocumentsChunkIndexSchema();
 
         const chunks = await db
             .select({
