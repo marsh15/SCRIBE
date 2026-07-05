@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   completeReservedSourceUpload,
   deleteOwnedSource,
+  isRetryableSourceError,
   parseSourceUploadMetadata,
   retryDelayMinutes,
   shouldRetrySource,
@@ -83,6 +84,15 @@ describe("Source intake production policy", () => {
     expect([1, 2, 3, 4].map(retryDelayMinutes)).toEqual([2, 4, 8, 16]);
     expect(shouldRetrySource(4)).toBe(true);
     expect(shouldRetrySource(5)).toBe(false);
+  });
+
+  it("does not retry deterministic extraction failures", () => {
+    expect(
+      isRetryableSourceError(
+        "No text extracted from scanned.pdf. Scanned PDFs and image-only documents are not supported yet."
+      )
+    ).toBe(false);
+    expect(isRetryableSourceError("Google Embedding API error 429")).toBe(true);
   });
 
   it("queues completion once and treats callback replay as idempotent", async () => {

@@ -133,6 +133,12 @@ export function shouldRetrySource(attempts: number) {
   return attempts < 5;
 }
 
+export function isRetryableSourceError(message: string) {
+  return !/No text extracted|Scanned PDFs|image-only documents|Unsupported file type/i.test(
+    message
+  );
+}
+
 export function validateCompletedSourceBlob(
   source: { id: number; userId: string; name: string; size: number; type: string },
   blob: CompletedSourceBlob
