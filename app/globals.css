@@ -59,7 +59,7 @@
   --destructive: #DC2626;
 
   /* RAG / Vector special color */
-  --rag: #00C4A0;
+  --rag: #087565;
 
   /* 1px graphite, 20% opacity */
   --border: rgba(42, 40, 38, 0.2);
@@ -105,6 +105,18 @@
 
 :focus-visible { outline: 3px solid var(--ring); outline-offset: 3px; }
 button, a, input, select, textarea { touch-action: manipulation; }
+
+.landing-grid {
+  background-image:
+    linear-gradient(to right, var(--border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(to bottom, black, transparent 92%);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--rag) 28%, transparent);
+}
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     scroll-behavior: auto !important;
