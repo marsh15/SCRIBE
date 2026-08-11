@@ -25,16 +25,20 @@ export default function PricingPage() {
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <div className="inline-flex rounded-sm border border-border p-1">
+            <div className="inline-flex rounded-sm border border-border p-1" role="group" aria-label="Billing currency">
               <button
-                className={`px-3 py-1.5 text-xs font-mono uppercase tracking-wider rounded-sm ${currency === "INR" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                type="button"
+                aria-pressed={currency === "INR"}
+                className={`min-h-11 px-3 text-xs font-mono rounded-sm ${currency === "INR" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
                   }`}
                 onClick={() => setCurrency("INR")}
               >
                 INR
               </button>
               <button
-                className={`px-3 py-1.5 text-xs font-mono uppercase tracking-wider rounded-sm ${currency === "USD" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                type="button"
+                aria-pressed={currency === "USD"}
+                className={`min-h-11 px-3 text-xs font-mono rounded-sm ${currency === "USD" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
                   }`}
                 onClick={() => setCurrency("USD")}
               >
@@ -50,7 +54,7 @@ export default function PricingPage() {
             return (
               <article
                 key={plan.code}
-                className={`rounded-sm border p-5 ${plan.code === "pro" ? "border-[#00C4A0]/50 bg-card" : "border-border bg-card"
+                className={`rounded-sm border p-5 ${plan.code === "pro" ? "border-rag/50 bg-card" : "border-border bg-card"
                   }`}
               >
                 <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">{plan.name}</p>
@@ -72,7 +76,7 @@ export default function PricingPage() {
 
                 <Link
                   href={`/sign-in?redirect_url=/settings/billing?plan=${plan.code}&currency=${currency}`}
-                  className="mt-5 inline-flex w-full items-center justify-center rounded-sm bg-primary px-3 py-2 text-xs font-mono uppercase tracking-wider text-primary-foreground"
+                  className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-sm bg-primary px-3 text-xs font-medium text-primary-foreground"
                 >
                   {plan.code === "free" ? "Start Free" : `Choose ${plan.name}`}
                 </Link>

@@ -1,6 +1,6 @@
-# ✒️ SCRIBE
+# Scribe
 
-> **AI-Powered RAG Knowledge Base & Chatbot** — Upload documents, ask questions, get cited answers.
+> An evidence-first RAG knowledge workspace. Upload private documents, ask questions, and inspect the passages behind every answer.
 
 [![Live Demo](https://img.shields.io/badge/Live-scribe--marsh.vercel.app-00C4A0?style=flat-square&logo=vercel)](https://scribe-marsh.vercel.app)
 [![Next.js](https://img.shields.io/badge/Next.js-16.1-black?style=flat-square&logo=next.js)](https://nextjs.org)
@@ -10,9 +10,14 @@
 
 ## Overview
 
-SCRIBE is an intelligent document management and chatbot application that lets you ingest files (PDF, CSV, MD, TXT, DOCX), process them into vector embeddings, and query them using Google Gemini AI. It features a premium resizable three-pane interface to navigate chats, visualize the RAG pipeline in real time, and manage your uploaded knowledge base — all scoped per-user.
+Scribe is a full-stack document intelligence system built by [Santosh Kumar](https://github.com/marsh15). It ingests PDF, CSV, Markdown, text, and DOCX sources, indexes them with Gemini embeddings, retrieves relevant passages through pgvector, and streams answers with inspectable citations. The three-pane workspace keeps sources, conversation, and evidence visible without hiding the system's confidence or retrieval path.
 
 **Live:** [scribe-marsh.vercel.app](https://scribe-marsh.vercel.app)
+
+## Project walkthroughs
+
+- [How Scribe works](docs/PROJECT_WORKING_EXPLAINED.md) explains the product, ingestion lifecycle, retrieval flow, reliability model, and evidence experience without requiring code context.
+- [SDE fresher interview guide](docs/SCRIBE_WBD_SDE_FRESHER_INTERVIEW_GUIDE.md) covers architecture, computer-science fundamentals, trade-offs, likely interview questions, and honest extension ideas.
 
 ---
 
@@ -30,13 +35,19 @@ SCRIBE is an intelligent document management and chatbot application that lets y
 - **SaaS Billing** — Razorpay-backed pricing, plan limits, and usage metering.
 - **User Session Isolation** — Each Clerk-authenticated user has a fully isolated workspace (files, chats, search results, billing).
 
+### Engineering depth
+- **Recoverable Background Jobs** — Atomic job claims, bounded retries, exponential backoff, stale-job recovery, and idempotent completion paths.
+- **Private Direct Uploads** — Constrained upload tokens send originals directly to Vercel Blob without proxying large bodies through the app server.
+- **RAG Observability** — Retrieval traces capture selected chunks, similarity, latency, and optional evaluation signals.
+- **Focused Test Coverage** — Vitest suites cover validation, tenant-safe intake policy, webhook signatures, billing, chunking, cron authorization, and RAG behavior.
+
 ### UI/UX
 - **Three-Pane Layout** — Resizable sidebar, main content, and RAG inspector with persistent panel sizes.
 - **Real-Time RAG Inspector** — Live pipeline visualization (Tokenize → Embed → Vector Search → Build Context → Stream Response) with retrieved chunk preview.
 - **Dark & Light Mode** — Smooth animated toggle with proper contrast across all panels.
-- **Premium Typography** — DM Serif Display (headlines), DM Sans (body), JetBrains Mono (code/labels).
+- **Purposeful Typography** — DM Serif Display for public-facing headlines, DM Sans for product UI, and JetBrains Mono for technical metadata.
 - **Chat Avatars** — User/AI avatar indicators with a custom pen nib logomark.
-- **Micro-Animations** — Stagger-in list items, floating upload icon, pulse-glow active indicators, hover-lift cards.
+- **Accessible Interaction States** — Visible focus, reduced-motion support, semantic status colors, and mobile touch targets.
 
 ---
 

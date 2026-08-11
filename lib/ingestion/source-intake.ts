@@ -14,6 +14,7 @@ import {
   completeReservedSourceUpload,
   deleteOwnedSource,
   parseSourceUploadMetadata,
+  isRetryableSourceError,
   retryDelayMinutes,
   shouldRetrySource,
   sourceUploadPath,
@@ -27,6 +28,7 @@ export {
   completeReservedSourceUpload,
   deleteOwnedSource,
   parseSourceUploadMetadata,
+  isRetryableSourceError,
   retryDelayMinutes,
   shouldRetrySource,
   SourceIntakeError,
@@ -311,7 +313,7 @@ async function processClaimedSource(job: {
     return { sourceId: source.id, status: "ready" as const, chunks: chunks.length };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown Source intake error";
-    const retrying = shouldRetrySource(job.attempts);
+    const retrying = isRetryableSourceError(message) && shouldRetrySource(job.attempts);
     const nextRetryAt = retrying
       ? new Date(Date.now() + retryDelayMinutes(job.attempts) * 60 * 1000)
       : null;
