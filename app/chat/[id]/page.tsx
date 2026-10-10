@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import { useChatState } from "@/components/chat-context";
 import ReactMarkdown from "react-markdown";
 import { getChatMessages } from "@/app/chat/actions";
-import { useParams, useSearchParams, useRouter } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { DefaultChatTransport } from "ai";
 import { messageUsesKnowledgeBase } from "@/lib/chat-tools";
@@ -134,7 +134,6 @@ function ChatInterface({
   ];
   const isLoading = status === "submitted" || status === "streaming";
   const searchParams = useSearchParams();
-  const router = useRouter();
   const initialSendDone = useRef(false);
   const initialQuery = searchParams.get("q");
 
@@ -145,15 +144,16 @@ function ChatInterface({
 
     let cancelled = false;
     initialSendDone.current = true;
+    // Consume the URL prompt before streaming so a remount cannot send it again.
+    const url = new URL(window.location.href);
+    url.searchParams.delete("q");
+    window.history.replaceState(window.history.state, "", url);
     setSubmitError(null);
     clearError();
 
     const sendInitialQuery = async () => {
       try {
         await sendMessage({ text: initialQuery });
-        if (!cancelled) {
-          router.replace(`/chat/${chatId}`);
-        }
       } catch (error) {
         console.error("Failed to send initial chat message:", error);
         if (!cancelled) {
@@ -167,7 +167,7 @@ function ChatInterface({
     return () => {
       cancelled = true;
     };
-  }, [initialQuery, initialMessages.length, sendMessage, chatId, router, clearError]);
+  }, [initialQuery, initialMessages.length, sendMessage, clearError]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) =>
     setInput(e.target.value);
