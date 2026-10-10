@@ -298,3 +298,21 @@ def test_missing_cases_is_error(tmp_path, capsys):
         score_split(DATASET, "dev", rk)
     rc = main(["score", "--rankings", str(rk), "--dataset", str(DATASET), "--split", "dev", "--out", str(tmp_path / "o")])
     assert rc == 2 and missing_id in capsys.readouterr().err
+
+
+def test_csv_quote_matches_rendered_rows_in_any_pipeline():
+    """CSV labels are raw lines; legacy (space-joined) and 2.0 (col: val) renderings both match."""
+    from scribe_eval.dataset import Case
+    from scribe_eval.metrics import RankedItem, match_matrix
+
+    case = Case.model_validate({
+        "id": "t", "split": "dev", "category": "table_lookup", "tags": [], "question": "q",
+        "answerable": True, "reference_answer": "a", "must_include": [],
+        "evidence": [{"doc": "fleet.csv", "version": 1, "quote": "NW-T-0417,Hamburg,Volvo FH,2022", "page": None, "grade": 2}],
+        "forbidden": [],
+    })
+    legacy = RankedItem(chunk_id="1", doc="fleet.csv", text="id city\nNW-T-0417 Hamburg Volvo FH 2022\nNW-T-0418 Lyon")
+    new = RankedItem(chunk_id="2", doc="fleet.csv", text="Table: fleet.csv · Row 3 · id: NW-T-0417 · city: Hamburg · model: Volvo FH · year: 2022")
+    wrong_order = RankedItem(chunk_id="3", doc="fleet.csv", text="2022 Volvo FH Hamburg NW-T-0417")
+    other = RankedItem(chunk_id="4", doc="fleet.csv", text="NW-T-0418 Lyon Volvo FH 2022")
+    assert match_matrix(case, [legacy, new, wrong_order, other]) == [{0}, {0}, set(), set()]

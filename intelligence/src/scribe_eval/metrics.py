@@ -11,6 +11,12 @@ Relevance (D17): a ranked item is relevant to an evidence entry iff
 ``normalize(item.text)`` contains ``normalize(entry.quote)``. One item can
 satisfy several entries; one entry can be satisfied by several items.
 
+CSV exception: CSV evidence quotes are raw record lines (``a,b,c``), but each
+pipeline renders rows differently (legacy joins cells with spaces; Scribe 2.0
+renders ``col: val``). For a quote whose document is a ``.csv`` the entry is
+also satisfied when every non-empty cell of the record, normalized, appears in
+order in the item text. This keeps labels independent of any profile.
+
 Definitions, for an answerable case with n >= 1 evidence entries:
   recall@k  = |entries matched by at least one of the top-k items| / n
   hit@k     = 1 if any of the top-k items matches any entry, else 0
@@ -63,13 +69,47 @@ class RankedItem:
         )
 
 
+def csv_cells(raw_line: str) -> list[str]:
+    """Normalized non-empty cells of a raw CSV record (delimiter guessed)."""
+    import csv
+
+    best: list[str] = []
+    for delim in (",", ";", "\t", "|"):
+        try:
+            row = next(csv.reader([raw_line], delimiter=delim))
+        except (csv.Error, StopIteration):
+            continue
+        if len(row) > len(best):
+            best = row
+    return [c for c in (normalize(c) for c in best) if c]
+
+
+def _cells_in_order(cells: list[str], text: str) -> bool:
+    pos = 0
+    for cell in cells:
+        found = text.find(cell, pos)
+        if found < 0:
+            return False
+        pos = found + len(cell)
+    return bool(cells)
+
+
 def match_matrix(case: Case, ranking: Sequence[RankedItem]) -> list[set[int]]:
     """For each ranked item, the set of evidence indices it satisfies."""
     quotes = [normalize(e.quote) for e in case.evidence]
+    csv_entries = {
+        i: csv_cells(e.quote)
+        for i, e in enumerate(case.evidence)
+        if e.doc.lower().endswith(".csv")
+    }
     out: list[set[int]] = []
     for item in ranking:
         text = normalize(item.text)
-        out.append({i for i, q in enumerate(quotes) if q and q in text})
+        hit = {i for i, q in enumerate(quotes) if q and q in text}
+        for i, cells in csv_entries.items():
+            if i not in hit and _cells_in_order(cells, text):
+                hit.add(i)
+        out.append(hit)
     return out
 
 
