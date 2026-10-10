@@ -19,3 +19,6 @@ next-env.d.ts
 
 # scribe-eval run outputs
 benchmarks/runs/
+
+# T07 baseline harness: local embedding cache (large JSONL)
+benchmarks/cache/
