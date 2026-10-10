@@ -42,9 +42,9 @@ def test_encrypted_pdf_is_invalid_with_plain_message():
 def test_unsupported_format():
     for mime in ["image/png", "application/zip", ""]:
         assert code_of(b"data", mime) == "UNSUPPORTED_FORMAT"
-    # DOCX/CSV arrive with T10
-    assert code_of(b"PK", "application/vnd.openxmlformats-officedocument.wordprocessingml.document") == "UNSUPPORTED_FORMAT"
-    assert code_of(b"a,b", "text/csv") == "UNSUPPORTED_FORMAT"
+    # DOCX/CSV are supported since T10 (bad bytes are INVALID_DOCUMENT, not UNSUPPORTED_FORMAT)
+    assert code_of(b"PK", "application/vnd.openxmlformats-officedocument.wordprocessingml.document") == "INVALID_DOCUMENT"
+    assert code_of(b"\n\n", "text/csv") == "EMPTY_EXTRACTION"
 
 
 def test_empty_inputs():

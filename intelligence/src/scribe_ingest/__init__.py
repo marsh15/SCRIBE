@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import inspect
 from typing import Callable
 
+from .csv_rows import parse_csv
+from .docx import parse_docx
 from .errors import IngestError
 from .markdown import parse_markdown
 from .model import Block, ParsedDocument, canonical_text
@@ -38,9 +41,13 @@ def register_parser(mime: str, fn: Parser) -> None:
 register_parser("application/pdf", parse_pdf)
 register_parser("text/plain", parse_text)
 register_parser("text/markdown", parse_markdown)
+register_parser("application/vnd.openxmlformats-officedocument.wordprocessingml.document", parse_docx)
+register_parser("text/csv", parse_csv)
+register_parser("application/csv", parse_csv)
 
 
-def parse(data: bytes, mime: str, *, allow_ocr_pending: bool = False) -> ParsedDocument:
+def parse(data: bytes, mime: str, *, allow_ocr_pending: bool = False, name: str | None = None
+) -> ParsedDocument:
     """Parse `data` into typed blocks.
 
     A document with no readable (non-furniture) blocks raises EMPTY_EXTRACTION,
@@ -55,7 +62,11 @@ def parse(data: bytes, mime: str, *, allow_ocr_pending: bool = False) -> ParsedD
         )
     if not data:
         raise IngestError("EMPTY_EXTRACTION", "The file is empty.")
-    doc = fn(data)
+    # `name` (file name) is forwarded only to parsers that accept it (CSV).
+    if name and "name" in inspect.signature(fn).parameters:
+        doc = fn(data, name=name)  # type: ignore[call-arg]
+    else:
+        doc = fn(data)
     if not doc.chunkable_blocks:
         if doc.needs_ocr_pages and allow_ocr_pending:
             return doc

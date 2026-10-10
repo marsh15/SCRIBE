@@ -51,6 +51,10 @@ class ParsedDocument:
     page_count: int | None = None
     needs_ocr_pages: list[int] = field(default_factory=list)
     parser_version: str = PARSER_VERSION
+    # Source-level flags (T10): e.g. CSV encoding/delimiter, and warnings such as
+    # "CSV_ROWS_TRUNCATED:<n>" (DESIGN D21: the source is flagged, not failed).
+    meta: dict[str, Any] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
 
     @cached_property
     def text(self) -> str:
