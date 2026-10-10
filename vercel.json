@@ -4,5 +4,18 @@
       "path": "/api/internal/ingest/run",
       "schedule": "0 0 * * *"
     }
-  ]
+  ],
+  "rewrites": [
+    {
+      "source": "/api/py/(.*)",
+      "destination": "/api/py/index"
+    }
+  ],
+  "functions": {
+    "api/py/index.py": {
+      "maxDuration": 300,
+      "includeFiles": "intelligence/src/**",
+      "excludeFiles": "{intelligence/tests/**,intelligence/.venv/**,**/__pycache__/**,node_modules/**,.next/**,app/**,components/**,public/**}"
+    }
+  }
 }
