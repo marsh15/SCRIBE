@@ -8,7 +8,8 @@ import { extractTextFromBuffer } from "@/lib/ingestion/extract";
 import { chunkContent } from "@/lib/chunking";
 import { generateEmbeddings } from "@/lib/embeddings";
 import { deleteBlob, downloadBlobToBuffer } from "@/lib/storage/blob";
-import { requireEnv } from "@/lib/env";
+import { env, requireEnv } from "@/lib/env";
+import { ingestSourceViaPython, PermanentIngestError } from "@/lib/ingestion/python-engine";
 import { ensurePersonalWorkspace } from "@/lib/workspace";
 import { ensureDocumentsChunkIndexSchema } from "@/lib/db-compat";
 import {
@@ -246,6 +247,25 @@ async function processClaimedSource(job: {
   }
 
   try {
+    if (env.INGEST_ENGINE === "python") {
+      // Python owns parse/chunk/embed/activate and has already set the Source to ready.
+      const indexed = await ingestSourceViaPython(source);
+      await db.batch([
+        db.update(files).set({ updatedAt: new Date() }).where(eq(files.id, source.id)),
+        db
+          .update(ingestionJobs)
+          .set({
+            status: "completed",
+            lastError: null,
+            nextRetryAt: null,
+            finishedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(ingestionJobs.id, job.id)),
+      ]);
+      console.info("[SourceIntake] ready (python)", { sourceId: source.id, chunks: indexed.chunks });
+      return { sourceId: source.id, status: "ready" as const, chunks: indexed.chunks };
+    }
     const bytes = source.storageUrl
       ? await downloadBlobToBuffer(source.storageUrl)
       : source.fileData
@@ -323,7 +343,10 @@ async function processClaimedSource(job: {
     return { sourceId: source.id, status: "ready" as const, chunks: chunks.length };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown Source intake error";
-    const retrying = isRetryableSourceError(message) && shouldRetrySource(job.attempts);
+    const retrying =
+      !(error instanceof PermanentIngestError) &&
+      isRetryableSourceError(message) &&
+      shouldRetrySource(job.attempts);
     const nextRetryAt = retrying
       ? new Date(Date.now() + retryDelayMinutes(job.attempts) * 60 * 1000)
       : null;

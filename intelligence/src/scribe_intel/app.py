@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException
 
 from .auth import Principal, require_scope
 from .db import close_pool, get_pool
+from .ingest_routes import router as ingest_router
 
 router = APIRouter()
 
@@ -35,6 +36,8 @@ def create_app() -> FastAPI:
     # Vercel rewrites may or may not strip the /api/py prefix; serve both.
     app.include_router(router)
     app.include_router(router, prefix="/api/py", include_in_schema=False)
+    app.include_router(ingest_router)
+    app.include_router(ingest_router, prefix="/api/py", include_in_schema=False)
     return app
 
 

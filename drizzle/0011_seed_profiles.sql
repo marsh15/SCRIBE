@@ -9,10 +9,10 @@ SELECT v.id::uuid, v.name, v.provider, v.model, v.dimensions, v.normalized, v.co
 FROM (VALUES
   ('e0000000-0000-4000-8000-000000000001', 'legacy-gemini-embedding-2-preview-3072', 'google',
    'models/gemini-embedding-2-preview', 3072, false,
-   '{"space":"legacy-3072","task_types":{"document":"RETRIEVAL_DOCUMENT","query":"RETRIEVAL_QUERY"},"exact_search_only":true}'),
+   '{"space":"legacy-3072","task_format":"none","exact_search_only":true}'),
   ('e0000000-0000-4000-8000-000000000002', 'gemini-embedding-2-1536', 'google',
    'models/gemini-embedding-2', 1536, true,
-   '{"space":"v2-1536","output_dimensionality":1536,"task_types":{"document":"RETRIEVAL_DOCUMENT","query":"RETRIEVAL_QUERY"},"renormalize":true}')
+   '{"space":"v2-1536","output_dimensionality":1536,"task_format":"gemini-embedding-2-prefix-v1","renormalize":true}')
 ) AS v(id, name, provider, model, dimensions, normalized, config)
 ON CONFLICT DO NOTHING;
 
