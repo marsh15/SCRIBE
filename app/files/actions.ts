@@ -2,16 +2,16 @@
 
 import { db } from "@/lib/db-config";
 import { files } from "@/lib/db-schema";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { getUserId } from "@/lib/auth";
+import { resolveWorkspace } from "@/lib/workspace";
 import { deleteSource } from "@/lib/ingestion/source-intake";
 
 export async function getFiles() {
     try {
-        const userId = await getUserId();
+        const { userId, workspaceId } = await resolveWorkspace();
         const allFiles = await db.query.files.findMany({
-            where: eq(files.userId, userId),
+            where: and(eq(files.userId, userId), eq(files.workspaceId, workspaceId)),
             orderBy: [desc(files.createdAt)],
         });
         return allFiles;
@@ -23,7 +23,7 @@ export async function getFiles() {
 
 export async function deleteFile(fileId: number) {
     try {
-        const userId = await getUserId();
+        const { userId } = await resolveWorkspace();
         const deleted = await deleteSource(userId, fileId);
         if (!deleted) return { success: false, error: "Source not found" };
         revalidatePath("/upload");

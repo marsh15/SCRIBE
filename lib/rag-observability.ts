@@ -118,6 +118,7 @@ export function buildRagTraceChunkRows(traceId: string, chunks: RagToolChunk[]) 
 export async function recordRagTrace(input: {
   chatId: string;
   userId: string;
+  workspaceId: string;
   userMessageId?: string;
   search: SearchDocumentsResult;
 }) {
@@ -128,6 +129,7 @@ export async function recordRagTrace(input: {
     id: traceId,
     chatId: input.chatId,
     userId: input.userId,
+    workspaceId: input.workspaceId,
     userMessageId: input.userMessageId,
     query: input.search.query,
     status: toolResult.status,
@@ -186,6 +188,7 @@ export async function recordRagEvaluation(input: InsertRagEvaluation) {
 
 export async function getLatestRagTraceView(input: {
   userId: string;
+  workspaceId: string;
   chatId?: string;
   assistantMessageId?: string;
 }): Promise<RagTraceView | null> {
@@ -195,9 +198,14 @@ export async function getLatestRagTraceView(input: {
     where: input.assistantMessageId
       ? and(
           eq(ragTraces.userId, input.userId),
+          eq(ragTraces.workspaceId, input.workspaceId),
           eq(ragTraces.assistantMessageId, input.assistantMessageId)
         )
-      : and(eq(ragTraces.userId, input.userId), eq(ragTraces.chatId, input.chatId!)),
+      : and(
+          eq(ragTraces.userId, input.userId),
+          eq(ragTraces.workspaceId, input.workspaceId),
+          eq(ragTraces.chatId, input.chatId!)
+        ),
     orderBy: (table, { desc }) => [desc(table.createdAt)],
   });
 

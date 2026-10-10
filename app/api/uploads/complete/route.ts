@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, sql } from "@/lib/db-config";
 import { files, ingestionJobs } from "@/lib/db-schema";
 import { getUserId } from "@/lib/auth";
+import { ensurePersonalWorkspace } from "@/lib/workspace";
 import { verifyUploadToken } from "@/lib/uploads/signature";
 import { uploadBufferToBlob } from "@/lib/storage/blob";
 import { recordUsageEvent } from "@/lib/billing/usage";
@@ -56,6 +57,7 @@ async function insertQueuedFileRecord(input: {
   type: string;
   size: number;
   userId: string;
+  workspaceId: string;
   fileData: string | null;
   storageKey: string | null;
   storageUrl: string | null;
@@ -69,6 +71,7 @@ async function insertQueuedFileRecord(input: {
           type: input.type,
           size: input.size,
           userId: input.userId,
+          workspaceId: input.workspaceId,
           fileData: input.fileData,
           storageKey: input.storageKey,
           storageUrl: input.storageUrl,
@@ -86,9 +89,9 @@ async function insertQueuedFileRecord(input: {
     try {
       const result = await withDatabaseRetry("insertQueuedFileRecordRaw", () =>
         sql`
-          insert into "files" ("name", "type", "size", "user_id", "file_data", "storage_key", "storage_url", "status")
-          values (${input.name}, ${input.type}, ${input.size}, ${input.userId}, ${input.fileData}, ${input.storageKey}, ${input.storageUrl}, 'queued')
-          returning "id", "name", "type", "size", "user_id", "file_data", "extracted_text", "storage_key", "storage_url", "status", "processing_error", "text_bytes", "created_at"
+          insert into "files" ("name", "type", "size", "user_id", "workspace_id", "file_data", "storage_key", "storage_url", "status")
+          values (${input.name}, ${input.type}, ${input.size}, ${input.userId}, ${input.workspaceId}, ${input.fileData}, ${input.storageKey}, ${input.storageUrl}, 'queued')
+          returning "id", "name", "type", "size", "user_id", "workspace_id", "file_data", "extracted_text", "storage_key", "storage_url", "status", "processing_error", "text_bytes", "created_at"
         `
       );
 
@@ -104,6 +107,7 @@ async function insertQueuedFileRecord(input: {
         type: row.type,
         size: row.size,
         userId: row.user_id,
+        workspaceId: row.workspace_id,
         fileData: row.file_data,
         extractedText: row.extracted_text,
         storageKey: row.storage_key,
@@ -195,6 +199,7 @@ export async function POST(req: Request) {
       type: file.type || "application/octet-stream",
       size: file.size,
       userId,
+      workspaceId: await ensurePersonalWorkspace(userId),
       fileData,
       storageKey,
       storageUrl,

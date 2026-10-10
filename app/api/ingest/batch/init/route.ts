@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getUserId, isNotAuthenticatedError } from "@/lib/auth";
+import { isNotAuthenticatedError } from "@/lib/auth";
+import { resolveWorkspace } from "@/lib/workspace";
 import { db } from "@/lib/db-config";
 import { files } from "@/lib/db-schema";
 import { getUsageSummary } from "@/lib/billing/usage";
@@ -17,7 +18,7 @@ import { withDatabaseRetry } from "@/lib/db-retry";
  */
 export async function POST(req: Request) {
   try {
-    const userId = await getUserId();
+    const { userId, workspaceId } = await resolveWorkspace();
 
     const body = await req.json();
     const { fileName, fileSize, fileType } = body as {
@@ -62,6 +63,7 @@ export async function POST(req: Request) {
           type: fileType,
           size: fileSize,
           userId,
+          workspaceId,
           status: "processing",
           // No fileData, storageKey, or storageUrl — raw file stays in the browser
         })

@@ -5,6 +5,12 @@ const { getUserId, runQueuedSourceIntake } = vi.hoisted(() => ({
   runQueuedSourceIntake: vi.fn(),
 }));
 
+vi.mock("@/lib/workspace", () => ({
+  resolveWorkspace: async () => ({
+    userId: await getUserId(),
+    workspaceId: "ws_123",
+  }),
+}));
 vi.mock("@/lib/auth", () => ({
   getUserId,
   isNotAuthenticatedError: (error: unknown) =>
@@ -38,6 +44,7 @@ describe("user Source intake route", () => {
     expect(response.status).toBe(200);
     expect(runQueuedSourceIntake).toHaveBeenCalledWith(1, {
       userId: "user_123",
+      workspaceId: "ws_123",
       sourceId: 42,
     });
   });

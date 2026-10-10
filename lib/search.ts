@@ -40,6 +40,7 @@ function elapsedMs(start: number) {
 export async function searchDocuments(
     query: string,
     userId: string,
+    workspaceId: string,
     limit: number = 10,
     threshold: number = 0.3
 ) : Promise<SearchDocumentsResult> {
@@ -68,7 +69,7 @@ export async function searchDocuments(
         })
         .from(documents)
         .innerJoin(files, eq(documents.fileId, files.id))
-        .where(and(gt(similarity, threshold), eq(files.userId, userId)))
+        .where(and(gt(similarity, threshold), eq(files.userId, userId), eq(files.workspaceId, workspaceId)))
         .orderBy(desc(similarity))
         .limit(limit);
     const retrievalMs = elapsedMs(retrievalStart);

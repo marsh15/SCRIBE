@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getUserId, isNotAuthenticatedError } from "@/lib/auth";
+import { isNotAuthenticatedError } from "@/lib/auth";
+import { resolveWorkspace } from "@/lib/workspace";
 import { internalError } from "@/lib/api-errors";
 import { runQueuedSourceIntake } from "@/lib/ingestion/source-intake";
 
@@ -16,10 +17,10 @@ export const maxDuration = 300;
 
 export async function POST(req: Request) {
   try {
-    const userId = await getUserId();
+    const { userId, workspaceId } = await resolveWorkspace();
     const body = (await req.json().catch(() => ({}))) as { sourceId?: unknown };
     const sourceId = parseSourceId(body.sourceId);
-    const result = await runQueuedSourceIntake(sourceId ? 1 : 3, { userId, sourceId });
+    const result = await runQueuedSourceIntake(sourceId ? 1 : 3, { userId, workspaceId, sourceId });
 
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {

@@ -11,7 +11,7 @@ import { withSupermemory } from "@supermemory/tools/ai-sdk";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { searchDocuments } from "@/lib/search";
-import { getUserId } from "@/lib/auth";
+import { resolveWorkspace } from "@/lib/workspace";
 import { getUsageSummary, recordUsageEvent } from "@/lib/billing/usage";
 import {
   buildRagToolResult,
@@ -143,7 +143,7 @@ function formatChatError(error: unknown) {
 export async function POST(req: Request) {
   const requestStart = Date.now();
   try {
-    const userId = await getUserId();
+    const { userId, workspaceId } = await resolveWorkspace();
     const usageSummary = await getUsageSummary(userId);
     if (!usageSummary.allowOverage && usageSummary.projectedOverageInr > 0) {
       return NextResponse.json(
@@ -169,6 +169,22 @@ export async function POST(req: Request) {
 
     const url = new URL(req.url);
     const chatId = url.searchParams.get("chatId") || undefined;
+    if (chatId) {
+      const { db: ownershipDb } = await import("@/lib/db-config");
+      const { chats: chatsTable } = await import("@/lib/db-schema");
+      const { and, eq } = await import("drizzle-orm");
+      const ownedChat = await ownershipDb.query.chats.findFirst({
+        where: and(
+          eq(chatsTable.id, chatId),
+          eq(chatsTable.userId, userId),
+          eq(chatsTable.workspaceId, workspaceId)
+        ),
+        columns: { id: true },
+      });
+      if (!ownedChat) {
+        return new Response("Chat not found.", { status: 404 });
+      }
+    }
     const lastUserMessage = messages[messages.length - 1];
     const userMessageId = lastUserMessage.id || nanoid();
 
@@ -207,7 +223,7 @@ export async function POST(req: Request) {
         }),
         execute: async ({ query }) => {
           try {
-            const search = await searchDocuments(query, userId, 10, 0.3);
+            const search = await searchDocuments(query, userId, workspaceId, 10, 0.3);
             let toolResult = buildRagToolResult(search);
 
             if (chatId) {
@@ -215,6 +231,7 @@ export async function POST(req: Request) {
                 toolResult = await recordRagTrace({
                   chatId,
                   userId,
+                  workspaceId,
                   userMessageId,
                   search,
                 });

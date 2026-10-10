@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getUserId, isNotAuthenticatedError } from "@/lib/auth";
+import { isNotAuthenticatedError } from "@/lib/auth";
+import { resolveWorkspace } from "@/lib/workspace";
 import { db } from "@/lib/db-config";
 import { documents, files } from "@/lib/db-schema";
 import { eq } from "drizzle-orm";
@@ -16,7 +17,7 @@ interface FinalizeBody {
 
 export async function POST(req: Request) {
   try {
-    const userId = await getUserId();
+    const { userId, workspaceId } = await resolveWorkspace();
     const body: FinalizeBody = await req.json();
     const { fileId, totalChunks, textBytes, extractedText } = body;
 
@@ -45,7 +46,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "File not found." }, { status: 404 });
     }
 
-    if (file.userId !== userId) {
+    if (file.userId !== userId || file.workspaceId !== workspaceId) {
       return NextResponse.json(
         { error: "You do not own this file." },
         { status: 403 }
