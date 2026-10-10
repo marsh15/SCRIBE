@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   text,
@@ -11,6 +12,8 @@ import {
   doublePrecision,
   index,
   uniqueIndex,
+  uuid,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 
 export const SOURCE_STATUSES = [
@@ -24,6 +27,40 @@ export const SOURCE_STATUSES = [
 
 export type SourceStatus = (typeof SOURCE_STATUSES)[number];
 
+export const WORKSPACE_KINDS = ["personal", "eval"] as const;
+export type WorkspaceKind = (typeof WORKSPACE_KINDS)[number];
+
+export const workspaces = pgTable(
+  "workspaces",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    kind: text("kind", { enum: WORKSPACE_KINDS }).notNull(),
+    ownerUserId: text("owner_user_id"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    // At most one personal workspace per user (partial unique index).
+    personalOwnerUnique: uniqueIndex("workspaces_personal_owner_unique")
+      .on(table.ownerUserId)
+      .where(sql`${table.kind} = 'personal'`),
+  })
+);
+
+export const workspaceMembers = pgTable(
+  "workspace_members",
+  {
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" })
+      .notNull(),
+    userId: text("user_id").notNull(),
+    role: text("role").default("owner").notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.workspaceId, table.userId] }),
+    userIndex: index("workspace_members_user_id_index").on(table.userId),
+  })
+);
+
 export const files = pgTable(
   "files",
   {
@@ -32,6 +69,9 @@ export const files = pgTable(
     type: text("type").notNull(),
     size: integer("size").notNull(),
     userId: text("user_id").notNull(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id)
+      .notNull(),
     fileData: text("file_data"), // legacy base64-encoded original
     extractedText: text("extracted_text"),
     storageKey: text("storage_key"),
@@ -47,6 +87,7 @@ export const files = pgTable(
       table.status,
       table.updatedAt
     ),
+    workspaceIndex: index("files_workspace_id_index").on(table.workspaceId),
   })
 );
 
@@ -74,9 +115,14 @@ export const chats = pgTable("chats", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
   userId: text("user_id").notNull(),
+  workspaceId: uuid("workspace_id")
+    .references(() => workspaces.id)
+    .notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  workspaceIndex: index("chats_workspace_id_index").on(table.workspaceId),
+}));
 
 export const chatMessages = pgTable("chat_messages", {
   id: text("id").primaryKey(),
@@ -97,6 +143,9 @@ export const ragTraces = pgTable(
       .references(() => chats.id, { onDelete: "cascade" })
       .notNull(),
     userId: text("user_id").notNull(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id)
+      .notNull(),
     userMessageId: text("user_message_id").references(() => chatMessages.id, {
       onDelete: "set null",
     }),
@@ -126,6 +175,7 @@ export const ragTraces = pgTable(
     assistantMessageIndex: index("rag_traces_assistant_message_id_index").on(
       table.assistantMessageId
     ),
+    workspaceIndex: index("rag_traces_workspace_id_index").on(table.workspaceId),
   })
 );
 

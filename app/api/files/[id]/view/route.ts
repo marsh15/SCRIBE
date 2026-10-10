@@ -1,7 +1,7 @@
 import { db } from "@/lib/db-config";
 import { files } from "@/lib/db-schema";
 import { eq, and } from "drizzle-orm";
-import { getUserId } from "@/lib/auth";
+import { resolveWorkspace } from "@/lib/workspace";
 import { downloadBlobToBuffer } from "@/lib/storage/blob";
 
 export async function GET(
@@ -9,12 +9,12 @@ export async function GET(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const userId = await getUserId();
+        const { userId, workspaceId } = await resolveWorkspace();
         const { id } = await params;
         const fileId = Number(id);
 
         const file = await db.query.files.findFirst({
-            where: and(eq(files.id, fileId), eq(files.userId, userId)),
+            where: and(eq(files.id, fileId), eq(files.userId, userId), eq(files.workspaceId, workspaceId)),
             columns: {
                 fileData: true,
                 storageUrl: true,

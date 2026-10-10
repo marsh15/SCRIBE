@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
-import { getUserId, isNotAuthenticatedError } from "@/lib/auth";
+import { isNotAuthenticatedError } from "@/lib/auth";
+import { resolveWorkspace } from "@/lib/workspace";
 import { getLatestRagTraceView } from "@/lib/rag-observability";
 
 export async function GET(req: Request) {
   try {
-    const userId = await getUserId();
+    const { userId, workspaceId } = await resolveWorkspace();
     const url = new URL(req.url);
     const chatId = url.searchParams.get("chatId") || undefined;
     const assistantMessageId =
@@ -19,6 +20,7 @@ export async function GET(req: Request) {
 
     const trace = await getLatestRagTraceView({
       userId,
+      workspaceId,
       chatId,
       assistantMessageId,
     });

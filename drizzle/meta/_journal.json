@@ -57,6 +57,13 @@
       "when": 1783209600000,
       "tag": "0007_rag_observability",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783900800000,
+      "tag": "0008_workspaces",
+      "breakpoints": true
     }
   ]
 }
