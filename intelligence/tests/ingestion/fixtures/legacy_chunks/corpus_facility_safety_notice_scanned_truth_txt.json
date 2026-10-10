@@ -1,0 +1,24 @@
+{
+ "name": "corpus_facility_safety_notice_scanned_truth_txt",
+ "options": {
+  "fileName": "facility-safety-notice-scanned.truth.txt",
+  "numPages": 5
+ },
+ "chunks": [
+  {
+   "content": "NORTHWIND LOGISTICS - SAFETY NOTICE FSN-2026-014\n\nNotice reference FSN-2026-014 takes effect on 2 March 2026\nat depot D-RTM, Rotterdam.\n\nHigh-visibility vests are mandatory in all loading areas.\nForklifts must not exceed 8 km/h inside the warehouse and\n15 km/h in the yard.\n\nThe maximum rack load is 1,250 kg per pallet level. The\nassembly point for evacuation is Point B at the north\nfence.\n\nA fire drill is held on the first Tuesday of every month\nat 10:15.\n\nIn case of a life-threatening situation on any Northwind\nsite, call the site emergency line 0800-555-0112 first and\nthe Rotterdam control room on +31 10 555 0198 second.\n\nQuestions about this notice go to the depot manager, Dirk\nvan Leeuwen, on extension 4417.",
+   "metadata": {
+    "chunkIndex": 0,
+    "totalChunks": 1,
+    "fileName": "facility-safety-notice-scanned.truth.txt",
+    "estimatedPage": 1,
+    "totalPages": 5,
+    "positionPercent": 0,
+    "section": 1,
+    "charOffset": 0,
+    "charLength": 721
+   }
+  }
+ ],
+ "source": "fixtures/corpus/facility-safety-notice-scanned.truth.txt"
+}

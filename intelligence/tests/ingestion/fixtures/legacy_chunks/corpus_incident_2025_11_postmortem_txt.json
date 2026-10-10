@@ -1,0 +1,24 @@
+{
+ "name": "corpus_incident_2025_11_postmortem_txt",
+ "options": {
+  "fileName": "incident-2025-11-postmortem.txt",
+  "numPages": 5
+ },
+ "chunks": [
+  {
+   "content": "Postmortem: GPS feed outages, November 2025\n===========================================\n\nIncident number: INC-2025-117. Severity: SEV2. Author: Priya Raman, CTO.\n\nSummary\n-------\n\nOn 18 November 2025 the Helios Telematics GPS feed was unavailable for 221\nminutes starting at 08:12 UTC. A second outage on 27 November 2025 lasted 77\nminutes. The total downtime in November 2025 was 298 minutes, giving monthly\navailability of 99.31%.\n\nImpact\n------\n\nThe outage affected 412 vehicles and delayed 1,930 shipments. No customer data\nwas lost.\n\nDetection\n---------\n\nMonitoring detected the first outage after 19 minutes. Nobody was alerted\nautomatically because the alert threshold was set to 30 minutes.\n\nRoot cause\n----------\n\nThe root cause was an expired TLS certificate on the Helios ingest gateway.\nHelios had not renewed the certificate because the reminder email went to a\nmailbox of a former employee.\n\nAction items\n------------\n\n- INV-2047: make webhook delivery idempotent (owner Priya Raman, due\n  2026-03-31).\n\n- Reduce the alert threshold for GPS feed gaps from 30 minutes to 5 minutes\n  (owner Lars Hendriksen).\n\n- Ask Helios to confirm the service credit for November 2025 (owner Jonas\n  Albrecht).",
+   "metadata": {
+    "chunkIndex": 0,
+    "totalChunks": 1,
+    "fileName": "incident-2025-11-postmortem.txt",
+    "estimatedPage": 1,
+    "totalPages": 5,
+    "positionPercent": 0,
+    "section": 1,
+    "charOffset": 0,
+    "charLength": 1208
+   }
+  }
+ ],
+ "source": "fixtures/corpus/incident-2025-11-postmortem.txt"
+}

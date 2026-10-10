@@ -1,0 +1,24 @@
+{
+ "name": "corpus_runbook_deploy_md",
+ "options": {
+  "fileName": "runbook-deploy.md",
+  "numPages": 5
+ },
+ "chunks": [
+  {
+   "content": "# Runbook: Deploying the Dispatch Platform\n\nOwner: Priya Raman, CTO. Applies to platform release v4.x.\n\n## 1. Deploy windows\n\nStandard deployments are allowed on Tuesdays and Thursdays between 10:00 and 15:00 CET. No deployments are allowed between 15 December and 5 January.\n\n### 1.1 Exceptions\n\nHotfixes may be deployed outside the windows with written approval from the CTO.\n\n## 2. Pre-deploy checklist\n\n1. Confirm that the release candidate passed all tests in the pipeline.\n2. Confirm that the on-call engineer is available for the next 2 hours.\n3. Post a notice in the channel #ops-deploys.\n\n## 3. Deployment steps\n\n```bash\ngit tag v4.3.1\nmake release ENV=prod\nmake canary PERCENT=5 DURATION=30m\nmake promote\n```\n\n### 3.1 Canary\n\nThe canary receives 5% of traffic for 30 minutes before full promotion.\n\n### 3.2 Health checks\n\nThe health endpoint is /healthz and must return HTTP 200 within 2 seconds.\n\n## 4. Rollback\n\nRollback must start within 15 minutes if the error rate exceeds 2% during the canary. Run `make rollback VERSION=<previous>`.\n\n### 4.1 Database migrations\n\nMigrations must be backward compatible for one release. Destructive migrations require a separate change ticket and are never deployed together with application code.\n\n## 5. After the deploy\n\nUpdate the changelog and close the related INV tickets. The deploy owner posts a summary within 1 hour.",
+   "metadata": {
+    "chunkIndex": 0,
+    "totalChunks": 1,
+    "fileName": "runbook-deploy.md",
+    "estimatedPage": 1,
+    "totalPages": 5,
+    "positionPercent": 0,
+    "section": 1,
+    "charOffset": 0,
+    "charLength": 1375
+   }
+  }
+ ],
+ "source": "fixtures/corpus/runbook-deploy.md"
+}

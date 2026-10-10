@@ -1,0 +1,24 @@
+{
+ "name": "corpus_ops_manual_md",
+ "options": {
+  "fileName": "ops-manual.md",
+  "numPages": 5
+ },
+ "chunks": [
+  {
+   "content": "# Northwind Logistics Depot Operations Manual\n\nVersion 7.0, maintained by Lars Hendriksen, Head of Operations.\n\n## 1. Depot operations\n\n### 1.1 Opening hours\n\nStandard depot opening hours are 05:00 to 22:00, Monday to Saturday. Sunday operation requires approval from the depot manager and the Head of Operations.\n\n### 1.2 Dock management\n\n#### 1.2.1 Turnaround targets\n\n- The dock turnaround target is 45 minutes per vehicle.\n- Trucks that wait more than 30 minutes at the gate trigger a yard alert.\n- Reefer trucks are always unloaded first.\n\n#### 1.2.2 Dock door assignment\n\nDoors are assigned by the shift lead in the yard management system. Doors 1 to 4 are reserved for cold goods at every depot.\n\n## 2. Safety on the depot floor\n\n### 2.1 Vehicle speed\n\nForklifts must not exceed 8 km/h inside the warehouse and 12 km/h in the yard.\n\n### 2.2 Personal protective equipment\n\n- Safety shoes and a high-visibility vest are mandatory.\n- Hard hats are mandatory in the high-bay racking aisles.\n- Cut-resistant gloves are mandatory when opening cartons with a blade.\n\n## 3. Cold chain\n\n### 3.1 Temperature range\n\nCold goods (SKU NW-COLD-04) must be stored between 2 and 8 degrees C.\n\n### 3.2 Excursion handling\n\nIf the temperature is above 8 degrees C, follow these steps:\n\n1. Record the temperature and time in the log.\n2. Move the pallet to quarantine bay Q1.\n3. Inform the depot manager.\n\nA pallet that has been above 8 degrees C for more than 20 minutes must be quarantined and cannot be shipped.\n\n## 4. System commands\n\nThe depot command line tool is called nwctl. Typical commands are:\n\n```bash\nnwctl depot status --code D-RTM\nnwctl dock assign --door 7 --vehicle NW-T-0417\nnwctl yard alert --depot D-HAM --threshold 30\n```\n\n### 4.1 Depot shutdown\n\nTo shut down a depot in an emergency, run `nwctl depot shutdown --code <depot> --reason <text>`. A depot shutdown requires confirmation from the depot manager and the on-call operations director.\n\n## 5. Escalation levels\n\n- Level 1: shift lead, response within 10 minutes.\n- Level 2: depot manager, response within 30 minutes.\n- Level 3: Head of Operations, response within 2 hours.",
+   "metadata": {
+    "chunkIndex": 0,
+    "totalChunks": 1,
+    "fileName": "ops-manual.md",
+    "estimatedPage": 1,
+    "totalPages": 5,
+    "positionPercent": 0,
+    "section": 1,
+    "charOffset": 0,
+    "charLength": 2136
+   }
+  }
+ ],
+ "source": "fixtures/corpus/ops-manual.md"
+}
