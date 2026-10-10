@@ -64,6 +64,13 @@
       "when": 1783900800000,
       "tag": "0008_workspaces",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1783987200000,
+      "tag": "0009_retire_legacy_ingestion",
+      "breakpoints": true
     }
   ]
 }

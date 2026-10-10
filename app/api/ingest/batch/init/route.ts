@@ -1,91 +1,15 @@
 import { NextResponse } from "next/server";
-import { isNotAuthenticatedError } from "@/lib/auth";
-import { resolveWorkspace } from "@/lib/workspace";
-import { db } from "@/lib/db-config";
-import { files } from "@/lib/db-schema";
-import { getUsageSummary } from "@/lib/billing/usage";
-import { getUserMaxUploadBytes } from "@/lib/uploads/limits";
-import { withDatabaseRetry } from "@/lib/db-retry";
 
-/**
- * POST /api/ingest/batch/init
- *
- * Lightweight endpoint for the browser-orchestrated pipeline.
- * Creates a file record with status 'processing' WITHOUT uploading the raw file.
- * The browser will then POST text chunks directly to /api/ingest/batch.
- *
- * Body: { fileName, fileSize, fileType }
- */
-export async function POST(req: Request) {
-  try {
-    const { userId, workspaceId } = await resolveWorkspace();
-
-    const body = await req.json();
-    const { fileName, fileSize, fileType } = body as {
-      fileName: string;
-      fileSize: number;
-      fileType: string;
-    };
-
-    if (!fileName || !fileSize || !fileType) {
-      return NextResponse.json(
-        { error: "Missing required fields: fileName, fileSize, fileType." },
-        { status: 400 }
-      );
-    }
-
-    // ---- Quota check ----
-    const usage = await getUsageSummary(userId);
-    if (!usage.allowOverage && usage.projectedOverageInr > 0) {
-      return NextResponse.json(
-        { error: "Free plan usage limit reached. Upgrade to upload more files." },
-        { status: 402 }
-      );
-    }
-
-    // ---- File size limit check ----
-    const { maxBytes, maxMb, planCode } = await getUserMaxUploadBytes(userId);
-    if (fileSize > maxBytes) {
-      return NextResponse.json(
-        {
-          error: `File exceeds plan limit (${maxMb} MB for ${planCode.toUpperCase()} plan).`,
-        },
-        { status: 413 }
-      );
-    }
-
-    // ---- Create file record with status 'processing' (no raw file data) ----
-    const [insertedFile] = await withDatabaseRetry("initBrowserFile", () =>
-      db
-        .insert(files)
-        .values({
-          name: fileName,
-          type: fileType,
-          size: fileSize,
-          userId,
-          workspaceId,
-          status: "processing",
-          // No fileData, storageKey, or storageUrl — raw file stays in the browser
-        })
-        .returning()
-    );
-
-    return NextResponse.json({
-      ok: true,
-      file: {
-        id: insertedFile.id,
-        name: insertedFile.name,
-        size: insertedFile.size,
-        status: "processing",
-      },
-    });
-  } catch (error) {
-    if (isNotAuthenticatedError(error)) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-    console.error("Batch init error:", error);
-    const message =
-      error instanceof Error ? error.message : "Failed to initialize file";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+// Removed in Scribe 2.0 (T04): Sources are ingested only through the private
+// Blob intake in lib/ingestion/source-intake.ts (see ADR-0001).
+function gone() {
+  return NextResponse.json(
+    { error: "This endpoint was removed. Upload Sources through the Sources page." },
+    { status: 410 }
+  );
 }
+
+export const GET = gone;
+export const POST = gone;
+export const PUT = gone;
+export const DELETE = gone;
