@@ -1,0 +1,23 @@
+# Northwind Glossary
+
+## A to M
+
+⟦Cross-dock: a facility where inbound freight is transferred to outbound vehicles with less than 24 hours of storage.⟧
+
+⟦Depot code: a short identifier such as D-RTM for Rotterdam or D-HAM for Hamburg.⟧
+
+⟦Harbour: the internal HR portal used for leave, timesheets and payslips.⟧
+
+⟦Hub: a depot that sorts at least 500,000 parcels per quarter.⟧
+
+## N to Z
+
+⟦NorthExpense: the tool used to file expense claims.⟧
+
+⟦POD: proof of delivery, a signature or photo captured at the consignee.⟧
+
+⟦SEV1: the highest incident severity, requiring acknowledgement within 15 minutes.⟧
+
+⟦SKU prefix NW-PAL means pallet, NW-BOX means carton, and NW-COLD means cold-chain packaging.⟧
+
+⟦Tier A city: one of Amsterdam, Paris, Milan, London and Zurich, where higher hotel caps apply.⟧

@@ -1,0 +1,14 @@
+﻿sku;description;unit;price_eur;min_order_qty;valid_from
+NW-PAL-120;EUR pallet 120x80 cm standard;each;14,90;50;2026-01-01
+NW-PAL-100;Pallet 100x120 cm lightweight;each;12,60;50;2026-01-01
+NW-BOX-S;Carton small 30x20x20 cm;pack of 25;9,40;20;2026-01-01
+NW-BOX-M;Carton medium 40x30x30 cm;pack of 25;11,20;20;2026-01-01
+NW-BOX-L;Carton large 60x40x40 cm;pack of 10;13,80;10;2026-01-01
+NW-COLD-04;Insulated cold box 4 litre with gel pack;each;31,50;10;2026-03-01
+NW-GEL-02;Cooling gel pack 200 g;pack of 12;6,75;10;2026-03-01
+NW-WRAP-18;Stretch film 18 micron roll;roll;7,95;12;2026-01-01
+NW-TAPE-48;Packing tape 48 mm x 66 m;pack of 6;8,10;10;2026-01-01
+NW-LBL-A6;Thermal label roll A6, 500 labels;roll;5,30;20;2026-01-01
+NW-STRAP-PP;Polypropylene strapping 12 mm x 1000 m;roll;24,00;4;2026-01-01
+STO-PAL-WK;Pallet storage per week;per pallet;3,20;;2026-01-01
+FUEL-SUR;Fuel surcharge;percent of freight;6,5;;2026-05-01
