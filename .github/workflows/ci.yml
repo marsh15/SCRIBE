@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+
+  python:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: scribe
+          POSTGRES_PASSWORD: scribe
+          POSTGRES_DB: scribe
+        ports:
+          - 54329:5432
+        options: >-
+          --health-cmd "pg_isready -U scribe -d scribe"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL_TEST: postgresql://scribe:scribe@localhost:54329/scribe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      # Drizzle owns the schema; replay its SQL so the schema-contract test can run.
+      - name: Apply Drizzle migrations to test database
+        run: scripts/apply-migrations.sh
+      - run: uv sync
+        working-directory: intelligence
+      - run: uv run pytest -v
+        working-directory: intelligence

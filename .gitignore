@@ -15,3 +15,4 @@ build/
 *.tsbuildinfo
 next-env.d.ts
 .env*.local
+.pytest_cache/

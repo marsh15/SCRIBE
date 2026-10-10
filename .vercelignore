@@ -1,0 +1,6 @@
+intelligence/tests
+intelligence/.venv
+intelligence/.pytest_cache
+**/__pycache__
+docker-compose.yml
+.github

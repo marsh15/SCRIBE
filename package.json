@@ -41,6 +41,7 @@
     "drizzle-orm": "^0.45.1",
     "embla-carousel-react": "^8.6.0",
     "input-otp": "^1.4.2",
+    "jose": "^6.2.12",
     "lucide-react": "^0.563.0",
     "mammoth": "^1.11.0",
     "media-chrome": "^4.17.2",
