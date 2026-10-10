@@ -14,6 +14,12 @@ import {
   uniqueIndex,
   uuid,
   primaryKey,
+  customType,
+  check,
+  unique,
+  foreignKey,
+  real,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 export const SOURCE_STATUSES = [
@@ -79,6 +85,17 @@ export const files = pgTable(
     status: text("status", { enum: SOURCE_STATUSES }).default("ready").notNull(),
     processingError: text("processing_error"),
     textBytes: integer("text_bytes"),
+    // Scribe 2.0 (T08): soft delete + version pointers. FKs to source_versions
+    // are added in migration 0010 after that table exists.
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    desiredVersionId: uuid("desired_version_id").references(
+      (): AnyPgColumn => sourceVersions.id,
+      { onDelete: "set null" }
+    ),
+    activeVersionId: uuid("active_version_id").references(
+      (): AnyPgColumn => sourceVersions.id,
+      { onDelete: "set null" }
+    ),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -315,6 +332,17 @@ export const ingestionJobs = pgTable(
     attempts: integer("attempts").default(0).notNull(),
     lastError: text("last_error"),
     nextRetryAt: timestamp("next_retry_at"),
+    // Scribe 2.0 (T08): per-version jobs with lease fencing (Design B3).
+    sourceVersionId: uuid("source_version_id").references(
+      () => sourceVersions.id,
+      { onDelete: "set null" }
+    ),
+    generationId: uuid("generation_id").references(() => indexGenerations.id, {
+      onDelete: "set null",
+    }),
+    leaseToken: uuid("lease_token"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    errorCode: text("error_code"),
     startedAt: timestamp("started_at"),
     finishedAt: timestamp("finished_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -327,6 +355,554 @@ export const ingestionJobs = pgTable(
       table.nextRetryAt,
       table.createdAt
     ),
+  })
+);
+
+// ---------------------------------------------------------------------------
+// Scribe 2.0 (T08): source versions, profiles, index generations, chunks,
+// retrieval/evidence/eval tables. Design B2, ADR-0011. RLS is T15, not here.
+// Hand-written idempotent SQL lives in drizzle/0010_*.sql and 0011_*.sql;
+// triggers (immutability) exist only there because Drizzle cannot express them.
+// ---------------------------------------------------------------------------
+
+const tsvector = customType<{ data: string }>({
+  dataType() {
+    return "tsvector";
+  },
+});
+
+const tstz = (name: string) => timestamp(name, { withTimezone: true });
+
+export const UPLOAD_STATES = ["uploading", "stored", "failed"] as const;
+export type UploadState = (typeof UPLOAD_STATES)[number];
+
+export const GENERATION_STATUSES = [
+  "BUILDING",
+  "READY",
+  "ACTIVE",
+  "SUPERSEDED",
+  "FAILED",
+  "CANCELLED",
+] as const;
+export type GenerationStatus = (typeof GENERATION_STATUSES)[number];
+
+export const sourceVersions = pgTable(
+  "source_versions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sourceId: integer("source_id")
+      .references(() => files.id, { onDelete: "cascade" })
+      .notNull(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id)
+      .notNull(),
+    versionNumber: integer("version_number").notNull(),
+    storageKey: text("storage_key"),
+    sha256: text("sha256"),
+    sizeBytes: bigint("size_bytes", { mode: "number" }),
+    mimeType: text("mime_type"),
+    uploadState: text("upload_state", { enum: UPLOAD_STATES })
+      .default("uploading")
+      .notNull(),
+    duplicateOf: uuid("duplicate_of").references(
+      (): AnyPgColumn => sourceVersions.id,
+      { onDelete: "set null" }
+    ),
+    createdBy: text("created_by"),
+    createdAt: tstz("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    versionUnique: uniqueIndex("source_versions_source_id_version_number_unique").on(
+      table.sourceId,
+      table.versionNumber
+    ),
+    // Target for composite FKs that must agree on the owning source.
+    // (a UNIQUE constraint, not an index, so drizzle-kit emits it inside CREATE
+    // TABLE and the FK ALTERs that follow can reference it.)
+    idSourceUnique: unique("source_versions_id_source_id_unique").on(
+      table.id,
+      table.sourceId
+    ),
+    workspaceIndex: index("source_versions_workspace_id_index").on(table.workspaceId),
+    sourceShaIndex: index("source_versions_source_id_sha256_index").on(
+      table.sourceId,
+      table.sha256
+    ),
+    versionPositive: check("source_versions_version_number_check", sql`${table.versionNumber} > 0`),
+    uploadStateCheck: check(
+      "source_versions_upload_state_check",
+      sql`${table.uploadState} IN ('uploading', 'stored', 'failed')`
+    ),
+  })
+);
+
+export const embeddingProfiles = pgTable(
+  "embedding_profiles",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    dimensions: integer("dimensions").notNull(),
+    normalized: boolean("normalized").default(true).notNull(),
+    config: jsonb("config").default(sql`'{}'::jsonb`).notNull(),
+    configHash: text("config_hash").notNull(),
+    createdAt: tstz("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    nameUnique: uniqueIndex("embedding_profiles_name_unique").on(table.name),
+  })
+);
+
+export const chunkProfiles = pgTable(
+  "chunk_profiles",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    config: jsonb("config").default(sql`'{}'::jsonb`).notNull(),
+    configHash: text("config_hash").notNull(),
+    createdAt: tstz("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    nameUnique: uniqueIndex("chunk_profiles_name_unique").on(table.name),
+  })
+);
+
+export const indexProfiles = pgTable(
+  "index_profiles",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    parserProfile: text("parser_profile").notNull(),
+    chunkProfileId: uuid("chunk_profile_id")
+      .references(() => chunkProfiles.id)
+      .notNull(),
+    embeddingProfileId: uuid("embedding_profile_id")
+      .references(() => embeddingProfiles.id)
+      .notNull(),
+    config: jsonb("config").default(sql`'{}'::jsonb`).notNull(),
+    createdAt: tstz("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    nameUnique: uniqueIndex("index_profiles_name_unique").on(table.name),
+  })
+);
+
+export const retrievalProfiles = pgTable(
+  "retrieval_profiles",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    config: jsonb("config").default(sql`'{}'::jsonb`).notNull(),
+    configHash: text("config_hash").notNull(),
+    createdAt: tstz("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    nameUnique: uniqueIndex("retrieval_profiles_name_unique").on(table.name),
+  })
+);
+
+export const indexGenerations = pgTable(
+  "index_generations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    // source_id is denormalised from source_versions so "one ACTIVE generation
+    // per (source, index profile)" can be a plain partial unique index.
+    sourceId: integer("source_id")
+      .references(() => files.id, { onDelete: "cascade" })
+      .notNull(),
+    sourceVersionId: uuid("source_version_id").notNull(),
+    indexProfileId: uuid("index_profile_id")
+      .references(() => indexProfiles.id)
+      .notNull(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id)
+      .notNull(),
+    status: text("status", { enum: GENERATION_STATUSES }).default("BUILDING").notNull(),
+    expectedChunks: integer("expected_chunks").default(0).notNull(),
+    embeddedChunks: integer("embedded_chunks").default(0).notNull(),
+    errorCode: text("error_code"),
+    createdAt: tstz("created_at").defaultNow().notNull(),
+    updatedAt: tstz("updated_at").defaultNow().notNull(),
+    readyAt: tstz("ready_at"),
+    activatedAt: tstz("activated_at"),
+    supersededAt: tstz("superseded_at"),
+  },
+  (table) => ({
+    versionFk: foreignKey({
+      name: "index_generations_source_version_source_fk",
+      columns: [table.sourceVersionId, table.sourceId],
+      foreignColumns: [sourceVersions.id, sourceVersions.sourceId],
+    }).onDelete("cascade"),
+    statusCheck: check(
+      "index_generations_status_check",
+      sql`${table.status} IN ('BUILDING','READY','ACTIVE','SUPERSEDED','FAILED','CANCELLED')`
+    ),
+    countsCheck: check(
+      "index_generations_counts_check",
+      sql`${table.expectedChunks} >= 0 AND ${table.embeddedChunks} >= 0`
+    ),
+    versionProfileUnique: uniqueIndex("index_generations_version_profile_unique").on(
+      table.sourceVersionId,
+      table.indexProfileId
+    ),
+    // INV-4: at most one ACTIVE generation per (source, index profile).
+    oneActiveUnique: uniqueIndex("index_generations_one_active_unique")
+      .on(table.sourceId, table.indexProfileId)
+      .where(sql`${table.status} = 'ACTIVE'`),
+    // Target for active_indexes' composite FK.
+    pointerTarget: unique("index_generations_id_source_profile_unique").on(
+      table.id,
+      table.sourceId,
+      table.indexProfileId
+    ),
+    workspaceIndex: index("index_generations_workspace_id_index").on(table.workspaceId),
+    statusIndex: index("index_generations_status_index").on(table.status),
+  })
+);
+
+export const activeIndexes = pgTable(
+  "active_indexes",
+  {
+    sourceId: integer("source_id")
+      .references(() => files.id, { onDelete: "cascade" })
+      .notNull(),
+    indexProfileId: uuid("index_profile_id")
+      .references(() => indexProfiles.id)
+      .notNull(),
+    generationId: uuid("generation_id").notNull(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id)
+      .notNull(),
+    activatedAt: tstz("activated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.sourceId, table.indexProfileId] }),
+    generationFk: foreignKey({
+      name: "active_indexes_generation_fk",
+      columns: [table.generationId, table.sourceId, table.indexProfileId],
+      foreignColumns: [
+        indexGenerations.id,
+        indexGenerations.sourceId,
+        indexGenerations.indexProfileId,
+      ],
+    }).onDelete("cascade"),
+    workspaceIndex: index("active_indexes_workspace_id_index").on(table.workspaceId),
+    generationIndex: index("active_indexes_generation_id_index").on(table.generationId),
+  })
+);
+
+export const documentBlocks = pgTable(
+  "document_blocks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sourceVersionId: uuid("source_version_id")
+      .references(() => sourceVersions.id, { onDelete: "cascade" })
+      .notNull(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id)
+      .notNull(),
+    blockIndex: integer("block_index").notNull(),
+    type: text("type").notNull(),
+    text: text("text").notNull(),
+    headingPath: text("heading_path").array(),
+    page: integer("page"),
+    bbox: real("bbox").array(),
+    ocr: boolean("ocr").default(false).notNull(),
+    rowNumber: integer("row_number"),
+    charStart: integer("char_start"),
+    charEnd: integer("char_end"),
+    meta: jsonb("meta"),
+  },
+  (table) => ({
+    blockUnique: uniqueIndex("document_blocks_source_version_id_block_index_unique").on(
+      table.sourceVersionId,
+      table.blockIndex
+    ),
+    workspaceIndex: index("document_blocks_workspace_id_index").on(table.workspaceId),
+    bboxCheck: check(
+      "document_blocks_bbox_check",
+      sql`${table.bbox} IS NULL OR cardinality(${table.bbox}) = 4`
+    ),
+  })
+);
+
+export const chunks = pgTable(
+  "chunks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    generationId: uuid("generation_id")
+      .references(() => indexGenerations.id, { onDelete: "cascade" })
+      .notNull(),
+    sourceVersionId: uuid("source_version_id")
+      .references(() => sourceVersions.id, { onDelete: "cascade" })
+      .notNull(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id)
+      .notNull(),
+    parentId: uuid("parent_id").references((): AnyPgColumn => chunks.id, {
+      onDelete: "set null",
+    }),
+    chunkIndex: integer("chunk_index").notNull(),
+    content: text("content").notNull(),
+    headingText: text("heading_text"),
+    contentHash: text("content_hash").notNull(),
+    tokenCount: integer("token_count"),
+    ftsEn: tsvector("fts_en").generatedAlwaysAs(
+      sql`setweight(to_tsvector('english', coalesce(heading_text,'')),'A') || setweight(to_tsvector('english', content),'B')`
+    ),
+    ftsSimple: tsvector("fts_simple").generatedAlwaysAs(
+      sql`to_tsvector('simple', coalesce(heading_text,'') || ' ' || content)`
+    ),
+  },
+  (table) => ({
+    // Parents and children share one chunk_index sequence per generation.
+    chunkUnique: uniqueIndex("chunks_generation_id_chunk_index_unique").on(
+      table.generationId,
+      table.chunkIndex
+    ),
+    workspaceIndex: index("chunks_workspace_id_index").on(table.workspaceId),
+    generationIndex: index("chunks_generation_id_index").on(table.generationId),
+    sourceVersionIndex: index("chunks_source_version_id_index").on(table.sourceVersionId),
+    parentIndex: index("chunks_parent_id_index").on(table.parentId),
+    contentHashIndex: index("chunks_content_hash_index").on(table.contentHash),
+    ftsEnIndex: index("chunks_fts_en_gin").using("gin", table.ftsEn),
+    ftsSimpleIndex: index("chunks_fts_simple_gin").using("gin", table.ftsSimple),
+  })
+);
+
+export const chunkSourceSpans = pgTable(
+  "chunk_source_spans",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    chunkId: uuid("chunk_id")
+      .references(() => chunks.id, { onDelete: "cascade" })
+      .notNull(),
+    blockId: uuid("block_id")
+      .references(() => documentBlocks.id, { onDelete: "cascade" })
+      .notNull(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id)
+      .notNull(),
+    charStart: integer("char_start"),
+    charEnd: integer("char_end"),
+    page: integer("page"),
+    bbox: real("bbox").array(),
+  },
+  (table) => ({
+    chunkIndex: index("chunk_source_spans_chunk_id_index").on(table.chunkId),
+    blockIndex: index("chunk_source_spans_block_id_index").on(table.blockId),
+    workspaceIndex: index("chunk_source_spans_workspace_id_index").on(table.workspaceId),
+  })
+);
+
+export const chunkEmbeddings1536 = pgTable(
+  "chunk_embeddings_1536",
+  {
+    chunkId: uuid("chunk_id")
+      .references(() => chunks.id, { onDelete: "cascade" })
+      .primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id)
+      .notNull(),
+    embeddingProfileId: uuid("embedding_profile_id")
+      .references(() => embeddingProfiles.id)
+      .notNull(),
+    embedding: vector("embedding", { dimensions: 1536 }).notNull(),
+  },
+  (table) => ({
+    workspaceIndex: index("chunk_embeddings_1536_workspace_id_index").on(table.workspaceId),
+    hnsw: index("chunk_embeddings_1536_hnsw")
+      .using("hnsw", table.embedding.op("vector_cosine_ops"))
+      .with({ m: 16, ef_construction: 64 }),
+  })
+);
+
+// Legacy 3072-dim vectors: exact search only. pgvector HNSW/IVFFlat cap at 2000
+// dimensions, so there is deliberately NO ANN index on this table.
+export const chunkEmbeddings3072 = pgTable(
+  "chunk_embeddings_3072",
+  {
+    chunkId: uuid("chunk_id")
+      .references(() => chunks.id, { onDelete: "cascade" })
+      .primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id)
+      .notNull(),
+    embeddingProfileId: uuid("embedding_profile_id")
+      .references(() => embeddingProfiles.id)
+      .notNull(),
+    embedding: vector("embedding", { dimensions: 3072 }).notNull(),
+  },
+  (table) => ({
+    workspaceIndex: index("chunk_embeddings_3072_workspace_id_index").on(table.workspaceId),
+  })
+);
+
+export const retrievalTraces = pgTable(
+  "retrieval_traces",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id)
+      .notNull(),
+    chatId: text("chat_id").references(() => chats.id, { onDelete: "set null" }),
+    messageId: text("message_id").references(() => chatMessages.id, {
+      onDelete: "set null",
+    }),
+    query: text("query").notNull(),
+    profileId: uuid("profile_id").references(() => retrievalProfiles.id),
+    configHash: text("config_hash"),
+    status: text("status").default("started").notNull(),
+    degraded: text("degraded"),
+    stageMs: jsonb("stage_ms"),
+    counts: jsonb("counts"),
+    cost: jsonb("cost"),
+    createdAt: tstz("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    workspaceCreatedIndex: index("retrieval_traces_workspace_created_at_index").on(
+      table.workspaceId,
+      table.createdAt
+    ),
+    chatIndex: index("retrieval_traces_chat_id_index").on(table.chatId),
+    messageIndex: index("retrieval_traces_message_id_index").on(table.messageId),
+  })
+);
+
+export const retrievalCandidates = pgTable(
+  "retrieval_candidates",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    traceId: uuid("trace_id")
+      .references(() => retrievalTraces.id, { onDelete: "cascade" })
+      .notNull(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id)
+      .notNull(),
+    // SET NULL: a purged chunk must not delete the historical trace row.
+    chunkId: uuid("chunk_id").references(() => chunks.id, { onDelete: "set null" }),
+    denseRank: integer("dense_rank"),
+    denseScore: doublePrecision("dense_score"),
+    lexicalRank: integer("lexical_rank"),
+    lexicalScore: doublePrecision("lexical_score"),
+    fusionRank: integer("fusion_rank"),
+    rerankRank: integer("rerank_rank"),
+    rerankScore: doublePrecision("rerank_score"),
+    selected: boolean("selected").default(false).notNull(),
+  },
+  (table) => ({
+    traceIndex: index("retrieval_candidates_trace_id_index").on(table.traceId),
+    chunkIndex: index("retrieval_candidates_chunk_id_index").on(table.chunkId),
+    workspaceIndex: index("retrieval_candidates_workspace_id_index").on(table.workspaceId),
+  })
+);
+
+export const evidenceBundles = pgTable(
+  "evidence_bundles",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    traceId: uuid("trace_id")
+      .references(() => retrievalTraces.id, { onDelete: "cascade" })
+      .notNull(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id)
+      .notNull(),
+    answerability: text("answerability").notNull(),
+    topRerankScore: doublePrecision("top_rerank_score"),
+    createdAt: tstz("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    traceIndex: index("evidence_bundles_trace_id_index").on(table.traceId),
+    workspaceIndex: index("evidence_bundles_workspace_id_index").on(table.workspaceId),
+  })
+);
+
+export const evidenceItems = pgTable(
+  "evidence_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    bundleId: uuid("bundle_id")
+      .references(() => evidenceBundles.id, { onDelete: "cascade" })
+      .notNull(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id)
+      .notNull(),
+    label: text("label").notNull(),
+    chunkId: uuid("chunk_id").references(() => chunks.id, { onDelete: "set null" }),
+    sourceVersionId: uuid("source_version_id").references(() => sourceVersions.id, {
+      onDelete: "set null",
+    }),
+    quote: text("quote").notNull(),
+    quoteHash: text("quote_hash").notNull(),
+    pageStart: integer("page_start"),
+    pageEnd: integer("page_end"),
+    headingPath: text("heading_path").array(),
+  },
+  (table) => ({
+    bundleLabelUnique: uniqueIndex("evidence_items_bundle_id_label_unique").on(
+      table.bundleId,
+      table.label
+    ),
+    workspaceIndex: index("evidence_items_workspace_id_index").on(table.workspaceId),
+    chunkIndex: index("evidence_items_chunk_id_index").on(table.chunkId),
+  })
+);
+
+export const claimVerifications = pgTable(
+  "claim_verifications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id)
+      .notNull(),
+    messageId: text("message_id").references(() => chatMessages.id, {
+      onDelete: "cascade",
+    }),
+    bundleIds: uuid("bundle_ids").array(),
+    claimText: text("claim_text").notNull(),
+    labels: text("labels").array(),
+    deterministicOk: boolean("deterministic_ok"),
+    status: text("status").notNull(),
+    verifierModel: text("verifier_model"),
+    promptVersion: text("prompt_version"),
+    createdAt: tstz("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    messageIndex: index("claim_verifications_message_id_index").on(table.messageId),
+    workspaceIndex: index("claim_verifications_workspace_id_index").on(table.workspaceId),
+  })
+);
+
+// Eval tables are global (not workspace-owned): runs measure profiles against
+// datasets held in the eval workspace, so they carry no workspace_id.
+export const evalRuns = pgTable("eval_runs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  datasetVersion: text("dataset_version").notNull(),
+  split: text("split").notNull(),
+  profileId: uuid("profile_id").references(() => retrievalProfiles.id),
+  configHash: text("config_hash"),
+  codeCommit: text("code_commit"),
+  // INV-11: model ids, prompt versions, etc.
+  meta: jsonb("meta"),
+  startedAt: tstz("started_at").defaultNow().notNull(),
+  finishedAt: tstz("finished_at"),
+});
+
+export const evalResults = pgTable(
+  "eval_results",
+  {
+    runId: uuid("run_id")
+      .references(() => evalRuns.id, { onDelete: "cascade" })
+      .notNull(),
+    caseId: text("case_id").notNull(),
+    metrics: jsonb("metrics"),
+    ranking: jsonb("ranking"),
+    latencyMs: integer("latency_ms"),
+    cost: jsonb("cost"),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.runId, table.caseId] }),
   })
 );
 
@@ -356,3 +932,9 @@ export type InsertPaymentEvent = typeof paymentEvents.$inferInsert;
 export type SelectPaymentEvent = typeof paymentEvents.$inferSelect;
 export type InsertIngestionJob = typeof ingestionJobs.$inferInsert;
 export type SelectIngestionJob = typeof ingestionJobs.$inferSelect;
+export type SelectSourceVersion = typeof sourceVersions.$inferSelect;
+export type InsertSourceVersion = typeof sourceVersions.$inferInsert;
+export type SelectIndexGeneration = typeof indexGenerations.$inferSelect;
+export type InsertIndexGeneration = typeof indexGenerations.$inferInsert;
+export type SelectChunk = typeof chunks.$inferSelect;
+export type InsertChunk = typeof chunks.$inferInsert;
