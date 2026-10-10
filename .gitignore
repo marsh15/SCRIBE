@@ -16,3 +16,6 @@ build/
 next-env.d.ts
 .env*.local
 .pytest_cache/
+
+# scribe-eval run outputs
+benchmarks/runs/
