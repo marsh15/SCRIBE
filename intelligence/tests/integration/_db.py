@@ -10,6 +10,36 @@ CORPUS = REPO / "fixtures" / "corpus"
 GOLDEN = REPO / "benchmarks" / "datasets" / "golden-v1" / "cases.jsonl"
 
 
+# Workspaces that outlive a single test module on purpose (process-wide caches such as the T13 eval corpus).
+# The module-level purge skips them; the session-level purge removes everything created in the run.
+PROTECTED_WORKSPACES: set[str] = set()
+
+# Delete order for workspace-scoped rows. `files` cascades to source_versions / index_generations /
+# active_indexes / documents / ingestion_jobs; the explicit leftovers pass catches anything inserted
+# without a file. Seeded profile tables (retrieval/embedding/index/chunk profiles) are never touched.
+_PURGE_FIRST = ("retrieval_traces", "retrieval_candidates", "evidence_items", "evidence_bundles", "rag_traces",
+                "claim_verifications", "chats", "chunk_source_spans", "chunk_embeddings_1536",
+                "chunk_embeddings_3072", "chunks", "files")
+_PURGE_LEFTOVERS = ("active_indexes", "document_blocks", "index_generations", "source_versions",
+                    "workspace_members")
+
+
+def workspace_ids(url: str) -> set[str]:
+    with psycopg.connect(url, autocommit=True) as c:
+        return {str(r[0]) for r in c.execute("select id from workspaces").fetchall()}
+
+
+def purge_workspaces(url: str, wids) -> None:
+    """Delete every row belonging to the given workspaces (and the workspaces), in dependency order."""
+    wids = sorted(set(wids))
+    if not wids:
+        return
+    with psycopg.connect(url, autocommit=True) as c:
+        for table in _PURGE_FIRST + _PURGE_LEFTOVERS:
+            c.execute(f"delete from {table} where workspace_id = any(%s::uuid[])", (wids,))
+        c.execute("delete from workspaces where id = any(%s::uuid[])", (wids,))
+
+
 async def aconnect(url: str) -> psycopg.AsyncConnection:
     return await psycopg.AsyncConnection.connect(url, autocommit=True, prepare_threshold=None)
 

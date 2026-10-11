@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Any, Callable
 
 from scribe_ingest.tokens import count_tokens as default_count_tokens
 
@@ -32,6 +32,7 @@ class PipelineResult:
     counts: dict[str, int]
     degraded: list[str] = field(default_factory=list)
     answerability_inputs: dict[str, float | None] = field(default_factory=dict)
+    extra: dict[str, Any] = field(default_factory=dict)  # e.g. rerank_error (provider error code)
 
 
 async def run_pipeline(
@@ -47,6 +48,7 @@ async def run_pipeline(
     stage_ms: dict[str, float] = {}
     counts: dict[str, int] = {}
     degraded: list[str] = []
+    extra: dict[str, Any] = {}
 
     def lap(name: str, t0: float) -> None:
         stage_ms[name] = round((time.perf_counter() - t0) * 1000, 3)
@@ -68,7 +70,7 @@ async def run_pipeline(
             degraded.append(DEGRADED_RERANK)
         else:
             ranked, deg = await rerank_candidates(
-                reranker, query, ranked, cfg.rerank_top_n, count_tokens=count_tokens
+                reranker, query, ranked, cfg.rerank_top_n, count_tokens=count_tokens, error_info=extra
             )
             degraded.extend(deg)
             reranked = [r for r in ranked if r.rerank_rank is not None]
@@ -109,10 +111,11 @@ async def run_pipeline(
     in_context = {e.item.chunk_id for e in packed.entries}
     for e in packed.entries:
         in_context.update(e.merged_chunk_ids)
+        in_context.update(e.duplicates)  # hash duplicates are represented by the kept chunk's text
     for r in ranked:
         r.selected = r.chunk_id in in_context
 
     return PipelineResult(
         packed=packed, ranked=ranked, stage_ms=stage_ms, counts=counts, degraded=degraded,
-        answerability_inputs={"top_rerank_score": top_score},
+        answerability_inputs={"top_rerank_score": top_score}, extra=extra,
     )

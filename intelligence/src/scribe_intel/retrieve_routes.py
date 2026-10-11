@@ -1,8 +1,8 @@
 """POST /retrieve (T13). Scope `retrieve`; the workspace comes from the token only (INV-15).
 
 Errors are JSON objects ``{"error_code", "message", "retryable"}``: 422 validation (FastAPI default
-body), 404 UNKNOWN_PROFILE, 503 RETRIEVAL_FAILED (embedding provider or database failure: never a
-silent empty result, INV-16/B4). A retrieval trace is written in a separate short transaction after
+body), 404 UNKNOWN_PROFILE, 500 RERANK_CACHE_MISS (replay-mode configuration problem), 503
+RETRIEVAL_FAILED (embedding provider or database failure: never a silent empty result, INV-16/B4). A retrieval trace is written in a separate short transaction after
 the read snapshot closes; if that write fails the response still succeeds and carries the degraded flag
 ``trace_persist_failed``. Document text is never logged (INV-13).
 """
@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import time
 import uuid
 from typing import Any
@@ -23,13 +24,16 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from scribe_ingest.embedding import (Embedder, EmbeddingError, FakeEmbedder, FakeEmbedderRefused,
-                                     GeminiEmbedder, TaskFormat, embedder_from_env)
+                                     GeminiEmbedder, TaskFormat, database_name, embedder_from_env)
 
 from .auth import Principal, require_scope
 from .config import get_settings
 from .db import get_pool
+from .retrieval.profiles import BY_NAME
 from .retrieval.registry import DEFAULT_PROFILE, RetrieveContext, StrategyResult, get_handler, profile_names
-from .retrieval.types import RankedCandidate
+from .retrieval.packing import PackedContext
+from .retrieval.rerank import CacheMiss, FakeReranker, VoyageReranker
+from .retrieval.types import RankedCandidate, SpanRef
 
 router = APIRouter()
 log = logging.getLogger("scribe.retrieve")
@@ -71,6 +75,58 @@ def make_embedder_for(dsn: str):
     return embedder_for
 
 
+class FakeRerankerRefused(RuntimeError):
+    pass
+
+
+def make_reranker_for(dsn: str, env: "os._Environ[str] | dict[str, str] | None" = None):
+    """model name -> Reranker | None.
+
+    SCRIBE_RERANKER=voyage (default): VoyageReranker(model) (reads VOYAGE_API_KEY itself; without a key
+    it raises AUTH on use, which the pipeline turns into the degraded flag `rerank_unavailable`, no
+    request is made); fake: FakeReranker, only with SCRIBE_ALLOW_FAKE_RERANKER=1 AND a database whose
+    name contains 'test' (else FakeRerankerRefused, raised here so the route fails fast); none: no
+    reranker (profiles that rerank degrade to fused order)."""
+    env = os.environ if env is None else env
+    kind = (env.get("SCRIBE_RERANKER") or "voyage").lower()
+    if kind == "voyage":
+        return lambda model: VoyageReranker(model=model)
+    if kind == "none":
+        return lambda model: None
+    if kind == "fake":
+        name = database_name(dsn)
+        if env.get("SCRIBE_ALLOW_FAKE_RERANKER") != "1" or "test" not in name.lower():
+            raise FakeRerankerRefused(
+                "REFUSING to use the fake reranker: it requires SCRIBE_ALLOW_FAKE_RERANKER=1 and a database "
+                f"whose name contains 'test' (database is {name!r}).")
+        return lambda model: FakeReranker()
+    raise ValueError(f"SCRIBE_RERANKER must be voyage|fake|none, got {kind!r}")
+
+
+def span_json(s: SpanRef) -> dict[str, Any]:
+    return {"block_id": str(s.block_id), "block_index": s.block_index, "char_start": s.char_start,
+            "char_end": s.char_end, "page": s.page, "bbox": list(s.bbox) if s.bbox else None,
+            "ocr": s.ocr, "row_number": s.row_number}
+
+
+def context_json(p: PackedContext) -> dict[str, Any]:
+    return {
+        "budget_tokens": p.budget_tokens, "used_tokens": p.used_tokens,
+        "entries": [{
+            "chunk_id": str(e.item.chunk_id), "parent_id": str(e.item.parent_id) if e.item.parent_id else None,
+            "text": e.item.text, "heading_text": e.item.heading_text, "doc_name": e.item.doc_name,
+            "source_id": e.item.source_id, "source_version_id": str(e.item.source_version_id),
+            "token_count": e.item.token_count, "rerank_score": e.item.rerank_score,
+            "expanded_from_parent": e.item.expanded_from_parent,
+            "merged_chunk_ids": [str(x) for x in e.merged_chunk_ids],
+            "duplicates": [str(x) for x in e.duplicates],
+            "spans": [span_json(s) for s in e.item.spans],
+        } for e in p.entries],
+        "dropped": [{"chunk_id": str(d.chunk_id), "reason": d.reason, "token_count": d.token_count}
+                    for d in p.dropped],
+    }
+
+
 def candidate_json(rank: int, rc: RankedCandidate) -> dict[str, Any]:
     c = rc.candidate
     return {
@@ -83,12 +139,20 @@ def candidate_json(rank: int, rc: RankedCandidate) -> dict[str, Any]:
         "rerank_rank": rc.rerank_rank, "rerank_score": rc.rerank_score,
         "source_id": c.source_id, "source_version_id": str(c.source_version_id),
         "generation_id": str(c.generation_id), "content_hash": c.content_hash, "token_count": c.token_count,
-        "spans": [{"block_id": str(s.block_id), "block_index": s.block_index, "char_start": s.char_start,
-                   "char_end": s.char_end, "page": s.page, "bbox": list(s.bbox) if s.bbox else None,
-                   "ocr": s.ocr, "row_number": s.row_number} for s in c.spans],
+        "spans": [span_json(s) for s in c.spans],
         "provenance": {"source_id": c.source_id, "source_version_id": str(c.source_version_id),
                        "generation_id": str(c.generation_id), "chunk_id": str(c.chunk_id), "doc_name": c.doc_name},
     }
+
+
+def trace_config_hash(body: RetrieveBody) -> str:
+    """sha256 of the request-level knobs. For a seeded retrieval_profiles profile the profile's own
+    config hash replaces its name, so the hash pins the exact immutable config and is the same for
+    ok and failed traces of one request."""
+    seed = BY_NAME.get(body.profile)
+    key: dict[str, Any] = {"profile": seed.config_hash if seed is not None else body.profile,
+                           "limit": body.limit, "source_ids": body.source_ids}
+    return hashlib.sha256(json.dumps(key, sort_keys=True).encode()).hexdigest()
 
 
 async def persist_trace(pool, wid: str, body: RetrieveBody, status: str, *, result: StrategyResult | None,
@@ -98,16 +162,21 @@ async def persist_trace(pool, wid: str, body: RetrieveBody, status: str, *, resu
     if result is not None:
         counts.update(result.counts)
         counts.update(result.extra)
-    cfg_hash = hashlib.sha256(json.dumps({"profile": body.profile, "limit": body.limit,
-                                          "source_ids": body.source_ids}, sort_keys=True).encode()).hexdigest()
+    # config_hash is identical for ok and failed traces of the same request (see trace_config_hash);
+    # profile_id is linked by (name, config_hash) so a stale same-name row can never be linked.
+    seed = BY_NAME.get(body.profile)
+    cfg_hash = trace_config_hash(body)
+    profile_name, profile_hash = (seed.name, seed.config_hash) if seed is not None else (None, None)
+    packed = result is not None and result.packed is not None
     async with pool.connection() as conn:
         async with conn.transaction():
             await conn.execute("select set_config('app.workspace_id', %s, true)", (wid,))
             cur = await conn.execute(
-                "insert into retrieval_traces(workspace_id, query, config_hash, status, degraded, stage_ms, counts) "
-                "values (%s,%s,%s,%s,%s,%s,%s) returning id",
+                "insert into retrieval_traces(workspace_id, query, config_hash, status, degraded, stage_ms, counts, "
+                "profile_id) values (%s,%s,%s,%s,%s,%s,%s, (select id from retrieval_profiles "
+                "where name = %s and config_hash = %s)) returning id",
                 (wid, body.query, cfg_hash, status, ",".join(degraded) or None,
-                 Jsonb(stage_ms), Jsonb(counts)))
+                 Jsonb(stage_ms), Jsonb(counts), profile_name, profile_hash))
             trace_id = (await cur.fetchone())[0]
             if result is not None and result.ranked:
                 async with conn.cursor() as c2:
@@ -116,7 +185,7 @@ async def persist_trace(pool, wid: str, body: RetrieveBody, status: str, *, resu
                         "lexical_rank, lexical_score, fusion_rank, rerank_rank, rerank_score, selected) "
                         "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                         [(trace_id, wid, rc.chunk_id, rc.dense_rank, rc.dense_score, rc.lexical_rank, rc.lexical_score,
-                          rc.fusion_rank, rc.rerank_rank, rc.rerank_score, i < body.limit)
+                          rc.fusion_rank, rc.rerank_rank, rc.rerank_score, rc.selected if packed else i < body.limit)
                          for i, rc in enumerate(result.ranked)])
     return trace_id
 
@@ -146,14 +215,24 @@ async def retrieve(body: RetrieveBody, principal: Principal = Depends(require_sc
     except RuntimeError:
         return _error(503, "RETRIEVAL_FAILED", "database unavailable", True)
 
+    try:
+        reranker_for = make_reranker_for(settings.dsn)
+    except FakeRerankerRefused as exc:
+        return _error(500, "FAKE_RERANKER_REFUSED", str(exc), False)
+    except ValueError as exc:
+        return _error(500, "RERANKER_MISCONFIGURED", str(exc), False)
+
     ctx = RetrieveContext(pool=pool, workspace_id=wid, query=body.query, source_ids=body.source_ids,
-                          limit=body.limit, embedder_for=embedder_for)
+                          limit=body.limit, embedder_for=embedder_for, reranker_for=reranker_for)
     try:
         result = await handler(ctx)
-    except (EmbeddingError, psycopg.Error, LookupError, OSError) as exc:
+    except (EmbeddingError, CacheMiss, psycopg.Error, LookupError, OSError) as exc:
         # message carries only the error class/code, never query or document text (INV-13)
         code = exc.code if isinstance(exc, EmbeddingError) else type(exc).__name__
-        retryable = exc.retryable if isinstance(exc, EmbeddingError) else not isinstance(exc, LookupError)
+        cache_miss = isinstance(exc, CacheMiss)
+        # CacheMiss (replay mode) is a configuration problem, never silently degraded: loud and non-retryable
+        retryable = (exc.retryable if isinstance(exc, EmbeddingError)
+                     else not isinstance(exc, (LookupError, CacheMiss)))
         log.warning("retrieval failed profile=%s workspace=%s cause=%s", body.profile, wid, code)
         trace_id = None
         try:
@@ -162,6 +241,9 @@ async def retrieve(body: RetrieveBody, principal: Principal = Depends(require_sc
                                                degraded=[]))
         except Exception:  # noqa: BLE001
             log.warning("trace persist failed (failed retrieval) workspace=%s", wid)
+        if cache_miss:
+            return _error(500, "RERANK_CACHE_MISS", "rerank cache miss in replay mode (configuration problem)",
+                          False, cause=code, trace_id=trace_id)
         msg = ("embedding provider failed" if isinstance(exc, EmbeddingError) else "retrieval backend failed")
         return _error(503, "RETRIEVAL_FAILED", f"{msg} ({code})", retryable, cause=code, trace_id=trace_id)
 
@@ -178,8 +260,11 @@ async def retrieve(body: RetrieveBody, principal: Principal = Depends(require_sc
         degraded.append("trace_persist_failed")
     stage_ms["trace_persist"] = int((time.monotonic() - t) * 1000)
     stage_ms["request_total"] = int((time.monotonic() - started) * 1000)
-    return {
+    out: dict[str, Any] = {
         "profile": body.profile, "trace_id": trace_id, "degraded": degraded,
         "candidates": [candidate_json(i, rc) for i, rc in enumerate(returned, 1)],
         "stage_ms": stage_ms, "counts": {**result.counts, "returned": len(returned)}, "meta": result.extra,
     }
+    if result.packed is not None:
+        out["context"] = context_json(result.packed)
+    return out

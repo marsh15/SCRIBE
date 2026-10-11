@@ -43,6 +43,20 @@ async def test_profile_b_lexical_only_dedups_hash_dup():
     assert r.packed.entries[0].duplicates == [cid(5)] and r.packed.entries[0].also_in[0].doc_name == "c.pdf"
 
 
+async def test_hash_duplicate_of_a_packed_chunk_is_marked_selected():
+    r = await run(P.PROFILE_B)
+    assert r.packed.entries[0].duplicates == [cid(5)]
+    sel = {x.chunk_id: x.selected for x in r.ranked}
+    assert sel[cid(3)] and sel[cid(5)] and sel[cid(1)]
+    # a duplicate whose kept twin did not make it into the context stays unselected
+    tight = P.RetrievalProfile(name="tight", description="t", config=P.ProfileConfig(
+        lexical_top_k=40, budget_tokens=3))
+    r = await run(tight)
+    assert [e.item.chunk_id for e in r.packed.entries] == [cid(3)]
+    sel = {x.chunk_id: x.selected for x in r.ranked}
+    assert sel[cid(3)] and sel[cid(5)] and not sel[cid(1)]
+
+
 async def test_profile_c_hybrid_rrf():
     r = await run(P.PROFILE_C)
     # 3: dense3 + lex1 ; 1: dense1 + lex3 -> 3 = 1/63+1/61 = .03226 , 1 = 1/61+1/63 equal -> best rank equal (1) -> id
@@ -75,7 +89,7 @@ async def test_profile_e_full_pipeline():
 
 async def test_degraded_rerank_uses_fused_order_and_is_labelled():
     r = await run(P.PROFILE_E, reranker=FakeReranker(fail_with=RerankError("RATE_LIMITED", "x", retryable=True)))
-    assert r.degraded == ["rerank_unavailable"]
+    assert r.degraded == ["rerank_unavailable"] and r.extra == {"rerank_error": "RATE_LIMITED"}
     assert r.answerability_inputs["top_rerank_score"] is None
     assert [x.fusion_rank for x in r.ranked] == sorted(x.fusion_rank for x in r.ranked)
     assert r.packed.entries  # still produces context

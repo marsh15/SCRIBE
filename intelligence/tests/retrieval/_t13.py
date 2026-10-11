@@ -14,7 +14,7 @@ from pathlib import Path
 import psycopg
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "integration"))
-from _db import aconnect, new_file, new_workspace  # noqa: E402
+from _db import PROTECTED_WORKSPACES, aconnect, new_file, new_workspace  # noqa: E402
 
 from scribe_ingest.embedding import FakeEmbedder  # noqa: E402
 from scribe_ingest.chunking import STRUCTURAL_V1, chunk_document  # noqa: E402
@@ -143,6 +143,7 @@ def corpus_workspace(url: str) -> dict:
             conn = await aconnect(url)
             try:
                 wid = await new_workspace(conn)
+                PROTECTED_WORKSPACES.add(wid)  # shared across modules; purged at session end, not module end
                 res = await ingest_corpus(conn, wid, list_corpus(CORPUS), lambda n: (CORPUS / n).read_bytes(),
                                           FakeEmbedder())
                 return {"wid": wid, "results": dict(res), "profile_id": await structural_profile_id(conn)}

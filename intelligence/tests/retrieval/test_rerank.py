@@ -226,3 +226,20 @@ async def test_any_error_code_degrades():
         ranked = rrf_fuse({"dense": [cand(1, 1)]})
         _, deg = await rerank_candidates(FakeReranker(fail_with=RerankError(code, "x", retryable=False)), "q", ranked, 1)  # type: ignore[arg-type]
         assert deg == ["rerank_unavailable"]
+
+
+async def test_rerank_error_code_is_recorded_and_logged_without_content(caplog):
+    ranked = rrf_fuse({"dense": [cand(1, 1, content="CONFIDENTIAL document text")]})
+    info: dict = {}
+    err = RerankError("AUTH", f"bad key {KEY}", retryable=False)
+    with caplog.at_level("WARNING", logger="scribe.retrieve"):
+        _, deg = await rerank_candidates(FakeReranker(fail_with=err), "SECRETQUERY", ranked, 1, error_info=info)
+    assert deg == ["rerank_unavailable"] and info == {"rerank_error": "AUTH"}
+    warnings = [r for r in caplog.records if r.name == "scribe.retrieve"]
+    assert len(warnings) == 1 and "AUTH" in warnings[0].getMessage()
+    for leaked in (KEY, "SECRETQUERY", "CONFIDENTIAL"):
+        assert leaked not in caplog.text
+    # a successful rerank records nothing
+    info.clear()
+    await rerank_candidates(FakeReranker(), "q", ranked, 1, error_info=info)
+    assert info == {}

@@ -26,6 +26,8 @@ from scribe_ingest.embedding import Embedder
 
 from . import strategies
 from .dense import DenseMode
+from .packing import PackedContext
+from .rerank import Reranker
 from .search import RetrievalSnapshot, resolve_index_profile, run_legacy_dense, run_retrievers, snapshot_tx
 from .types import Candidate, RankedCandidate
 
@@ -43,6 +45,8 @@ class RetrieveContext:
     source_ids: list[int] | None
     limit: int
     embedder_for: Callable[[int], Embedder]  # dims -> embedder (1536 for v2, 3072 for legacy)
+    # rerank model name -> reranker (None = no reranker available); used by profiles that rerank
+    reranker_for: Callable[[str], Reranker | None] = lambda model: None
 
 
 @dataclass
@@ -52,6 +56,8 @@ class StrategyResult:
     counts: dict[str, Any] = field(default_factory=dict)
     degraded: list[str] = field(default_factory=list)
     extra: dict[str, Any] = field(default_factory=dict)
+    packed: PackedContext | None = None  # evidence context (hybrid profiles); None for T13 strategies
+    profile_name: str | None = None  # retrieval_profiles.name when the strategy is a seeded profile
 
 
 Handler = Callable[[RetrieveContext], Awaitable[StrategyResult]]

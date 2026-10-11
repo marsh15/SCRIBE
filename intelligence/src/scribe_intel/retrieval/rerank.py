@@ -20,6 +20,7 @@ import asyncio
 import dataclasses
 import hashlib
 import json
+import logging
 import os
 import random
 import re
@@ -36,6 +37,8 @@ MAX_DOCUMENTS = 1000
 MAX_RETRIES = 4
 DEFAULT_MAX_DOC_TOKENS = 2048
 DEGRADED_RERANK = "rerank_unavailable"
+
+log = logging.getLogger("scribe.retrieve")
 
 ErrorCode = Literal["RATE_LIMITED", "TRANSIENT_PROVIDER", "AUTH", "INVALID_REQUEST"]
 
@@ -285,12 +288,15 @@ async def rerank_candidates(
     *,
     max_doc_tokens: int = DEFAULT_MAX_DOC_TOKENS,
     count_tokens: Callable[[str], int] | None = None,
+    error_info: dict[str, Any] | None = None,
 ) -> tuple[list[RankedCandidate], list[str]]:
     """Rerank the first `top_n` fused candidates. Returns (full ordered list, degraded labels).
 
     Output order: reranked head (rerank_rank 1..m), then the un-reranked tail in fused order.
     On ANY RerankError the fused order is returned unchanged with ["rerank_unavailable"]
-    (INV-16). Inputs are not mutated. CacheMiss (replay mode) deliberately propagates."""
+    (INV-16); the error code (never the key, query or document text) is logged once and, when
+    `error_info` is given, recorded as `error_info["rerank_error"]`. Inputs are not mutated.
+    CacheMiss (replay mode) deliberately propagates."""
     if count_tokens is None:
         from scribe_ingest.tokens import count_tokens as _ct
 
@@ -304,7 +310,10 @@ async def rerank_candidates(
         results = await reranker.rerank(query, docs, len(head))
         if any(not 0 <= r.index < len(head) for r in results) or len({r.index for r in results}) != len(results):
             raise RerankError("INVALID_REQUEST", "reranker returned invalid indices", retryable=False)
-    except RerankError:
+    except RerankError as exc:
+        log.warning("rerank degraded to fused order cause=%s", exc.code)
+        if error_info is not None:
+            error_info["rerank_error"] = exc.code
         return list(ordered), [DEGRADED_RERANK]
     results = sorted(results, key=lambda r: (-r.score, r.index))
     out: list[RankedCandidate] = []
