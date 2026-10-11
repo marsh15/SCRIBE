@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException
 
 from .auth import Principal, require_scope
 from .db import close_pool, get_pool
+from .evidence_routes import router as evidence_router
 from .ingest_routes import router as ingest_router
 from .retrieve_routes import router as retrieve_router
 
@@ -41,6 +42,8 @@ def create_app() -> FastAPI:
     app.include_router(ingest_router, prefix="/api/py", include_in_schema=False)
     app.include_router(retrieve_router)
     app.include_router(retrieve_router, prefix="/api/py", include_in_schema=False)
+    app.include_router(evidence_router)
+    app.include_router(evidence_router, prefix="/api/py", include_in_schema=False)
     return app
 
 
