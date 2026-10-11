@@ -271,7 +271,7 @@ def test_retrieval_profiles_immutable(conn):
              psycopg.errors.RestrictViolation)
 
 
-def test_source_version_frozen_except_duplicate_of_and_upload_state(conn, seed):
+def test_source_version_frozen_once_stored(conn, seed):
     for col, val in (("sha256", "'zzz'"), ("storage_key", "'k'"), ("size_bytes", "5"),
                      ("mime_type", "'x/y'"), ("version_number", "9"), ("created_by", "'z'")):
         err = fail_sql(conn, f"update source_versions set {col} = {val} where id=%s", (seed["ver"],),
@@ -279,11 +279,18 @@ def test_source_version_frozen_except_duplicate_of_and_upload_state(conn, seed):
         assert "immutable" in str(err)
     ver2 = scalar(conn, "insert into source_versions(source_id, workspace_id, version_number) "
                         "values (%s,%s,2) returning id", (seed["file"], seed["ws"]))
+    ver3 = scalar(conn, "insert into source_versions(source_id, workspace_id, version_number) "
+                        "values (%s,%s,3) returning id", (seed["file"], seed["ws"]))
+    fail_sql(conn, "update source_versions set upload_state='nope' where id=%s", (ver3,),
+             psycopg.errors.CheckViolation)
     conn.execute("update source_versions set duplicate_of=%s, upload_state='failed' where id=%s",
                  (seed["ver"], ver2))
     assert scalar(conn, "select upload_state from source_versions where id=%s", (ver2,)) == "failed"
-    fail_sql(conn, "update source_versions set upload_state='nope' where id=%s", (ver2,),
-             psycopg.errors.CheckViolation)
+    # T19 (0015): once a version leaves 'uploading' the whole row is frozen, duplicate_of and upload_state included
+    for col, val in (("duplicate_of", "null"), ("upload_state", "'stored'")):
+        err = fail_sql(conn, f"update source_versions set {col} = {val} where id=%s", (ver2,),
+                       psycopg.errors.RestrictViolation)
+        assert "immutable" in str(err)
 
 
 # ----------------------------------------------------------------------- FTS

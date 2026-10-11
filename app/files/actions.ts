@@ -10,6 +10,7 @@ import { requeueFailedSource } from "@/lib/ingestion/python-queue";
 import { fireTick } from "@/lib/ingestion/tick";
 import { resolveWorkspace } from "@/lib/workspace";
 import { deleteSource } from "@/lib/ingestion/source-intake";
+import { listSourceVersions } from "@/lib/ingestion/source-versions";
 
 export async function getFiles() {
     try {
@@ -75,5 +76,17 @@ export async function retrySource(fileId: number) {
     } catch (error) {
         console.error("Failed to retry Source:", error);
         return { success: false, error: "Could not retry this Source" };
+    }
+}
+
+/** Version history for one Source (states, duplicates). Empty for a Source the caller does not own. */
+export async function getSourceVersions(sourceId: number) {
+    try {
+        const { userId, workspaceId } = await resolveWorkspace();
+        if (!Number.isInteger(sourceId) || sourceId <= 0) return [];
+        return await listSourceVersions(workspaceId, userId, sourceId);
+    } catch (error) {
+        console.error("Failed to fetch Source versions:", error);
+        return [];
     }
 }

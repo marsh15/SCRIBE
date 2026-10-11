@@ -20,13 +20,14 @@ import {
   retryDelayMinutes,
   shouldRetrySource,
   sourceUploadPath,
-  SourceIntakeError,
   validateSourceUploadAllowance,
   type CompletedSourceBlob,
+  type SourceUploadCompletionPayload,
   type SourceUploadMetadata,
 } from "@/lib/ingestion/source-intake-policy";
 
 export {
+  parseSourceUploadCompletionPayload,
   completeReservedSourceUpload,
   deleteOwnedSource,
   parseSourceUploadMetadata,
@@ -39,6 +40,7 @@ export {
 } from "@/lib/ingestion/source-intake-policy";
 export type {
   CompletedSourceBlob,
+  SourceUploadCompletionPayload,
   SourceUploadMetadata,
 } from "@/lib/ingestion/source-intake-policy";
 
@@ -58,11 +60,6 @@ export interface SourceUploadReservation {
   source: SourceSummary;
   uploadPath: string;
   clientToken: string;
-}
-
-export interface SourceUploadCompletionPayload {
-  sourceId: number;
-  userId: string;
 }
 
 export async function reserveSourceUpload(input: {
@@ -136,28 +133,6 @@ export async function reserveSourceUpload(input: {
       })
       .where(eq(files.id, source.id));
     throw error;
-  }
-}
-
-export function parseSourceUploadCompletionPayload(payload: string | null | undefined) {
-  try {
-    const parsed = JSON.parse(payload ?? "") as Partial<SourceUploadCompletionPayload>;
-    if (
-      !Number.isInteger(parsed.sourceId) ||
-      !parsed.sourceId ||
-      parsed.sourceId <= 0 ||
-      typeof parsed.userId !== "string" ||
-      parsed.userId.length === 0
-    ) {
-      throw new Error("Invalid completion payload");
-    }
-    return parsed as SourceUploadCompletionPayload;
-  } catch {
-    throw new SourceIntakeError(
-      "Invalid upload completion payload",
-      400,
-      "invalid_completion"
-    );
   }
 }
 

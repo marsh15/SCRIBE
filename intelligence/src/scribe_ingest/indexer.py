@@ -236,6 +236,38 @@ async def register_version(
     return ref
 
 
+async def load_stored_version(conn: psycopg.AsyncConnection, workspace_id: str, version_id: uuid.UUID) -> dict[str, Any]:
+    """The reserved-and-stored source_versions row a T19 job points at (None fields mean 'not stored yet')."""
+    async with conn.transaction():
+        await _begin(conn, workspace_id)
+        cur = await conn.execute(
+            "select version_number, storage_key, sha256, mime_type, upload_state, duplicate_of from source_versions "
+            "where id = %s and workspace_id = %s", (version_id, workspace_id))
+        row = await cur.fetchone()
+    if row is None:
+        raise IndexerError("INVALID_DOCUMENT", "the version this job points at no longer exists")
+    keys = ("version_number", "storage_key", "sha256", "mime_type", "upload_state", "duplicate_of")
+    return dict(zip(keys, row))
+
+
+def verify_stored_bytes(version: dict[str, Any], data: bytes) -> None:
+    """The bytes fetched from storage must be the bytes whose sha256 was recorded when the version was stored."""
+    if version["upload_state"] != "stored" or not version["sha256"]:
+        raise IndexerError("INVALID_DOCUMENT", "the uploaded version was never stored")
+    if hashlib.sha256(data).hexdigest() != version["sha256"]:
+        raise IndexerError("INVALID_DOCUMENT", "the stored file does not match its recorded checksum")
+
+
+async def begin_reserved_version(conn: psycopg.AsyncConnection, workspace_id: str, source_id: int,
+                                 version_id: uuid.UUID, fence: Fence) -> None:
+    """Counterpart of `register_version` for a version that TS already reserved/stored and pointed
+    desired_version_id at: fence the job at PARSE and refuse (ActivationRefused) if it is no longer desired."""
+    async with conn.transaction():
+        await _begin(conn, workspace_id)
+        await fence.touch(conn, stage="PARSE", version_id=version_id)
+        await _check_still_desired(conn, workspace_id, source_id, version_id, lock=True)
+
+
 # ------------------------------------------------------------------ GENERATION
 
 async def ensure_generation(conn: psycopg.AsyncConnection, workspace_id: str, source_id: int,
@@ -459,8 +491,9 @@ async def activate_generation(
         await conn.execute(
             "update files set active_version_id = %s, status = 'ready', processing_error = NULL, "
             "text_bytes = coalesce(%s, text_bytes), extracted_text = coalesce(%s, extracted_text), "
+            "size = coalesce((select v.size_bytes from source_versions v where v.id = %s), size), "
             "updated_at = now() where id = %s and workspace_id = %s",
-            (version_id, text_bytes, extracted_text, source_id, workspace_id))
+            (version_id, text_bytes, extracted_text, version_id, source_id, workspace_id))
         if old:  # D20: superseded generations keep chunks/spans but lose embeddings
             await conn.execute(
                 "delete from chunk_embeddings_1536 e using chunks c where c.id = e.chunk_id "
@@ -474,19 +507,25 @@ async def fail_generation(conn: psycopg.AsyncConnection, workspace_id: str, sour
     file only turns 'failed' when it has no active version at all."""
     async with conn.transaction():
         await _begin(conn, workspace_id)
-        await conn.execute(
+        cur = await conn.execute(
             "update index_generations set status = %s, error_code = %s, updated_at = now() "
             "where id = %s and workspace_id = %s and status in ('BUILDING','READY')",
             ("CANCELLED" if cancelled else "FAILED", code, generation_id, workspace_id))
-        if not cancelled:
+        if cancelled:
+            if cur.rowcount:  # a cancelled build was never searchable: drop its partial embeddings (D20 keeps chunks/spans)
+                await conn.execute(
+                    "delete from chunk_embeddings_1536 e using chunks c where c.id = e.chunk_id "
+                    "and c.generation_id = %s and e.workspace_id = %s", (generation_id, workspace_id))
+        else:
             await conn.execute(
                 "update files set status = 'failed', processing_error = %s, updated_at = now() "
                 "where id = %s and workspace_id = %s and active_version_id is null and deleted_at is null",
                 (message[:500], source_id, workspace_id))
+        # only the job that built THIS generation (a Source has one job per version)
         await conn.execute(
-            "update ingestion_jobs set generation_id = %s, error_code = %s where file_id = %s and exists "
-            "(select 1 from files f where f.id = %s and f.workspace_id = %s)",
-            (generation_id, code, source_id, source_id, workspace_id))
+            "update ingestion_jobs set generation_id = %s, error_code = %s where file_id = %s and "
+            "source_version_id = (select source_version_id from index_generations where id = %s)",
+            (generation_id, code, source_id, generation_id))
 
 
 # ------------------------------------------------------------------ driver

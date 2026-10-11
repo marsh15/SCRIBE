@@ -33,13 +33,16 @@ from scribe_ingest.indexer import (
     _begin,
     _check_still_desired,
     activate_generation,
+    begin_reserved_version,
     embed_generation,
     ensure_generation,
     fail_generation,
     load_index_profile,
+    load_stored_version,
     parse_for_index,
     persist_chunks,
     register_version,
+    verify_stored_bytes,
 )
 from scribe_ingest.model import BLOCK_SEPARATOR
 
@@ -219,12 +222,24 @@ async def run_step(
             extracted = BLOCK_SEPARATOR.join(r[0] for r in rows if not r[1])
             text_bytes = len(extracted)
         else:
-            if not storage_url:
-                raise IndexerError("INVALID_DOCUMENT", "source has no stored original to ingest")
-            data = await asyncio.to_thread(download, storage_url, blob_token)
-            ver = await register_version(conn, wid, file_id, data, mime, created_by=user_id,
-                                         storage_key=storage_key, fence=fence)
-            ver_id = ver.id
+            stored = await load_stored_version(conn, wid, ver_id) if ver_id else None
+            if stored and (stored["storage_key"] or "").startswith("http"):
+                # T19: a version TS reserved and stored (desired_version_id already points at it). Its own blob, its own
+                # mime; never re-register it (that would re-point desired_version_id and defeat cancellation).
+                async with conn.transaction():  # step boundary: a newer upload / a delete cancels before any download
+                    await _begin(conn, wid)
+                    await _check_still_desired(conn, wid, file_id, ver_id)
+                data = await asyncio.to_thread(download, stored["storage_key"], blob_token)
+                verify_stored_bytes(stored, data)
+                mime = stored["mime_type"] or mime
+                await begin_reserved_version(conn, wid, file_id, ver_id, fence)
+            else:
+                if not storage_url:
+                    raise IndexerError("INVALID_DOCUMENT", "source has no stored original to ingest")
+                data = await asyncio.to_thread(download, storage_url, blob_token)
+                ver = await register_version(conn, wid, file_id, data, mime, created_by=user_id,
+                                             storage_key=storage_key, fence=fence)
+                ver_id = ver.id
             gen_id, prior = await ensure_generation(conn, wid, file_id, ver_id, profile, fence=fence)
             if prior == "ACTIVE":  # these bytes are already live: nothing to build
                 async with conn.transaction():
