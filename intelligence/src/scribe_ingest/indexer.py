@@ -18,6 +18,7 @@ Decisions (see docs/scribe2/T12-notes.md)
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import time
 import uuid
@@ -32,9 +33,10 @@ from .chunking import STRUCTURAL_V1, ChunkProfile, ChunkSet, chunk_document
 from .embedding import BATCH_SIZE, Embedder, EmbeddingError
 from .errors import IngestError
 from .model import ParsedDocument
+from .ocr import OCR_PAGES_PER_STEP, OcrClient, OcrError, apply_ocr, check_ocr_limit, clean_ocr_text, render_page_png
 
 INDEX_PROFILE_NAME = "structural-v1"
-OCR_MESSAGE = "scanned pages need OCR (T21)"
+OCR_UNAVAILABLE_MESSAGE = "Text recognition for scanned pages is not available on this server."
 PERMANENT_CODES = {
     "INVALID_DOCUMENT", "UNSUPPORTED_FORMAT", "RESOURCE_LIMIT", "EMPTY_EXTRACTION",
     "OCR_NOT_AVAILABLE", "PROFILE_MISMATCH", "INVALID_REQUEST", "AUTH",
@@ -311,10 +313,76 @@ async def _check_still_desired(conn: psycopg.AsyncConnection, workspace_id: str,
 
 
 def parse_for_index(data: bytes, mime: str, name: str | None) -> ParsedDocument:
-    doc = parse(data, mime, allow_ocr_pending=True, name=name)
-    if doc.needs_ocr_pages:
-        raise IndexerError("OCR_NOT_AVAILABLE", OCR_MESSAGE)
-    return doc
+    """Parse only. A scanned/mixed PDF comes back with `needs_ocr_pages` set; `resolve_ocr` turns those pages into
+    OCR blocks (T21)."""
+    return parse(data, mime, allow_ocr_pending=True, name=name)
+
+
+async def _load_ocr_pages(conn: psycopg.AsyncConnection, workspace_id: str, version_id: uuid.UUID) -> dict[int, str]:
+    async with conn.transaction():
+        await _begin(conn, workspace_id)
+        cur = await conn.execute(
+            "select page, text from source_version_ocr_pages where source_version_id = %s and workspace_id = %s",
+            (version_id, workspace_id))
+        return {r[0]: r[1] for r in await cur.fetchall()}
+
+
+async def _save_ocr_page(
+    conn: psycopg.AsyncConnection, workspace_id: str, source_id: int, version_id: uuid.UUID,
+    generation_id: uuid.UUID, page: int, text: str, model: str, *, fence: Fence | None, usage_user_id: str | None,
+) -> None:
+    """One page = one transaction: lease fence, 'still desired' check, the page row and its idempotent usage event
+    commit together, so a killed worker neither loses a finished page nor double-counts it."""
+    async with conn.transaction():
+        await _begin(conn, workspace_id)
+        if fence:
+            await fence.touch(conn, stage="OCR")
+        await _check_still_desired(conn, workspace_id, source_id, version_id)
+        await conn.execute(
+            "insert into source_version_ocr_pages(source_version_id, workspace_id, page, text, model) "
+            "values (%s,%s,%s,%s,%s) on conflict (source_version_id, page) do nothing",
+            (version_id, workspace_id, page, text, model))
+        if usage_user_id:
+            await conn.execute(
+                "insert into usage_events(user_id, metric, quantity, unit, source_type, source_id, is_estimated, "
+                "idempotency_key) values (%s,'ocr_pages',1,'pages','ingest',%s,false,%s) "
+                "on conflict (idempotency_key) do nothing",
+                (usage_user_id, str(source_id), f"gen:{generation_id}:ocr:{page}"))
+
+
+async def resolve_ocr(
+    conn: psycopg.AsyncConnection, workspace_id: str, source_id: int, version_id: uuid.UUID,
+    generation_id: uuid.UUID, data: bytes, doc: ParsedDocument, ocr: OcrClient | None, *,
+    fence: Fence | None = None, deadline: float | None = None, max_pages: int | None = OCR_PAGES_PER_STEP,
+    usage_user_id: str | None = None,
+) -> ParsedDocument:
+    """OCR the pages the parser flagged (T21) and return the merged document.
+
+    * More than 50 flagged pages -> RESOURCE_LIMIT before any provider call (D21).
+    * Finished pages are read back from `source_version_ocr_pages`, so a killed/yielded step never redoes them.
+    * At most `max_pages` pages (and at least one) per invocation, and none after `deadline`; when pages remain this
+      raises IndexerError('OCR_PENDING') and the caller yields the job (progress is already committed).
+    * Page text is untrusted (INV-13): never logged, never in an error message."""
+    if not doc.needs_ocr_pages:
+        return doc
+    check_ocr_limit(doc.needs_ocr_pages)
+    done = await _load_ocr_pages(conn, workspace_id, version_id)
+    todo = [p for p in doc.needs_ocr_pages if p not in done]
+    if todo and ocr is None:
+        raise IndexerError("OCR_NOT_AVAILABLE", OCR_UNAVAILABLE_MESSAGE)
+    processed = 0
+    for page in todo:
+        if processed and ((max_pages is not None and processed >= max_pages)
+                          or (deadline is not None and time.monotonic() > deadline)):
+            raise IndexerError("OCR_PENDING", "text recognition continues in the next step", retryable=True)
+        png = await asyncio.to_thread(render_page_png, data, page)
+        res = await ocr.transcribe(png, page=page)  # type: ignore[union-attr]
+        text = clean_ocr_text(res.text)
+        await _save_ocr_page(conn, workspace_id, source_id, version_id, generation_id, page, text, ocr.model,  # type: ignore[union-attr]
+                             fence=fence, usage_user_id=usage_user_id)
+        done[page] = text
+        processed += 1
+    return apply_ocr(doc, done)
 
 
 async def persist_chunks(
@@ -533,7 +601,8 @@ async def fail_generation(conn: psycopg.AsyncConnection, workspace_id: str, sour
 async def build_generation(
     conn: psycopg.AsyncConnection, workspace_id: str, source_id: int, version: VersionRef,
     data: bytes, mime: str, embedder: Embedder, *, name: str | None = None,
-    profile: IndexProfile | None = None, deadline: float | None = None,
+    profile: IndexProfile | None = None, deadline: float | None = None, ocr: OcrClient | None = None,
+    usage_user_id: str | None = None,
 ) -> IngestResult:
     """PARSE -> CHUNK -> EMBED -> ACTIVATE for one registered version."""
     _require_autocommit(conn)
@@ -555,8 +624,13 @@ async def build_generation(
             return res
         t = time.monotonic()
         doc = parse_for_index(data, mime, name)
-        res.warnings = list(doc.warnings)
         res.timings_ms["parse"] = _ms(t)
+        if doc.needs_ocr_pages:  # one invocation: all flagged pages (<= 50), bounded only by the deadline
+            t = time.monotonic()
+            doc = await resolve_ocr(conn, workspace_id, source_id, version.id, gen_id, data, doc, ocr,
+                                    deadline=deadline, max_pages=None, usage_user_id=usage_user_id)
+            res.timings_ms["ocr"] = _ms(t)
+        res.warnings = list(doc.warnings)
         t = time.monotonic()
         chunkset = chunk_document(doc, STRUCTURAL_V1)
         res.timings_ms["chunk"] = _ms(t)
@@ -576,7 +650,7 @@ async def build_generation(
         return res
     except IndexerError as exc:
         res.error_code, res.message, res.retryable = exc.code, exc.message, exc.retryable
-        if exc.code == "TIME_BUDGET":
+        if exc.code in ("TIME_BUDGET", "OCR_PENDING"):
             res.status = "BUILDING"  # resumable; generation stays BUILDING
             return res
         cancelled = isinstance(exc, ActivationRefused)
@@ -585,7 +659,7 @@ async def build_generation(
         return res
     except IngestError as exc:
         res.error_code, res.message, res.retryable = exc.code, exc.message, False
-    except EmbeddingError as exc:
+    except (EmbeddingError, OcrError) as exc:
         res.error_code, res.message, res.retryable = exc.code, exc.message, exc.retryable
     except psycopg.OperationalError as exc:
         res.error_code, res.message, res.retryable = "DATABASE_UNAVAILABLE", type(exc).__name__, True

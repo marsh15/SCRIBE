@@ -17,7 +17,7 @@ PROTECTED_WORKSPACES: set[str] = set()
 # Delete order for workspace-scoped rows. `files` cascades to source_versions / index_generations /
 # active_indexes / documents / ingestion_jobs; the explicit leftovers pass catches anything inserted
 # without a file. Seeded profile tables (retrieval/embedding/index/chunk profiles) are never touched.
-_PURGE_FIRST = ("retrieval_traces", "retrieval_candidates", "evidence_items", "evidence_bundles", "rag_traces",
+_PURGE_FIRST = ("source_version_ocr_pages", "retrieval_traces", "retrieval_candidates", "evidence_items", "evidence_bundles", "rag_traces",
                 "claim_verifications", "chats", "chunk_source_spans", "chunk_embeddings_1536",
                 "chunk_embeddings_3072", "chunks", "files")
 _PURGE_LEFTOVERS = ("active_indexes", "document_blocks", "index_generations", "source_versions",

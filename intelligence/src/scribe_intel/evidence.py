@@ -20,6 +20,8 @@ import psycopg
 from scribe_ingest.indexer import _begin
 
 SOURCE_DELETED_LABEL = "Source deleted"
+# T21: shown with any quote whose text came from OCR (T23 citation opening and T24 Structure/Chunks tabs must show it too).
+OCR_NOTICE = "OCR text — verify against original"
 
 
 @dataclass(frozen=True)
@@ -36,6 +38,11 @@ class EvidenceView:
     page_end: int | None = None
     heading_path: tuple[str, ...] | None = None
     notice: str | None = None
+    ocr: bool = False  # the quote's text was transcribed by OCR, not read from a text layer
+
+    @property
+    def ocr_notice(self) -> str | None:
+        return OCR_NOTICE if self.ocr else None
 
     @property
     def readable(self) -> bool:
@@ -44,7 +51,9 @@ class EvidenceView:
 
 _SELECT = """
 select e.id, e.bundle_id, e.label, e.quote, e.quote_hash, e.page_start, e.page_end, e.heading_path,
-       f.id, f.name, f.deleted_at
+       f.id, f.name, f.deleted_at,
+       exists (select 1 from chunk_source_spans s join document_blocks b on b.id = s.block_id
+                where s.chunk_id = e.chunk_id and s.workspace_id = %(w)s and b.workspace_id = %(w)s and b.ocr) as ocr
 from evidence_items e
 left join source_versions v on v.id = e.source_version_id and v.workspace_id = %(w)s
 left join files f on f.id = v.source_id and f.workspace_id = %(w)s
@@ -54,12 +63,12 @@ order by e.bundle_id, e.label
 
 
 def _view(row) -> EvidenceView:
-    eid, bundle_id, label, quote, qhash, p0, p1, heading, fid, fname, fdeleted = row
+    eid, bundle_id, label, quote, qhash, p0, p1, heading, fid, fname, fdeleted, ocr = row
     if fid is None or fdeleted is not None:
         return EvidenceView(eid, bundle_id, label, "source_deleted", notice=SOURCE_DELETED_LABEL)
     return EvidenceView(eid, bundle_id, label, "available", source_id=fid, source_name=fname, quote=quote,
                         quote_hash=qhash, page_start=p0, page_end=p1,
-                        heading_path=tuple(heading) if heading else None)
+                        heading_path=tuple(heading) if heading else None, ocr=bool(ocr))
 
 
 async def _run(conn: psycopg.AsyncConnection, workspace_id: str, cond: str, params: dict) -> list[EvidenceView]:

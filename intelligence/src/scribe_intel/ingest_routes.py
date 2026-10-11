@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict
 
 from scribe_ingest.blob import BlobDownloadError, download_private_blob
 from scribe_ingest.embedding import FakeEmbedderRefused, embedder_from_env
+from scribe_ingest.ocr import OcrClientRefused, ocr_client_from_env
 from scribe_ingest.indexer import IndexerError, _begin, build_generation, load_index_profile, register_version
 
 from .auth import Principal, require_scope
@@ -47,6 +48,10 @@ async def ingest_source(body: IngestSourceBody, principal: Principal = Depends(r
     except FakeEmbedderRefused as exc:
         raise _fail(500, "FAKE_EMBEDDER_REFUSED", str(exc), False) from None
     try:
+        ocr = ocr_client_from_env(settings.dsn)
+    except OcrClientRefused as exc:
+        raise _fail(500, "FAKE_OCR_REFUSED", str(exc), False) from None
+    try:
         pool = await get_pool()
     except RuntimeError:
         raise _fail(503, "DATABASE_UNAVAILABLE", "database unavailable", True) from None
@@ -79,7 +84,8 @@ async def ingest_source(body: IngestSourceBody, principal: Principal = Depends(r
                 raise _fail(409, "VERSION_MISMATCH", "stored bytes do not match the requested version", False)
             profile = await load_index_profile(conn)
             res = await build_generation(conn, wid, body.source_id, ver, data, mime, embedder, name=name,
-                                         profile=profile, deadline=time.monotonic() + TIME_BUDGET_S)
+                                         profile=profile, deadline=time.monotonic() + TIME_BUDGET_S, ocr=ocr,
+                                         usage_user_id=principal.sub)
     except HTTPException:
         raise
     except IndexerError as exc:
@@ -110,9 +116,13 @@ async def ingest_step(principal: Principal = Depends(require_scope("ingest_step"
     except FakeEmbedderRefused as exc:
         raise _fail(500, "FAKE_EMBEDDER_REFUSED", str(exc), False) from None
     try:
+        ocr = ocr_client_from_env(settings.dsn)
+    except OcrClientRefused as exc:
+        raise _fail(500, "FAKE_OCR_REFUSED", str(exc), False) from None
+    try:
         pool = await get_pool()
         async with pool.connection() as conn:
-            return await run_step(conn, embedder, budget_s=STEP_BUDGET_S,
+            return await run_step(conn, embedder, budget_s=STEP_BUDGET_S, ocr=ocr,
                                   blob_token=os.environ.get("BLOB_READ_WRITE_TOKEN", ""))
     except RuntimeError:
         raise _fail(503, "DATABASE_UNAVAILABLE", "database unavailable", True) from None

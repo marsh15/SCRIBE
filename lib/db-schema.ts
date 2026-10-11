@@ -638,6 +638,36 @@ export const documentBlocks = pgTable(
   })
 );
 
+// T21 (0017): durable OCR progress per source version, one row per transcribed page ('' = blank page, still done).
+// Untrusted document text (INV-13). Cascades with the version.
+export const sourceVersionOcrPages = pgTable(
+  "source_version_ocr_pages",
+  {
+    sourceVersionId: uuid("source_version_id")
+      .references(() => sourceVersions.id, { onDelete: "cascade" })
+      .notNull(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id)
+      .notNull(),
+    page: integer("page").notNull(),
+    text: text("text").notNull(),
+    model: text("model").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({
+      name: "source_version_ocr_pages_pk",
+      columns: [table.sourceVersionId, table.page],
+    }),
+    workspaceIndex: index("source_version_ocr_pages_workspace_id_index").on(
+      table.workspaceId
+    ),
+    pageCheck: check("source_version_ocr_pages_page_check", sql`${table.page} >= 1`),
+  })
+);
+
 export const chunks = pgTable(
   "chunks",
   {

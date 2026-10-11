@@ -22,7 +22,7 @@ def _entries():
             if "." + ev["doc"].rsplit(".", 1)[1] not in TEXT_DOCS:
                 continue
             if ev["doc"] == "facility-safety-notice-scanned.pdf":
-                continue  # scanned: no text layer, OCR is T21
+                continue  # scanned: no text layer; its OCR path is covered in test_ocr.py
             key = (ev["doc"], ev["quote"], ev["page"])
             if key in seen:
                 continue

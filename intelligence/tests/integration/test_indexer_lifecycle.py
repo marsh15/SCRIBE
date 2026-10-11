@@ -200,16 +200,16 @@ async def test_profile_divergence_fails_loudly(env):
     assert info.value.code == "PROFILE_MISMATCH" and "child_max_tokens" in info.value.message
 
 
-async def test_scanned_pdf_fails_with_ocr_code_and_marks_file_failed(env):
+async def test_scanned_pdf_without_an_ocr_client_fails_plainly_and_marks_file_failed(env):
     conn, wid, _ = env
     name = "facility-safety-notice-scanned.pdf"
     fid = await new_file(conn, wid, name, "application/pdf")
     data = (CORPUS / name).read_bytes()
     v = await register_version(conn, wid, fid, data, "application/pdf")
-    r = await build_generation(conn, wid, fid, v, data, "application/pdf", FakeEmbedder(), name=name)
+    r = await build_generation(conn, wid, fid, v, data, "application/pdf", FakeEmbedder(), name=name)  # ocr=None
     assert (r.status, r.error_code, r.retryable) == ("FAILED", "OCR_NOT_AVAILABLE", False)
     assert (await one(conn, "select status, processing_error from files where id=%s", fid)) == (
-        "failed", "scanned pages need OCR (T21)")
+        "failed", "Text recognition for scanned pages is not available on this server.")
 
 
 async def test_unsupported_format_is_permanent(env):

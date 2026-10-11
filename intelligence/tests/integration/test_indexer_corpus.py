@@ -11,10 +11,13 @@ import pytest
 from _db import CORPUS, GOLDEN, aconnect, new_workspace
 from conftest import DATABASE_URL_TEST, needs_db
 from scribe_eval.dataset import Case
-from scribe_eval.ingest_corpus import EXPECTED_FAILURES, evaluate, format_table, ingest_corpus, list_corpus
+from scribe_eval.ingest_corpus import evaluate, format_table, ingest_corpus, list_corpus
 from scribe_eval.metrics import RankedItem, match_matrix
 from scribe_eval.normalize import normalize
 from scribe_ingest.embedding import FakeEmbedder
+from scribe_ingest.ocr import FakeOcrClient
+
+SCANNED = "facility-safety-notice-scanned.pdf"
 
 pytestmark = needs_db
 
@@ -26,7 +29,10 @@ def ingested():
         try:
             wid = await new_workspace(conn)
             emb = FakeEmbedder()
-            results = await ingest_corpus(conn, wid, list_corpus(CORPUS), lambda n: (CORPUS / n).read_bytes(), emb)
+            # FAKE OCR: returns the committed ground-truth text of the scanned page (tests only; never published)
+            ocr = FakeOcrClient({1: (CORPUS / "facility-safety-notice-scanned.truth.txt").read_text()})
+            results = await ingest_corpus(conn, wid, list_corpus(CORPUS), lambda n: (CORPUS / n).read_bytes(), emb,
+                                          ocr=ocr)
             return wid, results, emb
         finally:
             await conn.close()
@@ -44,11 +50,7 @@ def test_every_document_active_and_fully_embedded(ingested):
     print("\nFAKE-EMBEDDER corpus ingest\n" + format_table(ingested["list"]))
     assert evaluate(ingested["list"]) == []
     for name, r in ingested["results"].items():
-        if name in EXPECTED_FAILURES:
-            assert r.status == "FAILED" and r.error_code == "OCR_NOT_AVAILABLE"
-            assert r.message == "scanned pages need OCR (T21)"
-        else:
-            assert r.status == "ACTIVE" and r.embedded == r.expected == r.children > 0
+        assert r.status == "ACTIVE" and r.embedded == r.expected == r.children > 0
 
 
 def test_active_indexes_and_file_state(ingested):
@@ -57,19 +59,24 @@ def test_active_indexes_and_file_state(ingested):
                        "left join index_generations g on g.id=ai.generation_id where f.workspace_id=%s", ingested["wid"])
     assert len(rows) == len(ingested["results"])
     for name, status, active, desired, gen, gstatus in rows:
-        if name in EXPECTED_FAILURES:
-            assert status == "failed" and active is None and gen is None
-        else:
-            assert status == "ready" and active == desired and gen and gstatus == "ACTIVE"
+        assert status == "ready" and active == desired and gen and gstatus == "ACTIVE"
     text_bytes = q(ingested, "select count(*) from files where workspace_id=%s and status='ready' and text_bytes > 0",
                    ingested["wid"])[0][0]
-    assert text_bytes == len(rows) - 1
+    assert text_bytes == len(rows)
 
 
-def test_failed_generation_recorded_for_scanned_pdf(ingested):
+def test_scanned_pdf_indexed_with_flagged_ocr_blocks(ingested):
+    """T21: the scanned page is OCR'd (fake client), its blocks are flagged, page known, bbox NULL."""
+    rows = q(ingested, "select b.ocr, b.page, b.bbox from document_blocks b join source_versions v on v.id=b.source_version_id "
+                       "join files f on f.id=v.source_id where f.workspace_id=%s and f.name=%s", ingested["wid"], SCANNED)
+    assert rows and all(ocr and page == 1 and bbox is None for ocr, page, bbox in rows)
     (status, code), = q(ingested, "select g.status, g.error_code from index_generations g join files f on f.id=g.source_id "
-                                  "where f.workspace_id=%s and f.name like '%%scanned.pdf'", ingested["wid"])
-    assert (status, code) == ("FAILED", "OCR_NOT_AVAILABLE")
+                                  "where f.workspace_id=%s and f.name=%s", ingested["wid"], SCANNED)
+    assert (status, code) == ("ACTIVE", None)
+    # no other document has OCR blocks
+    assert q(ingested, "select count(*) from document_blocks b join source_versions v on v.id=b.source_version_id "
+                       "join files f on f.id=v.source_id where f.workspace_id=%s and b.ocr and f.name<>%s",
+             ingested["wid"], SCANNED)[0][0] == 0
 
 
 def test_only_children_have_embeddings(ingested):
@@ -124,7 +131,7 @@ def test_golden_evidence_contained_in_child_chunks(ingested, capsys):
     split_list, missed_list = [], []
     for case in cases:
         for ev in case.evidence:
-            if ev.doc in EXPECTED_FAILURES or ev.doc not in children:
+            if ev.doc not in children:
                 continue
             one = case.model_copy(update={"evidence": [ev]})
             if any(match_matrix(one, children[ev.doc])):

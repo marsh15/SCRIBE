@@ -12,6 +12,7 @@ from typing import Callable
 import psycopg
 
 from scribe_ingest.embedding import Embedder, FakeEmbedder, GeminiEmbedder
+from scribe_ingest.ocr import FakeOcrClient, GeminiOcrClient, OcrClient
 from scribe_ingest.indexer import IngestResult, build_generation, load_index_profile, register_version
 
 EVAL_OWNER = "eval-golden-v1"
@@ -20,7 +21,6 @@ MIMES = {
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 }
 SKIP = {"FACTS.md"}
-EXPECTED_FAILURES = {"facility-safety-notice-scanned.pdf": "OCR_NOT_AVAILABLE"}  # until T21
 DEFAULT_CACHE = "benchmarks/cache/py-embeddings.sqlite"
 Loader = Callable[[str], bytes]
 
@@ -63,7 +63,7 @@ async def reset_workspace(conn: psycopg.AsyncConnection, wid: str) -> None:
 
 async def ingest_corpus(
     conn: psycopg.AsyncConnection, wid: str, names: list[str], loader: Loader, embedder: Embedder,
-    *, reset: bool = False,
+    *, reset: bool = False, ocr: OcrClient | None = None,
 ) -> list[tuple[str, IngestResult]]:
     async with conn.transaction():
         await conn.execute("select set_config('app.workspace_id', %s, true)", (wid,))
@@ -88,18 +88,14 @@ async def ingest_corpus(
                 (name, mime, len(data), EVAL_OWNER, wid, f"eval/{name}"))
             fid = (await cur.fetchone())[0]
         ver = await register_version(conn, wid, fid, data, mime, created_by=EVAL_OWNER, storage_key=f"eval/{name}")
-        out.append((name, await build_generation(conn, wid, fid, ver, data, mime, embedder, name=name, profile=profile)))
+        out.append((name, await build_generation(conn, wid, fid, ver, data, mime, embedder, name=name, profile=profile,
+                                                 ocr=ocr)))
     return out
 
 
 def evaluate(results: list[tuple[str, IngestResult]]) -> list[str]:
     problems = []
     for name, r in results:
-        want = EXPECTED_FAILURES.get(name)
-        if want:
-            if r.status == "FAILED" and r.error_code != want:
-                problems.append(f"{name}: failed with {r.error_code}, expected {want}")
-            continue
         if r.status != "ACTIVE" or r.embedded != r.expected or r.expected == 0:
             problems.append(f"{name}: status={r.status} embedded={r.embedded}/{r.expected} error={r.error_code}")
     return problems
@@ -127,6 +123,7 @@ def run(args) -> int:
     cache = None
     if args.embedder == "fake":
         embedder: Embedder = FakeEmbedder()
+        ocr: OcrClient = FakeOcrClient(default="[FAKE OCR - NOT REAL TEXT] placeholder transcription of a scanned page.")
         print("WARNING: FAKE embeddings (hash vectors, no semantic meaning). Use --reset before a real "
               "(gemini) run, otherwise ACTIVE fake generations are kept as they are.", file=sys.stderr)
     else:
@@ -135,13 +132,14 @@ def run(args) -> int:
 
         cache = DiskCache(args.cache_path)
         embedder = GeminiEmbedder(cache=DiskEmbeddingCache(cache))
+        ocr = GeminiOcrClient()  # key from GOOGLE_GENERATIVE_AI_API_KEY; scanned pages are NOT cached on disk
 
     async def go() -> int:
         async with await psycopg.AsyncConnection.connect(args.database_url, autocommit=True,
                                                          prepare_threshold=None) as conn:
             wid = await ensure_eval_workspace(conn)
             results = await ingest_corpus(conn, wid, list_corpus(corpus), lambda n: (corpus / n).read_bytes(),
-                                          embedder, reset=args.reset)
+                                          embedder, reset=args.reset, ocr=ocr)
         print(f"workspace {wid} (kind eval), profile {args.profile}, embedder "
               f"{'FAKE' if embedder.is_fake else embedder.model}")  # type: ignore[attr-defined]
         print(format_table(results))

@@ -31,10 +31,27 @@ def _connect() -> psycopg.Connection:
     return psycopg.connect(DATABASE_URL_TEST, autocommit=True)
 
 
+DRIZZLE_DIR = MIGRATION.parent
+
+
+def _later_migrations() -> list[Path]:
+    """Numbered migrations after 0013 (top-level drizzle/ only; deferred/ and rollback/ are subdirs and excluded),
+    in sorted order, mirroring scripts/apply-migrations.sh. Replaying 0013 alone would re-create functions with
+    their old bodies and clobber later migrations."""
+    out = []
+    for p in sorted(DRIZZLE_DIR.glob("*.sql")):
+        num = p.name.split("_", 1)[0]
+        if num.isdigit() and int(num) > 13:
+            out.append(p)
+    return out
+
+
 @pytest.fixture(scope="module", autouse=True)
 def migrated():
     with _connect() as c:
         c.execute(MIGRATION.read_text().replace("--> statement-breakpoint", ""))
+        for p in _later_migrations():
+            c.execute(p.read_text().replace("--> statement-breakpoint", ""))
 
 
 @pytest.fixture(scope="module")

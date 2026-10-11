@@ -1,7 +1,9 @@
 """Leased, resumable ingestion steps (T18, DESIGN B3, INV-5).
 
 One `run_step` claims ONE job through the SECURITY DEFINER `app_claim_ingestion_job` (fresh lease_token),
-then runs PARSE -> CHUNK -> EMBED (batched, resumes from the embedded count) -> ACTIVATE inside a time budget.
+then runs PARSE -> (OCR, T21) -> CHUNK -> EMBED (batched, resumes from the embedded count) -> ACTIVATE inside a time budget.
+OCR transcribes at most OCR_PAGES_PER_STEP scanned pages per invocation; each finished page is committed (with its
+idempotent usage event) before the next one starts, so a yielded or killed step resumes at the first page without a row.
 All progress is written by the existing indexer stages with a `Fence`: `UPDATE ingestion_jobs ... WHERE
 lease_token = :mine` in the same transaction as the work; zero rows => LeaseLost, rollback, write nothing.
 
@@ -42,9 +44,11 @@ from scribe_ingest.indexer import (
     parse_for_index,
     persist_chunks,
     register_version,
+    resolve_ocr,
     verify_stored_bytes,
 )
 from scribe_ingest.model import BLOCK_SEPARATOR
+from scribe_ingest.ocr import OcrClient, OcrError
 
 LEASE_SECONDS = 330
 MAX_LIVE_LEASES = 3
@@ -93,7 +97,7 @@ def error_from_exception(exc: BaseException) -> tuple[str, str]:
     """(code, plain message safe to show to a user). Unknown exceptions never leak their text."""
     if isinstance(exc, IngestError):
         return exc.code, exc.message
-    if isinstance(exc, EmbeddingError):
+    if isinstance(exc, (EmbeddingError, OcrError)):
         return exc.code, exc.message
     if isinstance(exc, IndexerError):
         return exc.code, exc.message
@@ -123,12 +127,12 @@ async def _terminal(conn, wid, fence: Fence, status: str, stage: str, code: str 
         (status, stage, code, (message or "")[:500] or None))
 
 
-async def _yield_job(conn, wid, fence: Fence) -> None:
+async def _yield_job(conn, wid, fence: Fence, stage: str = "EMBED") -> None:
     """Out of time with progress saved: back to the queue and hand the attempt back."""
     await _job_update(
         conn, wid, fence,
-        "update ingestion_jobs set status = 'queued', stage = 'EMBED', attempts = greatest(attempts - 1, 0), "
-        "lease_token = null, lease_expires_at = null, next_retry_at = null, updated_at = now()", ())
+        "update ingestion_jobs set status = 'queued', stage = %s, attempts = greatest(attempts - 1, 0), "
+        "lease_token = null, lease_expires_at = null, next_retry_at = null, updated_at = now()", (stage,))
 
 
 async def _schedule_retry(conn, wid, fence: Fence, code: str, message: str, minutes: float) -> None:
@@ -174,7 +178,7 @@ async def more_work(conn) -> bool:
 async def run_step(
     conn: psycopg.AsyncConnection, embedder: Embedder, *, budget_s: float = 240.0, max_live: int = MAX_LIVE_LEASES,
     lease_seconds: int = LEASE_SECONDS, download: Callable[..., bytes] = download_private_blob, blob_token: str = "",
-    rng: random.Random | Any = random,
+    rng: random.Random | Any = random, ocr: OcrClient | None = None, ocr_pages_per_step: int | None = None,
 ) -> dict[str, Any]:
     started = time.monotonic()
     deadline = started + budget_s
@@ -247,6 +251,13 @@ async def run_step(
                     await fence.touch(conn, stage="DONE", complete=True)
                 return {**out, "outcome": "completed", "stage": "DONE", "more": await more_work(conn)}
             doc = parse_for_index(data, mime, name)
+            if doc.needs_ocr_pages:
+                # stage OCR is set by the fenced page writes; a yield (OCR_PENDING) below re-queues at stage OCR and the
+                # next claim re-runs this path (cheap: re-download + re-parse) and skips the pages already stored
+                doc = await resolve_ocr(
+                    conn, wid, file_id, ver_id, gen_id, data, doc, ocr, fence=fence, deadline=deadline,
+                    **({} if ocr_pages_per_step is None else {"max_pages": ocr_pages_per_step}),
+                    usage_user_id=user_id)
             chunkset = chunk_document(doc, STRUCTURAL_V1)
             await persist_chunks(conn, wid, file_id, ver_id, gen_id, doc, chunkset, fence=fence)
             text_bytes, extracted = len(doc.text), doc.text
@@ -271,12 +282,13 @@ async def run_step(
             await _safe(fail_generation(conn, wid, file_id, gen_id, exc.code, exc.message, cancelled=True))
         return {**out, "outcome": status, "error_code": exc.code, "more": await more_work(conn)}
     except IndexerError as exc:
-        if exc.code == "TIME_BUDGET":
+        if exc.code in ("TIME_BUDGET", "OCR_PENDING"):
+            stage = "OCR" if exc.code == "OCR_PENDING" else "EMBED"
             try:
-                await _yield_job(conn, wid, fence)
+                await _yield_job(conn, wid, fence, stage)
             except LeaseLost:
                 return {**out, "outcome": "lease_lost"}
-            return {**out, "outcome": "yielded", "stage": "EMBED", "more": True}
+            return {**out, "outcome": "yielded", "stage": stage, "more": True}
         return await _handle_failure(conn, wid, fence, file_id, gen_id, out, attempts, exc, rng)
     except Exception as exc:  # noqa: BLE001 - classified below; never swallowed
         return await _handle_failure(conn, wid, fence, file_id, gen_id, out, attempts, exc, rng)

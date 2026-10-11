@@ -22,6 +22,7 @@ from psycopg.types.json import Jsonb
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from scribe_ingest.ocr import OCR_NOTICE
 
 from scribe_ingest.embedding import (Embedder, EmbeddingError, FakeEmbedder, FakeEmbedderRefused,
                                      GeminiEmbedder, TaskFormat, database_name, embedder_from_env)
@@ -106,7 +107,7 @@ def make_reranker_for(dsn: str, env: "os._Environ[str] | dict[str, str] | None" 
 def span_json(s: SpanRef) -> dict[str, Any]:
     return {"block_id": str(s.block_id), "block_index": s.block_index, "char_start": s.char_start,
             "char_end": s.char_end, "page": s.page, "bbox": list(s.bbox) if s.bbox else None,
-            "ocr": s.ocr, "row_number": s.row_number}
+            "ocr": s.ocr, "ocr_notice": OCR_NOTICE if s.ocr else None, "row_number": s.row_number}
 
 
 def context_json(p: PackedContext) -> dict[str, Any]:
