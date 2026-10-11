@@ -2,7 +2,7 @@
 
 **Review status: NOT YET HUMAN-REVIEWED.** A person must verify every case (question, reference answer, evidence quotes, forbidden docs) against the corpus in `fixtures/corpus/` before this dataset is used for milestone reports.
 
-120 questions over the 24-document Northwind Logistics corpus (`fixtures/corpus/`, planted facts in `fixtures/corpus/FACTS.md`), 12 per category. Files: `cases.jsonl`, `meta.json`.
+200 questions over the 24-document Northwind Logistics corpus (`fixtures/corpus/`, planted facts in `fixtures/corpus/FACTS.md`), 20 per category: the 120 original cases (12 per category) plus 80 machine-drafted, UNREVIEWED cases added by task T28 (8 per category, `origin: machine-drafted-t28`, `reviewed: false`; see `UNREVIEWED_T28.md`). Files: `cases.jsonl`, `meta.json`, `REVIEW_FIRST.md`, `UNREVIEWED_T28.md`.
 
 ## Categories
 
@@ -21,7 +21,7 @@
 
 ## Schema (one JSON object per line in `cases.jsonl`)
 
-`id`, `split` (`dev`|`validation`|`test`), `category`, `tags[]`, `question`, `answerable`, `reference_answer` (1-3 sentences), `must_include[]` (short strings a correct answer must contain; empty when unanswerable), `evidence[]` of `{doc, version, quote, page, grade}`, and `forbidden[]` of `{doc}`. The authoritative definition is `intelligence/src/scribe_eval/dataset.py`.
+`id`, `split` (`dev`|`validation`|`test`), `category`, `tags[]`, optional `origin` and `reviewed` (T28: set on the machine-drafted cases), `question`, `answerable`, `reference_answer` (1-3 sentences), `must_include[]` (short strings a correct answer must contain; empty when unanswerable), `evidence[]` of `{doc, version, quote, page, grade}`, and `forbidden[]` of `{doc}`. The authoritative definition is `intelligence/src/scribe_eval/dataset.py`.
 
 - `doc`: filename in the corpus. `version`: 1 for every document here.
 - `quote`: at most 200 characters, copied verbatim, within one sentence or one table row, occurring exactly once in that document after normalization.
@@ -35,7 +35,7 @@ Labels are profile-independent: `(doc, version, quote, page, grade)`. A retrieve
 
 ## Split policy (INV-12)
 
-Splits are assigned per category (stratified) with `scribe-eval assign-splits benchmarks/datasets/golden-v1 --seed 20260101`, ratios in `meta.json` (dev 0.4, validation 0.2, test 0.4). Resulting counts: 50 dev, 20 validation, 50 test. Tuning and debugging use `dev`; model and parameter selection use `validation`. The `test` split is used only for milestone reports and is never used to tune anything. Do not edit cases after looking at test results; add new cases to a new dataset version instead.
+Splits are assigned per category (stratified) with `scribe-eval assign-splits benchmarks/datasets/golden-v1 --seed 20260101`, ratios in `meta.json` (dev 0.4, validation 0.2, test 0.4). Original 120 cases: 50 dev, 20 validation, 50 test. The 80 T28 cases were split afterwards with `--only-origin machine-drafted-t28` (same seed; the 120 original splits are not moved), giving 80 dev, 40 validation, 80 test overall (8/4/8 per category). Tuning and debugging use `dev`; model and parameter selection use `validation`. The `test` split is used only for milestone reports and is never used to tune anything. Do not edit cases after looking at test results; add new cases to a new dataset version instead.
 
 ## Validation
 

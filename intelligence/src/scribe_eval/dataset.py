@@ -38,6 +38,10 @@ class Case(BaseModel):
     must_include: list[str] = []
     evidence: list[Evidence] = []
     forbidden: list[Forbidden] = []
+    # T28: provenance. Cases drafted by a model carry origin="machine-drafted-t28" and reviewed=false until a person
+    # has checked the question, reference answer, quotes and forbidden docs. Absent on the original T05 cases.
+    origin: str | None = None
+    reviewed: bool | None = None
 
 
 def parse_cases(path: Path) -> tuple[list[Case], list[str]]:

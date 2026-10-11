@@ -64,6 +64,10 @@ class RunRecord(BaseModel):
     started_at: str = Field(default_factory=now_iso)
     finished_at: str | None = None
     summary: dict[str, Any] = {}
+    # T28: a run built from fake generators/verifiers is never a measurement. ``stamp`` carries the visible marker.
+    measurement: bool = True
+    stamp: str | None = None
+    dataset_sha256: str | None = None
     case_results: list[dict[str, Any]] = Field(default_factory=list, exclude=True)
 
     def write(self, out_dir: str | Path = DEFAULT_RUNS_DIR, results: list[CaseResult] | None = None) -> Path:
