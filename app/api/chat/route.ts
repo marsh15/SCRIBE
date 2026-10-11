@@ -4,6 +4,7 @@ import {
   convertToModelMessages,
   tool,
   stepCountIs,
+  createUIMessageStreamResponse,
 } from "ai";
 import { NextResponse } from "next/server";
 import { google } from "@ai-sdk/google";
@@ -30,6 +31,8 @@ import {
 import { ensureStructuredAnswer } from "@/lib/chat-answer";
 import { buildSystemPrompt } from "@/lib/chat-prompt";
 import { extractRagToolResult, type RagToolResult } from "@/lib/rag-types";
+import { streamWithVerification, type TurnFinish } from "@/lib/chat-verify-stream";
+import { requestVerification } from "@/lib/evidence/verification";
 
 export type ChatMessage = UIMessage;
 
@@ -256,6 +259,11 @@ export async function POST(req: Request) {
       }),
     };
 
+    // T26: the turn's outcome for post-stream verification (Python engine only; legacy path is unchanged).
+    const turn: { text: string; messageId?: string; skip?: boolean } = { text: "" };
+    let turnDone!: (t: TurnFinish) => void;
+    const turnFinished = new Promise<TurnFinish>((resolve) => (turnDone = resolve));
+
     const result = streamText({
       model,
       messages: await convertToModelMessages(sanitizedMessages),
@@ -263,6 +271,9 @@ export async function POST(req: Request) {
       system: buildSystemPrompt(retrievalEngine),
       stopWhen: stepCountIs(3),
       onFinish: async ({ response, text, usage }: { response?: ResponseLike; text?: string; usage?: UsageLike }) => {
+        turn.text = text ?? "";
+        try {
+        await (async () => {
         if (!chatId) return;
 
         const { db } = await import("@/lib/db-config");
@@ -314,6 +325,7 @@ export async function POST(req: Request) {
             (result) => result.status === "unavailable",
           );
           // INV-16 / B4: never persist an answer that has no evidence behind it.
+          turn.skip = searchUnavailable;
           const finalText = searchUnavailable
             ? SEARCH_UNAVAILABLE_MESSAGE
             : ensureStructuredAnswer(text ?? "");
@@ -340,6 +352,7 @@ export async function POST(req: Request) {
             content: finalText,
             parts: assistantParts as never,
           });
+          turn.messageId = assistantMessageId;
 
           const totalRequestMs = Math.max(0, Date.now() - requestStart);
           for (const ragResult of completedRagResults) {
@@ -396,9 +409,26 @@ export async function POST(req: Request) {
         } catch (error) {
           console.error("Failed to save assistant message or usage in onFinish", error);
         }
-
+        })();
+        } finally {
+          turnDone({ ...turn });
+        }
       },
     });
+
+    if (retrievalEngine === "python") {
+      const stream = streamWithVerification({
+        modelStream: result.toUIMessageStream({ sendFinish: false }),
+        finished: turnFinished,
+        verify: (t) =>
+          requestVerification({ userId, workspaceId, messageId: t.messageId, text: t.text, results: ragToolResults }),
+        onError: (error) => {
+          console.error("[Chat] Stream failed:", error);
+          return formatChatError(error);
+        },
+      });
+      return createUIMessageStreamResponse({ stream });
+    }
 
     return result.toUIMessageStreamResponse({
       onError: (error) => {

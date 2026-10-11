@@ -6,6 +6,7 @@ import { useChatState } from "@/components/chat-context";
 import { ArrowUp, CornerDownLeft, Database, Loader2 } from "lucide-react";
 import { CitedMarkdown } from "@/components/cited-markdown";
 import { collectEvidenceByLabel } from "@/lib/evidence/citations";
+import { verificationFromParts } from "@/lib/evidence/verification";
 import { createChat } from "@/app/chat/actions";
 import { useRouter } from "next/navigation";
 import { notifyChatCreated } from "@/lib/chat-events";
@@ -162,6 +163,8 @@ export default function Ragchatbot() {
                     <div className="prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-pre:bg-primary prose-pre:text-primary-foreground max-w-none prose-a:text-rag prose-a:no-underline hover:prose-a:underline">
                     <CitedMarkdown
                       evidence={collectEvidenceByLabel(m.parts)}
+                      verification={m.role === "assistant" ? verificationFromParts(m.parts) : undefined}
+                      streaming={status === "streaming" && m.id === messages[messages.length - 1]?.id}
                       text={
                         m.parts
                         ?.filter((p) => p.type === "text")

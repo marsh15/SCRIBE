@@ -56,6 +56,8 @@ export type RagEvidenceItem = {
   label: string;
   sourceId: number;
   sourceName: string;
+  /** The Source version the quote was taken from (T26 re-checks it). */
+  sourceVersionId?: string | null;
   pageStart: number | null;
   pageEnd: number | null;
   headingPath: string[];

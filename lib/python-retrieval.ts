@@ -60,6 +60,7 @@ type PyContextEntry = {
 
 type PyItem = {
   id: string;
+  source_version_id?: string | null;
   label: string;
   source_id: number;
   source_name: string;
@@ -230,6 +231,7 @@ export function buildPythonToolResult(query: string, res: PyRetrieveResponse, to
       label: i.label,
       sourceId: i.source_id,
       sourceName: i.source_name,
+      sourceVersionId: i.source_version_id ?? null,
       pageStart: i.page_start ?? null,
       pageEnd: i.page_end ?? null,
       headingPath: i.heading_path ?? [],

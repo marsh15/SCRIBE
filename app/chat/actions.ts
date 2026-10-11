@@ -6,6 +6,7 @@ import { desc, eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { nanoid } from "nanoid";
 import { resolveWorkspace } from "@/lib/workspace";
+import { readStoredVerifications, type VerificationData } from "@/lib/evidence/verification";
 
 export async function getChats() {
     try {
@@ -82,5 +83,18 @@ export async function deleteChat(id: string) {
     } catch (err) {
         console.error("Failed to delete chat:", err);
         return false;
+    }
+}
+
+/** Stored claim verifications (T26) for a chat's assistant messages. Empty on any failure: no badges, never a false one. */
+export async function getChatVerifications(chatId: string): Promise<Record<string, VerificationData>> {
+    try {
+        const { userId, workspaceId } = await resolveWorkspace();
+        const rows = await getChatMessages(chatId);
+        const messageIds = rows.filter((m) => m.role === "assistant").map((m) => m.id);
+        return await readStoredVerifications({ userId, workspaceId, messageIds });
+    } catch (err) {
+        console.error("Failed to fetch verifications:", err);
+        return {};
     }
 }
