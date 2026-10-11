@@ -20,6 +20,7 @@ import {
   type CompleteOutcome,
   type ReservedVersion,
 } from "@/lib/ingestion/source-version-policy";
+import { toPage, toWindow, type Page, type PageRequest } from "@/lib/files/source-detail-paging";
 import {
   toVersionView,
   type SourceVersionRow,
@@ -200,12 +201,17 @@ export async function completeSourceVersionUpload(input: {
   );
 }
 
-/** Version history of one Source, newest first. A foreign or deleted Source yields an empty list. */
+/** Version history of one Source, newest first, paged. A foreign or deleted Source yields an empty page. */
 export async function listSourceVersions(
   workspaceId: string,
   userId: string,
-  sourceId: number
-): Promise<SourceVersionView[]> {
+  sourceId: number,
+  request?: PageRequest
+): Promise<Page<SourceVersionView>> {
+  // T24: bounded server-side (default 50, max 200); fetch one extra row to learn whether another page exists
+  const window = toWindow(request);
+  const fetchLimit = window.limit + 1;
+  const offset = window.offset;
   const rows = (await sql`
     SELECT v."id", v."version_number", v."size_bytes", v."created_at", v."upload_state", v."duplicate_of",
            d."version_number" AS duplicate_of_number,
@@ -226,9 +232,10 @@ export async function listSourceVersions(
     WHERE v."source_id" = ${sourceId}::int AND v."workspace_id" = ${workspaceId}::uuid
       AND f."user_id" = ${userId} AND f."deleted_at" IS NULL
     ORDER BY v."version_number" DESC
+    LIMIT ${fetchLimit}::int OFFSET ${offset}::int
   `) as Array<Record<string, unknown>>;
 
-  return rows.map((r) =>
+  const views = rows.map((r) =>
     toVersionView({
       id: String(r.id),
       versionNumber: Number(r.version_number),
@@ -247,4 +254,5 @@ export async function listSourceVersions(
       lastError: (r.last_error as string | null) ?? null,
     })
   );
+  return toPage(views, window);
 }

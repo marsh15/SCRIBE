@@ -365,7 +365,7 @@ async def test_history_query_reports_each_versions_state(env):
     assert out[0] == "duplicate"
     v4, _, _ = await upload_version(conn, wid, fid, blobs, V3)  # queued, not started
     sql = history_sql()
-    cur = await conn.execute(sql, {"workspaceId": wid, "userId": "t12", "sourceId": fid})
+    cur = await conn.execute(sql, {"workspaceId": wid, "userId": "t12", "sourceId": fid, "fetchLimit": 51, "offset": 0})
     cols = [c.name for c in cur.description]
     rows = {r[cols.index("version_number")]: dict(zip(cols, r)) for r in await cur.fetchall()}
     assert sorted(rows) == [1, 2, 3, 4]
@@ -374,5 +374,5 @@ async def test_history_query_reports_each_versions_state(env):
     assert rows[3]["duplicate_of"] == v1 and rows[3]["duplicate_of_number"] == 1 and rows[3]["job_status"] is None
     assert rows[4]["job_status"] == "queued" and rows[4]["is_desired"] is True and rows[4]["generation_status"] is None
     # a different user / workspace sees nothing
-    cur = await conn.execute(sql, {"workspaceId": wid, "userId": "intruder", "sourceId": fid})
+    cur = await conn.execute(sql, {"workspaceId": wid, "userId": "intruder", "sourceId": fid, "fetchLimit": 51, "offset": 0})
     assert await cur.fetchall() == []

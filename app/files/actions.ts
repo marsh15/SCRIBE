@@ -10,6 +10,7 @@ import { requeueFailedSource } from "@/lib/ingestion/python-queue";
 import { fireTick } from "@/lib/ingestion/tick";
 import { resolveWorkspace } from "@/lib/workspace";
 import { deleteSource } from "@/lib/ingestion/source-intake";
+import { MAX_PAGE_SIZE } from "@/lib/files/source-detail-paging";
 import { listSourceVersions } from "@/lib/ingestion/source-versions";
 
 export async function getFiles() {
@@ -85,7 +86,7 @@ export async function getSourceVersions(sourceId: number) {
     try {
         const { userId, workspaceId } = await resolveWorkspace();
         if (!Number.isInteger(sourceId) || sourceId <= 0) return [];
-        return await listSourceVersions(workspaceId, userId, sourceId);
+        return (await listSourceVersions(workspaceId, userId, sourceId, { limit: MAX_PAGE_SIZE })).items;
     } catch (error) {
         console.error("Failed to fetch Source versions:", error);
         return [];

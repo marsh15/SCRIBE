@@ -103,7 +103,7 @@ describe("getSourceVersions action", () => {
     expect(versions.map((v) => [v.versionNumber, v.state])).toEqual([[2, "building"], [1, "active"]]);
     expect(versions[0].sizeBytes).toBe(20);
     const [, values] = mocks.sql.mock.calls[0];
-    expect(values).toEqual([7, "22222222-2222-4222-8222-222222222222", "user_1"]);
+    expect(values).toEqual([7, "22222222-2222-4222-8222-222222222222", "user_1", 201, 0]);
   });
 
   it("returns nothing for an invalid id or when the lookup fails", async () => {

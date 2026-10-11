@@ -3,6 +3,7 @@ import { files } from "@/lib/db-schema";
 import { eq, and, isNull } from "drizzle-orm";
 import { resolveWorkspace } from "@/lib/workspace";
 import { downloadBlobToBuffer } from "@/lib/storage/blob";
+import { resolveVersionBlob } from "@/lib/files/source-detail";
 
 export async function GET(
     req: Request,
@@ -12,6 +13,26 @@ export async function GET(
         const { userId, workspaceId } = await resolveWorkspace();
         const { id } = await params;
         const fileId = Number(id);
+
+        // T24: a specific version. A duplicate version (T19) has no blob of its own, so it is served from the version
+        // it duplicates; the lookup is scoped to the caller's workspace/user and 404s for foreign or deleted Sources.
+        const versionParam = new URL(req.url).searchParams.get("version");
+        if (versionParam !== null) {
+            const versionNumber = Number(versionParam);
+            if (!Number.isInteger(versionNumber) || versionNumber <= 0) {
+                return new Response("File not found", { status: 404 });
+            }
+            const blob = await resolveVersionBlob(workspaceId, userId, fileId, versionNumber);
+            if (!blob) return new Response("File not found", { status: 404 });
+            const bytes = await downloadBlobToBuffer(blob.url);
+            return new Response(bytes, {
+                headers: {
+                    "Content-Type": blob.mimeType,
+                    "Content-Disposition": `inline; filename="${encodeURIComponent(blob.fileName)}"`,
+                    "Cache-Control": "private, max-age=3600",
+                },
+            });
+        }
 
         const file = await db.query.files.findFirst({
             where: and(eq(files.id, fileId), eq(files.userId, userId), eq(files.workspaceId, workspaceId), isNull(files.deletedAt)),

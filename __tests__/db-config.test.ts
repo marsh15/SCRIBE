@@ -14,5 +14,6 @@ describe("database configuration", () => {
 
     expect(() => db.query).toThrow(/NEON_DATABASE_URL is not configured/);
     expect(() => sql`SELECT 1`).toThrow(/NEON_DATABASE_URL is not configured/);
-  });
+    // The dynamic import is slow when the whole suite runs in parallel; the default 5s timeout flaked.
+  }, 30_000);
 });

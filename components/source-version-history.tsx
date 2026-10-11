@@ -1,7 +1,7 @@
 "use client";
 
 import { Loader2, Upload } from "lucide-react";
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import type { SourceVersionView, VersionState } from "@/lib/ingestion/source-version-state";
 
@@ -51,10 +51,12 @@ function detail(version: SourceVersionView): string | null {
 export interface SourceVersionHistoryProps {
   versions: SourceVersionView[];
   loading?: boolean;
+  /** Optional per-version action (T24: "Open original"). */
+  renderAction?: (version: SourceVersionView) => ReactNode;
 }
 
 /** Version history of one Source: newest first, with each version's state and duplicates called out. */
-export function SourceVersionHistory({ versions, loading }: SourceVersionHistoryProps) {
+export function SourceVersionHistory({ versions, loading, renderAction }: SourceVersionHistoryProps) {
   if (loading && versions.length === 0) {
     return (
       <p className="mt-2 flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground" data-testid="versions-loading">
@@ -86,6 +88,7 @@ export function SourceVersionHistory({ versions, loading }: SourceVersionHistory
               </span>
             </div>
             {note && <p className="text-[11px] text-muted-foreground">{note}</p>}
+            {renderAction?.(version)}
           </li>
         );
       })}
