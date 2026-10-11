@@ -35,6 +35,8 @@ def list_corpus(corpus: Path) -> list[str]:
 
 
 async def ensure_eval_workspace(conn: psycopg.AsyncConnection) -> str:
+    # Eval tooling only: discovers/creates the eval workspace by owner_user_id, which RLS cannot express without a
+    # context. It must run on a privileged (owner/superuser) connection, never as scribe_app.
     cur = await conn.execute("select id, kind from workspaces where owner_user_id = %s", (EVAL_OWNER,))
     rows = await cur.fetchall()
     for _, kind in rows:
@@ -63,7 +65,9 @@ async def ingest_corpus(
     conn: psycopg.AsyncConnection, wid: str, names: list[str], loader: Loader, embedder: Embedder,
     *, reset: bool = False,
 ) -> list[tuple[str, IngestResult]]:
-    kind = (await (await conn.execute("select kind from workspaces where id = %s", (wid,))).fetchone() or [None])[0]
+    async with conn.transaction():
+        await conn.execute("select set_config('app.workspace_id', %s, true)", (wid,))
+        kind = (await (await conn.execute("select kind from workspaces where id = %s", (wid,))).fetchone() or [None])[0]
     if kind != "eval":
         raise CliError(f"refusing: workspace {wid} is kind {kind!r}, not 'eval'")
     if reset:

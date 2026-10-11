@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict
 
 from scribe_ingest.blob import BlobDownloadError, download_private_blob
 from scribe_ingest.embedding import FakeEmbedderRefused, embedder_from_env
-from scribe_ingest.indexer import IndexerError, build_generation, load_index_profile, register_version
+from scribe_ingest.indexer import IndexerError, _begin, build_generation, load_index_profile, register_version
 
 from .auth import Principal, require_scope
 from .config import get_settings
@@ -52,10 +52,14 @@ async def ingest_source(body: IngestSourceBody, principal: Principal = Depends(r
         raise _fail(503, "DATABASE_UNAVAILABLE", "database unavailable", True) from None
     try:
         async with pool.connection() as conn:
-            cur = await conn.execute(
-                "select name, type, storage_url, storage_key, deleted_at from files where id = %s and workspace_id = %s",
-                (body.source_id, wid))
-            row = await cur.fetchone()
+            # RLS: the lookup needs the workspace context, which is transaction-local (same pattern as the indexer).
+            async with conn.transaction():
+                await _begin(conn, wid)
+                cur = await conn.execute(
+                    "select name, type, storage_url, storage_key, deleted_at from files "
+                    "where id = %s and workspace_id = %s",
+                    (body.source_id, wid))
+                row = await cur.fetchone()
             if row is None:
                 raise _fail(404, "SOURCE_NOT_FOUND", "source not found", False)
             name, mime, storage_url, storage_key, deleted_at = row

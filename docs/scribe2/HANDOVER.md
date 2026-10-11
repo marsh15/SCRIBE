@@ -58,7 +58,7 @@ Each fits one agent run / one PR. Full text is in the plan; key points below. Mi
 **M1 — measured hybrid retrieval**
 - **T13 (DONE — see table)** Dense (exact/ANN) + lexical (FTS) search in Python, `POST /api/py/retrieve`, one `REPEATABLE READ READ ONLY` transaction with `set_config('app.workspace_id')`, filters inside SQL before LIMIT (INV-2/3), `fts_simple` for identifiers (ERR_AUTH_403, INV-2047) and phrase queries, a `legacy-dense` strategy over `chunk_embeddings_3072` that reproduces the T07 baseline, candidates persisted to `retrieval_candidates`. **Embed queries with `embed_queries`, not the document format.**
 - **T14 (DONE except the live Voyage run)** RRF (k=60, ranks only, INV-10) + Voyage rerank adapter (cache, fake for tests, degraded `rerank_unavailable` on failure) + dedup by content_hash/parent + parent expansion + 6,000-token packer; seed retrieval profiles A–E with stored config hashes.
-- **T15** RLS: app/Python connect as `scribe_app` (NOBYPASSRLS), policies per INV-1, `scoped(workspaceId)` helper in TS, SECURITY DEFINER queue-claim functions, cross-tenant tests (SQL and every API route). Roll out table by table.
+- **T15 (DONE at DB level, see follow-ups below)** RLS: app/Python connect as `scribe_app` (NOBYPASSRLS), policies per INV-1, `scoped(workspaceId)` helper in TS, SECURITY DEFINER queue-claim functions, cross-tenant tests (SQL and every API route). Roll out table by table.
 - **T16** `RETRIEVAL_ENGINE=python|legacy` for chat (default legacy), stage-timeline inspector (`rag-inspector.tsx`), "search unavailable" state, Supermemory off in python mode (D16).
 - **T17** Run profiles A–E on dev/validation, tune, choose default by a written rule, one `--milestone-report` test run → `docs/scribe2/benchmarks/m1.md` with paired CIs, latency, cost, ≥5 worked failures; flip `RETRIEVAL_ENGINE` if the rule is met.
 
@@ -121,3 +121,13 @@ Local test databases created in the `scribe-db-1` container: `t08`, `t12_test`, 
 ## 7. Working agreements
 
 Use Sonnet-class models for everything. Commit WITHOUT any Co-Authored-By/AI attribution line (user decision, later in the project; earlier commits have one). Roles: Opus head only reviews, Sonnet does the main work, Haiku does easy tasks. Do not commit secrets or fake-embedding results as baselines. Do not tune on the test split. Report outcomes as measured, including regressions.
+
+## 8. T15 follow-ups (RLS, migration 0013)
+
+0013 enables RLS (no FORCE) and adds `scribe_app`, `scribe_definer` and the `app_*` SECURITY DEFINER functions. Rollout order: apply 0013 -> move callers to `scoped()` / a `scribe_app` DSN (enable LOGIN out of band) -> only then run `drizzle/deferred/force_rls.sql` (has a guard; not journaled). Open items:
+
+- **Never run `drizzle-kit push`** against a DB with these policies/roles/functions: Drizzle does not model them and push may drop or reset them. Use `generate` + hand-written SQL only.
+- Cross-workspace integrity: add composite FKs (e.g. `(source_version_id, workspace_id)` -> `source_versions(id, workspace_id)`) so a row cannot reference a parent from another workspace (RI checks bypass RLS).
+- Add a DB integration test for `lib/scoped.ts` (the unit test only checks the batch shape with a mocked db).
+- Child tables inheriting via EXISTS (`chat_messages`, `ingestion_jobs`, `documents`, `rag_trace_chunks`, `rag_evaluations`): add a guard test that fails when a new table with a parent FK but no `workspace_id` appears without a policy.
+- No TS callers use `scoped()` yet; `ensurePersonalWorkspace` should call `app_ensure_personal_workspace` once on `scribe_app`. `scribe_eval.ingest_corpus.ensure_eval_workspace` needs a privileged connection.
