@@ -41,6 +41,11 @@ jobs:
       DATABASE_URL_TEST: postgresql://scribe:scribe@localhost:54329/scribe
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
