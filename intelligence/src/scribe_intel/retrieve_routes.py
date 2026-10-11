@@ -261,7 +261,7 @@ async def retrieve(body: RetrieveBody, principal: Principal = Depends(require_sc
     stage_ms["trace_persist"] = int((time.monotonic() - t) * 1000)
     stage_ms["request_total"] = int((time.monotonic() - started) * 1000)
     out: dict[str, Any] = {
-        "profile": body.profile, "trace_id": trace_id, "degraded": degraded,
+        "profile": body.profile, "trace_id": trace_id, "degraded": degraded, "config_hash": trace_config_hash(body),
         "candidates": [candidate_json(i, rc) for i, rc in enumerate(returned, 1)],
         "stage_ms": stage_ms, "counts": {**result.counts, "returned": len(returned)}, "meta": result.extra,
     }

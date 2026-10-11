@@ -120,7 +120,7 @@ Local test databases created in the `scribe-db-1` container: `t08`, `t12_test`, 
 
 ## 7. Working agreements
 
-Use Sonnet-class models for everything. Commit WITHOUT any Co-Authored-By/AI attribution line (user decision, later in the project; earlier commits have one). Roles: Opus head only reviews, Sonnet does the main work, Haiku does easy tasks. Do not commit secrets or fake-embedding results as baselines. Do not tune on the test split. Report outcomes as measured, including regressions.
+Use Sonnet-class models for everything. Commit WITHOUT any Co-Authored-By/AI attribution line (user decision, later in the project; earlier commits have one). Roles: one Opus head only oversees and writes no code; it reviews once after ALL tasks are done (not per task). One main Sonnet builder does the work, Haiku subagents do easy tasks; the orchestrator re-runs tests itself before every commit. Do not commit secrets or fake-embedding results as baselines. Do not tune on the test split. Report outcomes as measured, including regressions.
 
 ## 8. T15 follow-ups (RLS, migration 0013)
 

@@ -13,6 +13,8 @@ const schema = z.object({
   VERCEL_URL: optionalSecret,
   // Scribe 2.0 (T12): "python" sends Source intake to the Python indexer; "legacy" keeps the TS pipeline.
   INGEST_ENGINE: z.enum(["python", "legacy"]).default("legacy"),
+  // Scribe 2.0 (T16): "python" serves chat search from POST /api/py/retrieve; "legacy" keeps the TS search.
+  RETRIEVAL_ENGINE: z.enum(["python", "legacy"]).default("legacy"),
   RAZORPAY_KEY_ID: optionalSecret,
   RAZORPAY_KEY_SECRET: optionalSecret,
   RAZORPAY_WEBHOOK_SECRET: optionalSecret,

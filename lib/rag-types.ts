@@ -13,19 +13,42 @@ export type RagToolChunk = {
   metadata: unknown;
   contentPreview: string;
   content: string;
+  /** Python engine only: section heading and per-stage ranks. */
+  section?: string | null;
+  stageRanks?: StageRanks;
+  selected?: boolean;
+};
+
+export type StageRanks = {
+  dense: number | null;
+  lexical: number | null;
+  fused: number | null;
+  reranked: number | null;
+};
+
+/** Python retrieval details (T16). Absent on legacy results and on old messages. */
+export type RagRetrievalMeta = {
+  engine: "python";
+  profile: string;
+  configHash?: string | null;
+  degraded: string[];
+  stageMs: Record<string, number>;
+  counts: Record<string, number>;
 };
 
 export type RagToolResult = {
   type: typeof RAG_TOOL_RESULT_TYPE;
   traceId?: string;
   query: string;
-  status: "retrieved" | "empty" | "failed";
+  status: "retrieved" | "empty" | "failed" | "unavailable";
   message?: string;
   context: string;
   timings: SearchDocumentsResult["timings"];
   topK: number;
   threshold: number;
   chunks: RagToolChunk[];
+  engine?: "legacy" | "python";
+  retrieval?: RagRetrievalMeta;
 };
 
 export function extractRagToolResult(output: unknown): RagToolResult | null {

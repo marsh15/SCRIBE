@@ -20,6 +20,12 @@ import {
   recordRagTrace,
 } from "@/lib/rag-observability";
 import { evaluateRagAnswer } from "@/lib/rag-eval";
+import {
+  getRetrievalEngine,
+  retrieveViaPython,
+  shouldUseSupermemory,
+  SEARCH_UNAVAILABLE_MESSAGE,
+} from "@/lib/python-retrieval";
 import { extractRagToolResult, type RagToolResult } from "@/lib/rag-types";
 
 export type ChatMessage = UIMessage;
@@ -190,7 +196,8 @@ export async function POST(req: Request) {
 
     const sanitizedMessages = sanitizeMessages(messages);
     const baseModel = google(CHAT_MODEL_ID);
-    const model = SUPERMEMORY_ENABLED
+    const retrievalEngine = getRetrievalEngine();
+    const model = shouldUseSupermemory(retrievalEngine, SUPERMEMORY_ENABLED)
       ? withSupermemory(baseModel, userId, { conversationId: chatId ?? userId })
       : baseModel;
 
@@ -222,6 +229,12 @@ export async function POST(req: Request) {
           query: z.string().describe("The search query to find relevant documents"),
         }),
         execute: async ({ query }) => {
+          if (retrievalEngine === "python") {
+            // workspace comes from resolveWorkspace(), never from the request body (INV-15)
+            const pyResult = await retrieveViaPython({ query, userId, workspaceId });
+            ragToolResults.push(pyResult);
+            return pyResult;
+          }
           try {
             const search = await searchDocuments(query, userId, workspaceId, 10, 0.3);
             let toolResult = buildRagToolResult(search);
@@ -271,6 +284,7 @@ CRITICAL RULE: You MUST call the searchKnowledgeBase tool on EVERY user message 
 - For vague queries, use a broad search query like "summary overview introduction main topic".
 - NEVER respond with "I need more information" or "please specify". ALWAYS search first, then answer based on what you find.
 - If the search returns no results, tell the user their knowledge base appears empty and suggest uploading documents.
+- If the tool context begins with SEARCH_UNAVAILABLE, the search service failed: do NOT answer, do NOT use general knowledge; reply only with the message given in that context.
 - The searchKnowledgeBase tool returns a structured object. Use its "context" field as the retrieved evidence text and its "chunks" array only as supporting metadata.
 
 HALLUCINATION PREVENTION (CRITICAL):
@@ -341,7 +355,13 @@ Citation rules:
           const hadKnowledgeLookup =
             toolCalls.some((call) => call.toolName === "searchKnowledgeBase") ||
             completedRagResults.length > 0;
-          const finalText = ensureStructuredAnswer(text ?? "", hadKnowledgeLookup);
+          const searchUnavailable = completedRagResults.some(
+            (result) => result.status === "unavailable",
+          );
+          // INV-16 / B4: never persist an answer that has no evidence behind it.
+          const finalText = searchUnavailable
+            ? SEARCH_UNAVAILABLE_MESSAGE
+            : ensureStructuredAnswer(text ?? "", hadKnowledgeLookup);
 
           if (finalText) {
             assistantParts.push({ type: "text", text: finalText });
@@ -368,7 +388,8 @@ Citation rules:
 
           const totalRequestMs = Math.max(0, Date.now() - requestStart);
           for (const ragResult of completedRagResults) {
-            if (!ragResult.traceId) continue;
+            // Python traces live in retrieval_traces, written by the Python service.
+            if (!ragResult.traceId || ragResult.engine === "python") continue;
 
             try {
               const generationMs = Math.max(

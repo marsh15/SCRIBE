@@ -71,6 +71,7 @@ async def test_success_shape_on_both_paths(client, seeded):
         assert top["spans"] and {"page", "bbox", "char_start", "char_end", "block_id"} <= set(top["spans"][0])
         assert "ERR_AUTH_403" in top["content"]
         assert {"lexical_plus_embed_wait", "hydrate", "trace_persist", "request_total"} <= set(j["stage_ms"])
+        assert isinstance(j["config_hash"], str) and j["config_hash"]
 
 
 async def test_default_profile_is_dense_exact(client, seeded):
