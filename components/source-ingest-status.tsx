@@ -59,3 +59,17 @@ export function SourceIngestStatus({ status, stage, attempts = 0, errorCode, las
     </div>
   );
 }
+
+/** T22: a legacy Source whose original file is gone keeps working on the old index; uploading it again upgrades it. */
+export function ReuploadNote({ reuploadRequiredAt }: { reuploadRequiredAt?: string | Date | null }) {
+  if (!reuploadRequiredAt) return null;
+  return (
+    <p
+      className="mt-1 font-mono text-[10px] text-muted-foreground"
+      data-testid="reupload-note"
+      title="The original file is no longer available, so this Source still uses the older index. Upload it again to upgrade it."
+    >
+      Re-upload to upgrade
+    </p>
+  );
+}

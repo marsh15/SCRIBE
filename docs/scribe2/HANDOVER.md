@@ -67,7 +67,7 @@ Each fits one agent run / one PR. Full text is in the plan; key points below. Mi
 - **T19** Upload new version while old stays searchable; duplicate bytes → `duplicate_of`; newer desired version cancels older build. Note: `source_versions.sha256` is frozen by trigger, so insert the row once bytes are known.
 - **T20** Soft delete excludes from retrieval in the same transaction (INV-14); background purge; "Source deleted" citations.
 - **T21** OCR for pages <25 chars with images: pypdfium2 150 DPI → Gemini 2.5 Flash, ≤50 pages/source, bounded pages per step, OCR blocks flagged, UI "OCR text — verify against original". Lifts the current `OCR_NOT_AVAILABLE` failure for scanned PDFs.
-- **T22** Backfill legacy sources onto structural-v1, then drop `chunk_embeddings_3072`, `documents`, and `scripts/migrate-embeddings.js` (back up the Neon branch first).
+- **T22 (DONE, nothing run against Neon)** `python -m scribe_ingest.upgrade backfill|progress` queues one structural-v1 job per active Source (T18 machinery drains it); migration `0018` adds `files.reupload_required_at/reason` ("Re-upload to upgrade" note on the Source row); `drizzle/deferred/retire_legacy.sql` (guarded, manual, `-v dry_run=1` supported) deletes legacy 3072 embeddings of upgraded Sources. `scripts/migrate-embeddings.js` removed. `documents` is NOT dropped: the legacy retrieval path, file detail page and source intake still read it (drop is a commented block in the SQL).
 - **T23** Open citations at exact page/passage (pdf.js bbox highlight, DOCX/MD/TXT quote highlight, CSV row, "page unavailable").
 - **T24** Source detail tabs: Original, Structure, Chunks, Versions, History.
 

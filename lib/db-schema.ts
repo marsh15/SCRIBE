@@ -93,6 +93,10 @@ export const files = pgTable(
     purgeNextRetryAt: timestamp("purge_next_retry_at", { withTimezone: true }),
     purgeErrorCode: text("purge_error_code"),
     purgeLastError: text("purge_last_error"),
+    // T22 (0018): legacy Source whose original blob is missing/unreadable keeps its legacy generation and shows
+    // "Re-upload to upgrade" until a new version is uploaded.
+    reuploadRequiredAt: timestamp("reupload_required_at", { withTimezone: true }),
+    reuploadReason: text("reupload_reason"),
     desiredVersionId: uuid("desired_version_id").references(
       (): AnyPgColumn => sourceVersions.id,
       { onDelete: "set null" }

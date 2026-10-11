@@ -558,6 +558,7 @@ async def activate_generation(
             (source_id, profile.id, generation_id, workspace_id))
         await conn.execute(
             "update files set active_version_id = %s, status = 'ready', processing_error = NULL, "
+            "reupload_required_at = NULL, reupload_reason = NULL, "
             "text_bytes = coalesce(%s, text_bytes), extracted_text = coalesce(%s, extracted_text), "
             "size = coalesce((select v.size_bytes from source_versions v where v.id = %s), size), "
             "updated_at = now() where id = %s and workspace_id = %s",

@@ -227,14 +227,19 @@ async def run_step(
             text_bytes = len(extracted)
         else:
             stored = await load_stored_version(conn, wid, ver_id) if ver_id else None
-            if stored and (stored["storage_key"] or "").startswith("http"):
+            # T22: a backfilled legacy version 1 has no recorded sha256 (frozen NULL) and its storage_key is not a URL;
+            # its original lives at files.storage_url. Build structural-v1 on THAT version (no spurious version 2).
+            legacy_v1 = bool(stored and stored["sha256"] is None and stored["upload_state"] == "stored"
+                             and not (stored["storage_key"] or "").startswith("http") and storage_url)
+            if stored and ((stored["storage_key"] or "").startswith("http") or legacy_v1):
                 # T19: a version TS reserved and stored (desired_version_id already points at it). Its own blob, its own
                 # mime; never re-register it (that would re-point desired_version_id and defeat cancellation).
                 async with conn.transaction():  # step boundary: a newer upload / a delete cancels before any download
                     await _begin(conn, wid)
                     await _check_still_desired(conn, wid, file_id, ver_id)
-                data = await asyncio.to_thread(download, stored["storage_key"], blob_token)
-                verify_stored_bytes(stored, data)
+                data = await asyncio.to_thread(download, storage_url if legacy_v1 else stored["storage_key"], blob_token)
+                if not legacy_v1:
+                    verify_stored_bytes(stored, data)
                 mime = stored["mime_type"] or mime
                 await begin_reserved_version(conn, wid, file_id, ver_id, fence)
             else:

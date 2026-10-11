@@ -46,3 +46,11 @@ it("disables Retry while a retry is in flight and renders nothing for ready Sour
   render({ status: "ready", stage: "DONE", attempts: 1 });
   expect(host.textContent).toBe("");
 });
+
+it("shows a Re-upload to upgrade note only for Sources marked by the legacy backfill", async () => {
+  const { ReuploadNote } = await import("@/components/source-ingest-status");
+  act(() => root.render(<ReuploadNote reuploadRequiredAt={null} />));
+  expect(host.textContent).toBe("");
+  act(() => root.render(<ReuploadNote reuploadRequiredAt="2026-10-01T00:00:00.000Z" />));
+  expect(host.querySelector('[data-testid="reupload-note"]')?.textContent).toBe("Re-upload to upgrade");
+});

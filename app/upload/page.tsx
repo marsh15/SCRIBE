@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { getFiles, deleteFile, retrySource, getSourceVersions } from "@/app/files/actions";
-import { SourceIngestStatus } from "@/components/source-ingest-status";
+import { ReuploadNote, SourceIngestStatus } from "@/components/source-ingest-status";
 import { SourceVersionHistory, UploadNewVersionButton } from "@/components/source-version-history";
 import type { SourceVersionView } from "@/lib/ingestion/source-version-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -527,6 +527,7 @@ export default function DocumentUpload() {
                             retrying={retryingId === file.id}
                             onRetry={() => handleRetry(file.id)}
                           />
+                          {status === "ready" && <ReuploadNote reuploadRequiredAt={file.reuploadRequiredAt} />}
                           {file.activeVersionId && (
                             <button
                               type="button"
