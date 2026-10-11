@@ -343,13 +343,19 @@ export const ingestionJobs = pgTable(
     leaseToken: uuid("lease_token"),
     leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
     errorCode: text("error_code"),
+    // T18: PARSE | CHUNK | EMBED | DONE | FAILED | CANCELLED | SUPERSEDED
+    stage: text("stage"),
     startedAt: timestamp("started_at"),
     finishedAt: timestamp("finished_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (table) => ({
-    fileUnique: uniqueIndex("ingestion_jobs_file_id_unique").on(table.fileId),
+    // T18 (0014): one job per (file, version); jobs queued before the version exists dedupe on the file alone.
+    fileVersionUnique: uniqueIndex("ingestion_jobs_file_version_unique").on(
+      table.fileId,
+      sql`COALESCE(${table.sourceVersionId}, '00000000-0000-0000-0000-000000000000'::uuid)`
+    ),
     queueIndex: index("ingestion_jobs_queue_index").on(
       table.status,
       table.nextRetryAt,

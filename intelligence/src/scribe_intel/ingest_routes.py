@@ -91,3 +91,41 @@ async def ingest_source(body: IngestSourceBody, principal: Principal = Depends(r
         return out
     status = 409 if res.status == "CANCELLED" else (503 if res.retryable else 422)
     raise HTTPException(status_code=status, detail=out)
+
+
+# ---------------------------------------------------------------- T18: leased steps
+
+STEP_BUDGET_S = float(os.environ.get("INGEST_STEP_BUDGET_S", "240"))
+
+
+@router.post("/ingest/step")
+async def ingest_step(principal: Principal = Depends(require_scope("ingest_step"))) -> dict:
+    """Claim ONE job (any workspace; the workspace comes from the claimed row, never the request) and run it
+    for up to STEP_BUDGET_S. Always 200 with an outcome; the caller re-fires while `more` is true."""
+    from .ingest_steps import run_step
+
+    settings = get_settings()
+    try:
+        embedder = embedder_from_env(settings.dsn)
+    except FakeEmbedderRefused as exc:
+        raise _fail(500, "FAKE_EMBEDDER_REFUSED", str(exc), False) from None
+    try:
+        pool = await get_pool()
+        async with pool.connection() as conn:
+            return await run_step(conn, embedder, budget_s=STEP_BUDGET_S,
+                                  blob_token=os.environ.get("BLOB_READ_WRITE_TOKEN", ""))
+    except RuntimeError:
+        raise _fail(503, "DATABASE_UNAVAILABLE", "database unavailable", True) from None
+
+
+@router.post("/ingest/sweep")
+async def ingest_sweep(principal: Principal = Depends(require_scope("ingest_step"))) -> dict:
+    from .ingest_steps import more_work, sweep
+
+    try:
+        pool = await get_pool()
+        async with pool.connection() as conn:
+            requeued = await sweep(conn)
+            return {"swept": len(requeued), "job_ids": requeued, "more": await more_work(conn)}
+    except RuntimeError:
+        raise _fail(503, "DATABASE_UNAVAILABLE", "database unavailable", True) from None

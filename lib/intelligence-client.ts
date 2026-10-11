@@ -1,7 +1,7 @@
 import { env } from "@/lib/env";
 import { mintInternalToken, type InternalTokenInput } from "@/lib/internal-token";
 
-function baseUrl(): string {
+export function baseUrl(): string {
   if (env.INTELLIGENCE_BASE_URL) return env.INTELLIGENCE_BASE_URL.replace(/\/$/, "");
   if (env.VERCEL_URL) return `https://${env.VERCEL_URL}`;
   return "http://localhost:3000";

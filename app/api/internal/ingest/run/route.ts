@@ -1,19 +1,7 @@
 import { NextResponse } from "next/server";
 import { runQueuedSourceIntake } from "@/lib/ingestion/source-intake";
-import crypto from "node:crypto";
-import { env } from "@/lib/env";
+import { hasCronSecret } from "@/lib/cron-auth";
 import { internalError } from "@/lib/api-errors";
-
-function hasCronSecret(req: Request) {
-  const expected = env.CRON_SECRET;
-  if (!expected) return false;
-  const authorization = req.headers.get("authorization");
-  if (!authorization?.startsWith("Bearer ")) return false;
-  const supplied = authorization.slice("Bearer ".length);
-  const actualBuffer = Buffer.from(supplied);
-  const expectedBuffer = Buffer.from(expected);
-  return actualBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(actualBuffer, expectedBuffer);
-}
 
 export const maxDuration = 300;
 

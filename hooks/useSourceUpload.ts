@@ -50,13 +50,14 @@ export function useSourceUpload() {
         ready?: number;
         retrying?: number;
         failed?: number;
+        ticked?: boolean;
       };
 
       if (!response.ok) {
         throw new Error(result.error || "Could not start Source intake");
       }
 
-      if ((result.claimed ?? 0) > 0) {
+      if ((result.claimed ?? 0) > 0 || result.ticked) {
         return result;
       }
 
@@ -140,7 +141,7 @@ export function useSourceUpload() {
       const nextStatus =
         (intake.ready ?? 0) > 0
           ? "ready"
-          : (intake.claimed ?? 0) > 0
+          : (intake.claimed ?? 0) > 0 || intake.ticked
             ? "processing"
             : "queued";
 

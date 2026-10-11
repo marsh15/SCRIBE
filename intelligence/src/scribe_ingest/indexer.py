@@ -49,6 +49,37 @@ class IndexerError(Exception):
         self.retryable = retryable
 
 
+class LeaseLost(Exception):
+    """INV-5: this worker no longer holds the job lease; the fenced write touched zero rows and was rolled back."""
+
+
+@dataclass(frozen=True)
+class Fence:
+    """Lease fence (DESIGN B3). `touch` runs INSIDE the transaction that writes progress: it updates the job row
+    WHERE lease_token = mine; zero rows means the lease was lost, so LeaseLost aborts (and rolls back) the whole
+    transaction and nothing is recorded."""
+    job_id: int
+    lease_token: uuid.UUID
+    lease_seconds: int = 330
+
+    async def touch(self, conn: psycopg.AsyncConnection, *, stage: str | None = None,
+                    generation_id: uuid.UUID | None = None, version_id: uuid.UUID | None = None,
+                    complete: bool = False) -> None:
+        cur = await conn.execute(
+            "update ingestion_jobs set lease_expires_at = now() + make_interval(secs => %s), updated_at = now(), "
+            "stage = coalesce(%s, stage), generation_id = coalesce(%s, generation_id), "
+            "source_version_id = coalesce(%s, source_version_id), "
+            "status = case when %s then 'completed' else status end, "
+            "finished_at = case when %s then now() else finished_at end, "
+            "last_error = case when %s then null else last_error end, "
+            "error_code = case when %s then null else error_code end "
+            "where id = %s and lease_token = %s and status = 'processing'",
+            (self.lease_seconds, stage, generation_id, version_id, complete, complete, complete, complete,
+             self.job_id, self.lease_token))
+        if cur.rowcount == 0:
+            raise LeaseLost(f"lease for job {self.job_id} was lost")
+
+
 class ActivationRefused(IndexerError):
     """INV-3/INV-4: the version is no longer the desired one, or the source is deleted."""
 
@@ -164,7 +195,7 @@ async def load_index_profile(conn: psycopg.AsyncConnection, name: str = INDEX_PR
 
 async def register_version(
     conn: psycopg.AsyncConnection, workspace_id: str, source_id: int, data: bytes, mime: str,
-    *, created_by: str | None = None, storage_key: str | None = None,
+    *, created_by: str | None = None, storage_key: str | None = None, fence: Fence | None = None,
 ) -> VersionRef:
     """Insert source_versions v(n) for these bytes if no version of this source has the same
     sha256 (the sha is frozen after insert, so the row is only created once bytes are known),
@@ -173,6 +204,8 @@ async def register_version(
     sha = hashlib.sha256(data).hexdigest()
     async with conn.transaction():
         await _begin(conn, workspace_id)
+        if fence:
+            await fence.touch(conn, stage="PARSE")
         cur = await conn.execute(
             "select deleted_at from files where id = %s and workspace_id = %s for update",
             (source_id, workspace_id))
@@ -206,11 +239,14 @@ async def register_version(
 # ------------------------------------------------------------------ GENERATION
 
 async def ensure_generation(conn: psycopg.AsyncConnection, workspace_id: str, source_id: int,
-                            version_id: uuid.UUID, profile: IndexProfile) -> tuple[uuid.UUID, str]:
+                            version_id: uuid.UUID, profile: IndexProfile,
+                            fence: Fence | None = None) -> tuple[uuid.UUID, str]:
     """Create the generation (BUILDING) or reset a non-ACTIVE one for a rebuild. Returns (id, status)
     where status is the status BEFORE any reset (ACTIVE means: nothing to do)."""
     async with conn.transaction():
         await _begin(conn, workspace_id)
+        if fence:
+            await fence.touch(conn, stage="CHUNK", version_id=version_id)
         await conn.execute("select 1 from files where id = %s and workspace_id = %s for update",
                            (source_id, workspace_id))
         cur = await conn.execute(
@@ -251,7 +287,7 @@ def parse_for_index(data: bytes, mime: str, name: str | None) -> ParsedDocument:
 
 async def persist_chunks(
     conn: psycopg.AsyncConnection, workspace_id: str, source_id: int, version_id: uuid.UUID,
-    generation_id: uuid.UUID, doc: ParsedDocument, chunkset: ChunkSet,
+    generation_id: uuid.UUID, doc: ParsedDocument, chunkset: ChunkSet, fence: Fence | None = None,
 ) -> dict[str, int]:
     """Persist blocks (once per version), chunks, spans in ONE transaction. Idempotent: an
     identical existing set is kept, a different partial set is replaced."""
@@ -260,6 +296,8 @@ async def persist_chunks(
         raise IngestError("EMPTY_EXTRACTION", "No readable text was found in this file.")
     async with conn.transaction():
         await _begin(conn, workspace_id)
+        if fence:
+            await fence.touch(conn, stage="EMBED", generation_id=generation_id, version_id=version_id)
         await _check_still_desired(conn, workspace_id, source_id, version_id, lock=True)
 
         # blocks (version-level; immutable once written)
@@ -317,7 +355,7 @@ async def persist_chunks(
 async def embed_generation(
     conn: psycopg.AsyncConnection, workspace_id: str, source_id: int, version_id: uuid.UUID,
     generation_id: uuid.UUID, profile: IndexProfile, embedder: Embedder, *, deadline: float | None = None,
-    batch_size: int = BATCH_SIZE,
+    batch_size: int = BATCH_SIZE, fence: Fence | None = None, usage_user_id: str | None = None,
 ) -> tuple[int, int]:
     """Embed child chunks lacking an embedding, batch by batch (each batch is its own transaction,
     so a crash resumes). Marks the generation READY when embedded == expected.
@@ -326,10 +364,14 @@ async def embed_generation(
         raise IndexerError("PROFILE_MISMATCH",
                            f"embedder dims {embedder.dimensions} != profile dims {profile.embedding_dims}")
     cur = await conn.execute(
-        "select c.id, c.content, c.heading_text from chunks c where c.generation_id = %s and c.workspace_id = %s "
+        "select c.id, c.content, c.heading_text, c.token_count from chunks c where c.generation_id = %s and c.workspace_id = %s "
         "and c.parent_id is not null and not exists (select 1 from chunk_embeddings_1536 e where e.chunk_id = c.id) "
         "order by c.chunk_index", (generation_id, workspace_id))
     todo = await cur.fetchall()
+    cur = await conn.execute(
+        "select count(*) from chunk_embeddings_1536 e join chunks c on c.id = e.chunk_id "
+        "where c.generation_id = %s and c.workspace_id = %s", (generation_id, workspace_id))
+    already = (await cur.fetchone())[0]  # batches are committed in order, so this keeps batch numbers stable on resume
     for i in range(0, len(todo), batch_size):
         if deadline is not None and time.monotonic() > deadline:
             raise IndexerError("TIME_BUDGET", "time budget exhausted; retry to resume", retryable=True)
@@ -339,18 +381,29 @@ async def embed_generation(
             raise EmbeddingError("INVALID_REQUEST", "embedder returned the wrong number of vectors", retryable=False)
         async with conn.transaction():
             await _begin(conn, workspace_id)
+            if fence:
+                await fence.touch(conn, stage="EMBED")
             await _check_still_desired(conn, workspace_id, source_id, version_id)
             async with conn.cursor() as c2:
                 await c2.executemany(
                     "insert into chunk_embeddings_1536(chunk_id, workspace_id, embedding_profile_id, embedding) "
                     "values (%s,%s,%s,%s::vector) on conflict (chunk_id) do nothing",
                     [(r[0], workspace_id, profile.embedding_profile_id, _vec(v)) for r, v in zip(batch, vectors)])
+            if usage_user_id:  # idempotent per batch: a replayed batch cannot double-count (D18)
+                await conn.execute(
+                    "insert into usage_events(user_id, metric, quantity, unit, source_type, source_id, is_estimated, "
+                    "idempotency_key) values (%s,'embedding_input_tokens',%s,'tokens','ingest',%s,true,%s) "
+                    "on conflict (idempotency_key) do nothing",
+                    (usage_user_id, sum(r[3] or 0 for r in batch), str(source_id),
+                     f"gen:{generation_id}:embed:{(already + i) // batch_size}"))
             await conn.execute(
                 "update index_generations g set embedded_chunks = (select count(*) from chunk_embeddings_1536 e "
                 "join chunks c on c.id = e.chunk_id where c.generation_id = g.id), updated_at = now() "
                 "where g.id = %s and g.workspace_id = %s", (generation_id, workspace_id))
     async with conn.transaction():
         await _begin(conn, workspace_id)
+        if fence:
+            await fence.touch(conn, stage="EMBED")
         cur = await conn.execute(
             "update index_generations set embedded_chunks = (select count(*) from chunk_embeddings_1536 e "
             "join chunks c on c.id = e.chunk_id where c.generation_id = %s), "
@@ -367,11 +420,13 @@ async def embed_generation(
 async def activate_generation(
     conn: psycopg.AsyncConnection, workspace_id: str, source_id: int, version_id: uuid.UUID,
     generation_id: uuid.UUID, profile: IndexProfile, *, text_bytes: int | None = None,
-    extracted_text: str | None = None,
+    extracted_text: str | None = None, fence: Fence | None = None,
 ) -> uuid.UUID | None:
     """Design B3 ACTIVATE: one transaction. Returns the superseded generation id (if any)."""
     async with conn.transaction():
         await _begin(conn, workspace_id)
+        if fence:  # job -> completed commits (or rolls back) together with the activation
+            await fence.touch(conn, stage="DONE", complete=True)
         await _check_still_desired(conn, workspace_id, source_id, version_id, lock=True)
         cur = await conn.execute(
             "select status, expected_chunks, embedded_chunks, source_version_id from index_generations "

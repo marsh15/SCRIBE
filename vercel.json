@@ -3,6 +3,10 @@
     {
       "path": "/api/internal/ingest/run",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/internal/ingest/sweep",
+      "schedule": "0 1 * * *"
     }
   ],
   "rewrites": [

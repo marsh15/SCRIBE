@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { getFiles, deleteFile } from "@/app/files/actions";
+import { getFiles, deleteFile, retrySource } from "@/app/files/actions";
+import { SourceIngestStatus } from "@/components/source-ingest-status";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -99,6 +100,7 @@ export default function DocumentUpload() {
   const [files, setFiles] = useState<any[]>([]);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [processingNowId, setProcessingNowId] = useState<number | null>(null);
+  const [retryingId, setRetryingId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const {
     state: sourceUpload,
@@ -201,6 +203,15 @@ export default function DocumentUpload() {
     } finally {
       setProcessingNowId(null);
     }
+  };
+
+  const handleRetry = async (id: number) => {
+    setRetryingId(id);
+    setMessage(null);
+    const result = await retrySource(id);
+    if (!result.success) setMessage({ type: "error", text: result.error ?? "Could not retry this Source" });
+    await fetchFiles();
+    setRetryingId(null);
   };
 
   const handleClearAll = async () => {
@@ -452,6 +463,15 @@ export default function DocumentUpload() {
                               {file.processingError}
                             </p>
                           )}
+                          <SourceIngestStatus
+                            status={status}
+                            stage={file.jobStage}
+                            attempts={file.jobAttempts}
+                            errorCode={file.jobErrorCode}
+                            lastError={file.jobLastError}
+                            retrying={retryingId === file.id}
+                            onRetry={() => handleRetry(file.id)}
+                          />
                         </div>
 
                         {canProcessNow && (

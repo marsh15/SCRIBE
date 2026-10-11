@@ -1,11 +1,13 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import {
   completeSourceUpload,
   parseSourceUploadCompletionPayload,
   SourceIntakeError,
 } from "@/lib/ingestion/source-intake";
 import { getBlobMetadata } from "@/lib/storage/blob";
+import { env } from "@/lib/env";
+import { fireTick } from "@/lib/ingestion/tick";
 
 export async function POST(req: Request) {
   try {
@@ -18,7 +20,7 @@ export async function POST(req: Request) {
       },
       onUploadCompleted: async ({ blob, tokenPayload }) => {
         const metadata = await getBlobMetadata(blob.url);
-        await completeSourceUpload({
+        const completion = await completeSourceUpload({
           payload: parseSourceUploadCompletionPayload(tokenPayload),
           blob: {
             url: blob.url,
@@ -27,6 +29,9 @@ export async function POST(req: Request) {
             contentType: metadata.contentType,
           },
         });
+        if (env.INGEST_ENGINE === "python" && completion.queued) {
+          after(async () => void (await fireTick()));
+        }
       },
     });
     return NextResponse.json(result);

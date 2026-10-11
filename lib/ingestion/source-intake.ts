@@ -200,7 +200,7 @@ export async function completeSourceUpload(input: {
           )
           INSERT INTO "ingestion_jobs" ("file_id", "status", "attempts", "created_at", "updated_at")
           SELECT "id", 'queued', 0, now(), now() FROM source
-          ON CONFLICT ("file_id") DO NOTHING
+          ON CONFLICT DO NOTHING
           RETURNING "file_id"
         `;
         return transitioned.length > 0;

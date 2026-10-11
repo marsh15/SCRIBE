@@ -294,7 +294,8 @@ def test_definer_functions_are_hardened():
                          "from pg_proc p join pg_roles r on r.oid=p.proowner where p.pronamespace='public'::regnamespace "
                          "and p.proname like 'app\\_%'").fetchall()
     assert {r[0] for r in rows} == {"app_workspace_ids_for_user", "app_ensure_personal_workspace",
-                                    "app_claim_ingestion_job", "app_sweep_expired_leases", "app_list_purgeable_sources"}
+                                    "app_claim_ingestion_job", "app_sweep_expired_leases", "app_list_purgeable_sources",
+                                    "app_count_live_leases", "app_count_claimable_jobs"}  # last two: 0014 (T18)
     for name, secdef, cfg, owner, pub, app in rows:
         assert secdef and owner == "scribe_definer" and not pub and app, name
         assert cfg == ["search_path=pg_catalog, public"], (name, cfg)
