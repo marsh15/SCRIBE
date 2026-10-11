@@ -129,3 +129,25 @@ async def ingest_sweep(principal: Principal = Depends(require_scope("ingest_step
             return {"swept": len(requeued), "job_ids": requeued, "more": await more_work(conn)}
     except RuntimeError:
         raise _fail(503, "DATABASE_UNAVAILABLE", "database unavailable", True) from None
+
+
+# ---------------------------------------------------------------- T20: purge of soft-deleted Sources
+
+PURGE_GRACE_SECONDS = int(os.environ.get("PURGE_GRACE_SECONDS", str(24 * 3600)))
+PURGE_BUDGET_S = float(os.environ.get("PURGE_BUDGET_S", "45"))
+
+
+@router.post("/ingest/purge")
+async def ingest_purge(principal: Principal = Depends(require_scope("ingest_step"))) -> dict:
+    """Purge soft-deleted Sources past the grace period: blobs of every version, then all rows (INV-14).
+    Called by the daily sweep. Failures are recorded on the Source (purge_error_code / purge_last_error) and retried
+    with backoff; the response always lists what happened."""
+    from scribe_ingest.purge import blob_store_from_env, purge_pending
+
+    try:
+        pool = await get_pool()
+        async with pool.connection() as conn:
+            return await purge_pending(conn, blob_store_from_env(), older_than_seconds=PURGE_GRACE_SECONDS,
+                                       budget_s=PURGE_BUDGET_S)
+    except RuntimeError:
+        raise _fail(503, "DATABASE_UNAVAILABLE", "database unavailable", True) from None

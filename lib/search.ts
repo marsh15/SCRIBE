@@ -1,5 +1,5 @@
 // lib/search.ts
-import { cosineDistance, desc, gt, sql, eq, and } from "drizzle-orm";
+import { cosineDistance, desc, gt, sql, eq, and, isNull } from "drizzle-orm";
 import { db } from "./db-config";
 import { documents, files } from "./db-schema";
 import { generateEmbedding } from "./embeddings";
@@ -69,7 +69,7 @@ export async function searchDocuments(
         })
         .from(documents)
         .innerJoin(files, eq(documents.fileId, files.id))
-        .where(and(gt(similarity, threshold), eq(files.userId, userId), eq(files.workspaceId, workspaceId)))
+        .where(and(gt(similarity, threshold), eq(files.userId, userId), eq(files.workspaceId, workspaceId), isNull(files.deletedAt)))
         .orderBy(desc(similarity))
         .limit(limit);
     const retrievalMs = elapsedMs(retrievalStart);

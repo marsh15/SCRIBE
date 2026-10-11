@@ -88,6 +88,11 @@ export const files = pgTable(
     // Scribe 2.0 (T08): soft delete + version pointers. FKs to source_versions
     // are added in migration 0010 after that table exists.
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    // T20 (0016): retry state of the background purge of a soft-deleted Source.
+    purgeAttempts: integer("purge_attempts").default(0).notNull(),
+    purgeNextRetryAt: timestamp("purge_next_retry_at", { withTimezone: true }),
+    purgeErrorCode: text("purge_error_code"),
+    purgeLastError: text("purge_last_error"),
     desiredVersionId: uuid("desired_version_id").references(
       (): AnyPgColumn => sourceVersions.id,
       { onDelete: "set null" }

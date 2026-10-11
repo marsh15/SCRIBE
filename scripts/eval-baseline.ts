@@ -28,7 +28,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { and, cosineDistance, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, cosineDistance, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/neon-http";
 import { parse as parseDotenv } from "dotenv";
 import { textsplitter } from "../lib/chunking";
@@ -361,7 +361,7 @@ export function buildSearchQuery(
     })
     .from(documents)
     .innerJoin(files, eq(documents.fileId, files.id))
-    .where(and(gt(similarity, threshold), eq(files.userId, userId), eq(files.workspaceId, workspaceId)))
+    .where(and(gt(similarity, threshold), eq(files.userId, userId), eq(files.workspaceId, workspaceId), isNull(files.deletedAt)))
     .orderBy(desc(similarity))
     .limit(limit);
 }

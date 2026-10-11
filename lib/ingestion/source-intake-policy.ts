@@ -77,12 +77,6 @@ export interface SourceCompletionAdapters {
   recordStorageUsage(source: ReservedSource): Promise<void>;
 }
 
-export interface SourceDeletionAdapters {
-  loadSource(sourceId: number, userId: string): Promise<ReservedSource | null>;
-  deleteBlob(urlOrPathname: string): Promise<void>;
-  deleteRecord(sourceId: number, userId: string): Promise<void>;
-}
-
 export class SourceIntakeError extends Error {
   constructor(
     message: string,
@@ -239,19 +233,4 @@ export async function completeReservedSourceUpload(
 
   await adapters.recordStorageUsage(source);
   return { queued: true, replayed: false, orphanDeleted: false };
-}
-
-export async function deleteOwnedSource(
-  userId: string,
-  sourceId: number,
-  adapters: SourceDeletionAdapters
-) {
-  const source = await adapters.loadSource(sourceId, userId);
-  if (!source) return false;
-
-  if (source.storageUrl) {
-    await adapters.deleteBlob(source.storageUrl);
-  }
-  await adapters.deleteRecord(sourceId, userId);
-  return true;
 }

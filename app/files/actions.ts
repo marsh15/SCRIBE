@@ -2,7 +2,7 @@
 
 import { db } from "@/lib/db-config";
 import { files, ingestionJobs } from "@/lib/db-schema";
-import { and, eq, desc, inArray } from "drizzle-orm";
+import { and, eq, desc, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { env } from "@/lib/env";
@@ -16,7 +16,7 @@ export async function getFiles() {
     try {
         const { userId, workspaceId } = await resolveWorkspace();
         const allFiles = await db.query.files.findMany({
-            where: and(eq(files.userId, userId), eq(files.workspaceId, workspaceId)),
+            where: and(eq(files.userId, userId), eq(files.workspaceId, workspaceId), isNull(files.deletedAt)),
             orderBy: [desc(files.createdAt)],
         });
         if (allFiles.length === 0) return allFiles;
@@ -54,6 +54,7 @@ export async function getFiles() {
 export async function deleteFile(fileId: number) {
     try {
         const { userId } = await resolveWorkspace();
+        // T20: soft delete. The Source leaves search immediately; blobs and rows are purged later by the daily sweep.
         const deleted = await deleteSource(userId, fileId);
         if (!deleted) return { success: false, error: "Source not found" };
         revalidatePath("/upload");

@@ -1,5 +1,5 @@
 import { generateClientTokenFromReadWriteToken } from "@vercel/blob/client";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db, sql } from "@/lib/db-config";
 import { documents, files, ingestionJobs, type SourceStatus } from "@/lib/db-schema";
 import { getUsageSummary, recordUsageEvent } from "@/lib/billing/usage";
@@ -14,7 +14,6 @@ import { ensurePersonalWorkspace } from "@/lib/workspace";
 import { ensureDocumentsChunkIndexSchema } from "@/lib/db-compat";
 import {
   completeReservedSourceUpload,
-  deleteOwnedSource,
   parseSourceUploadMetadata,
   isRetryableSourceError,
   retryDelayMinutes,
@@ -29,7 +28,6 @@ import {
 export {
   parseSourceUploadCompletionPayload,
   completeReservedSourceUpload,
-  deleteOwnedSource,
   parseSourceUploadMetadata,
   isRetryableSourceError,
   retryDelayMinutes,
@@ -153,7 +151,8 @@ export async function completeSourceUpload(input: {
           where: and(
             eq(files.id, sourceId),
             eq(files.userId, userId),
-            eq(files.workspaceId, workspaceId)
+            eq(files.workspaceId, workspaceId),
+            isNull(files.deletedAt)
           ),
         })) ?? null,
       deleteBlob,
@@ -484,36 +483,20 @@ export async function runQueuedSourceIntake(
   };
 }
 
+/**
+ * Delete a Source (T20, INV-14). SOFT delete: one database function sets `deleted_at` and cancels the Source's
+ * queued/processing/retrying jobs in a single transaction, so the Source is gone from search and evidence reads the
+ * moment it commits (every retrieval path filters `files.deleted_at IS NULL`). Blobs, chunks, embeddings and rows are
+ * removed later by the purge that runs from the daily sweep (`/api/py/ingest/purge`, after the grace period).
+ * Returns false when the Source does not exist for this owner or was already deleted.
+ */
 export async function deleteSource(userId: string, sourceId: number) {
+  if (!Number.isInteger(sourceId) || sourceId <= 0) return false;
   const workspaceId = await ensurePersonalWorkspace(userId);
-  const deleted = await deleteOwnedSource(userId, sourceId, {
-    loadSource: async (id, ownerId) => {
-      const source = await db.query.files.findFirst({
-        where: and(
-          eq(files.id, id),
-          eq(files.userId, ownerId),
-          eq(files.workspaceId, workspaceId)
-        ),
-      });
-      if (!source) return null;
-      return {
-        ...source,
-        storageUrl: source.storageUrl ?? source.storageKey,
-      };
-    },
-    deleteBlob,
-    deleteRecord: async (id, ownerId) => {
-      await db
-        .delete(files)
-        .where(
-          and(
-            eq(files.id, id),
-            eq(files.userId, ownerId),
-            eq(files.workspaceId, workspaceId)
-          )
-        );
-    },
-  });
-  if (deleted) console.info("[SourceIntake] deleted", { sourceId });
+  const rows = (await sql`
+    SELECT scribe_soft_delete_source(${workspaceId}::uuid, ${userId}, ${sourceId}::int) AS deleted
+  `) as Array<{ deleted: boolean }>;
+  const deleted = rows[0]?.deleted === true;
+  if (deleted) console.info("[SourceIntake] soft-deleted", { sourceId });
   return deleted;
 }

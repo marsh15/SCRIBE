@@ -2,7 +2,7 @@
 
 import { db } from "@/lib/db-config";
 import { files, documents } from "@/lib/db-schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, isNull } from "drizzle-orm";
 import { isNotAuthenticatedError } from "@/lib/auth";
 import { resolveWorkspace } from "@/lib/workspace";
 import { ensureDocumentsChunkIndexSchema } from "@/lib/db-compat";
@@ -26,7 +26,7 @@ export async function getFileWithChunks(fileId: number) {
                 hasStorageUrl: sql<boolean>`storage_url IS NOT NULL`.as("has_storage_url"),
             })
             .from(files)
-            .where(and(eq(files.id, fileId), eq(files.userId, userId), eq(files.workspaceId, workspaceId)))
+            .where(and(eq(files.id, fileId), eq(files.userId, userId), eq(files.workspaceId, workspaceId), isNull(files.deletedAt)))
             .limit(1);
 
         const file = fileRows[0];

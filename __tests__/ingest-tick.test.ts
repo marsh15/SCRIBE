@@ -103,11 +103,35 @@ describe("ingest sweep route", () => {
   });
 
   it("requeues expired leases through Python and kicks a tick when work is claimable", async () => {
-    callIntelligence.mockResolvedValue(stepResponse({ swept: 2, job_ids: [1, 2], more: true }));
+    callIntelligence.mockImplementation(async (path: string) =>
+      path === "/ingest/purge"
+        ? stepResponse({ listed: 0, purged: 0, retry_scheduled: 0 })
+        : stepResponse({ swept: 2, job_ids: [1, 2], more: true })
+    );
     const res = await sweep(new Request("https://scribe.example/api/internal/ingest/sweep", { headers: auth }));
     expect(await res.json()).toMatchObject({ ok: true, swept: 2, more: true });
     expect(callIntelligence.mock.calls[0][0]).toBe("/ingest/sweep");
     await drain();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("also purges soft-deleted Sources (T20) and reports the outcome", async () => {
+    callIntelligence.mockImplementation(async (path: string) =>
+      path === "/ingest/purge"
+        ? stepResponse({ listed: 3, purged: 2, retry_scheduled: 1 })
+        : stepResponse({ swept: 0, more: false })
+    );
+    const res = await sweep(new Request("https://scribe.example/api/internal/ingest/sweep", { headers: auth }));
+    expect(await res.json()).toMatchObject({ ok: true, purge: { listed: 3, purged: 2, retryScheduled: 1 } });
+    expect(callIntelligence.mock.calls.map((c) => c[0])).toEqual(["/ingest/sweep", "/ingest/purge"]);
+  });
+
+  it("a failing purge does not fail the sweep", async () => {
+    callIntelligence.mockImplementation(async (path: string) =>
+      path === "/ingest/purge" ? stepResponse({}, 503) : stepResponse({ swept: 1, more: false })
+    );
+    const res = await sweep(new Request("https://scribe.example/api/internal/ingest/sweep", { headers: auth }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, swept: 1, purge: { error: "purge_failed" } });
   });
 });

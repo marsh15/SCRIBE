@@ -146,7 +146,7 @@ export async function completeSourceVersionUpload(input: {
           FROM "source_versions" v
           INNER JOIN "files" f ON f."id" = v."source_id"
           WHERE v."id" = ${versionId}::uuid AND v."workspace_id" = ${workspaceId}::uuid
-            AND f."user_id" = ${input.payload.userId}
+            AND f."user_id" = ${input.payload.userId} AND f."deleted_at" IS NULL
         `) as Array<{
           id: string;
           source_id: number;
