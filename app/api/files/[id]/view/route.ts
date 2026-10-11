@@ -2,6 +2,7 @@ import { db } from "@/lib/db-config";
 import { files } from "@/lib/db-schema";
 import { eq, and, isNull } from "drizzle-orm";
 import { resolveWorkspace } from "@/lib/workspace";
+import { isNotAuthenticatedError } from "@/lib/auth";
 import { downloadBlobToBuffer } from "@/lib/storage/blob";
 import { resolveVersionBlob } from "@/lib/files/source-detail";
 
@@ -81,6 +82,7 @@ export async function GET(
             },
         });
     } catch (error) {
+        if (isNotAuthenticatedError(error)) return new Response("Not authenticated", { status: 401 });
         console.error("File serve error:", error);
         return new Response("Failed to serve file", { status: 500 });
     }

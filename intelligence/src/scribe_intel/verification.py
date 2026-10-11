@@ -294,6 +294,12 @@ def neutralize(text: str) -> str:
     return re.sub(r"\[(E\d+)\]", r"[ \1 ]", text)
 
 
+def _one_line(text: str) -> str:
+    """Claim text is model output shaped by documents (INV-13): flatten it to one line and defuse markers and `[E#]`
+    forgeries so it can never start a second `CLAIM n` line or open/close an evidence data block."""
+    return neutralize(" ".join(text.split()))
+
+
 def build_prompt(claims: Sequence[tuple[int, str, list[str]]], quotes: dict[str, str]) -> str:
     """`claims`: (index, text, labels). `quotes`: label -> stored quote. Every quote appears once, inside data markers."""
     used: list[str] = []
@@ -307,7 +313,7 @@ def build_prompt(claims: Sequence[tuple[int, str, list[str]]], quotes: dict[str,
         parts.append(f"<<<BEGIN_EVIDENCE_DATA {label}>>>\n{quote}\n<<<END_EVIDENCE_DATA {label}>>>")
     parts.append("\nCLAIMS:")
     for index, text, labels in claims:
-        parts.append(f"CLAIM {index} (evidence: {', '.join(labels)}): {strip_labels(text)}")
+        parts.append(f"CLAIM {index} (evidence: {', '.join(labels)}): {_one_line(strip_labels(text))}")
     parts.append("\nReturn JSON {\"verdicts\":[{\"index\":<claim number>,\"verdict\":\"SUPPORTED|PARTIAL|UNSUPPORTED\"}]} "
                  "with exactly one entry per claim.")
     return "\n\n".join(parts)

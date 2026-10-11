@@ -82,6 +82,11 @@ def assemble(
     seen_real = False
     for i, b in enumerate(blocks):
         b.index = i
+        # NUL cannot be stored in Postgres text: strip it before offsets are computed (PDF/DOCX text can carry it)
+        if "\x00" in b.text:
+            b.text = b.text.replace("\x00", "")
+        if any("\x00" in h for h in b.heading_path):
+            b.heading_path = [h.replace("\x00", "") for h in b.heading_path]
         if b.furniture:
             b.char_start = b.char_end = cursor
         else:

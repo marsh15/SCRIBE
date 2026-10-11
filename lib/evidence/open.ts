@@ -68,7 +68,13 @@ export async function openEvidence(itemId: string, user: { userId: string; works
   }
   if (res.status === 404) return { ok: false, status: 404 };
   if (!res.ok) return { ok: false, status: 502 };
-  const j = (await res.json()) as PyOpen;
+  let j: PyOpen;
+  try {
+    j = (await res.json()) as PyOpen;
+  } catch {
+    // never let the parser's message (it quotes part of the body) travel to the logs (INV-13)
+    return { ok: false, status: 502 };
+  }
   if (j.source_deleted) {
     // The quote, page and name are withheld: only the label and the notice survive.
     return { ok: true, evidence: { sourceDeleted: true, itemId: j.item_id, label: j.label, notice: SOURCE_DELETED_NOTICE } };

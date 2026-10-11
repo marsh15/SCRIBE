@@ -7,6 +7,12 @@ const isPublicRoute = createRouteMatcher([
     "/api/webhooks/razorpay",
     "/api/sources/upload-complete",
     "/api/internal/ingest/run",
+    // Self-fired and cron endpoints carry no Clerk session; each route checks `Authorization: Bearer ${CRON_SECRET}`.
+    "/api/internal/ingest/sweep",
+    "/api/internal/ingest/tick",
+    // The Python service is called server-to-server by our own routes (no Clerk session). It authenticates every
+    // request with the 60 s internal HS256 token and takes the workspace from it only (INV-15, token matrix test).
+    "/api/py/(.*)",
     "/api/health",
 ]);
 

@@ -39,11 +39,12 @@ _DIGIT_RUN = re.compile(r"\d{3,}")
 
 
 def _decode(data: bytes) -> tuple[str, str]:
+    # NUL cannot be stored in Postgres text/jsonb: a hostile file would otherwise fail every retry with an INTERNAL error
     try:
         text = data.decode("utf-8-sig")
-        return text, "utf-8-sig" if data.startswith(b"\xef\xbb\xbf") else "utf-8"
+        return text.replace("\x00", ""), "utf-8-sig" if data.startswith(b"\xef\xbb\xbf") else "utf-8"
     except UnicodeDecodeError:
-        return data.decode("latin-1"), "latin-1"
+        return data.decode("latin-1").replace("\x00", ""), "latin-1"
 
 
 def _records(text: str, delimiter: str, limit: int | None = None) -> list[list[str]]:

@@ -13,6 +13,7 @@ import { z } from "zod";
 import { nanoid } from "nanoid";
 import { searchDocuments } from "@/lib/search";
 import { resolveWorkspace } from "@/lib/workspace";
+import { isNotAuthenticatedError } from "@/lib/auth";
 import { getUsageSummary, recordUsageEvent } from "@/lib/billing/usage";
 import {
   buildRagToolResult,
@@ -438,6 +439,7 @@ export async function POST(req: Request) {
       },
     });
   } catch (error) {
+    if (isNotAuthenticatedError(error)) return new Response("Not authenticated", { status: 401 });
     console.error("Error streaming chat completion:", error);
     return new Response(formatChatError(error), { status: 500 });
   }
