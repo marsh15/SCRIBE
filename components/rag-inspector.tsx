@@ -9,7 +9,12 @@ import {
   getLastKnowledgeBaseInvocation,
 } from "@/lib/chat-tools";
 import { EMBEDDING_MODEL_LABEL } from "@/lib/embedding-config";
-import { extractRagToolResult, type RagRetrievalMeta, type RagToolChunk } from "@/lib/rag-types";
+import {
+  extractRagToolResult,
+  type RagAnswerability,
+  type RagRetrievalMeta,
+  type RagToolChunk,
+} from "@/lib/rag-types";
 
 interface RAGInspectorProps {
   messages: UIMessage[];
@@ -244,6 +249,8 @@ export function RAGInspector({ messages, status, chatId }: RAGInspectorProps) {
             <RetrievalDetails
               retrieval={liveToolResult.retrieval}
               chunks={liveToolResult.chunks}
+              answerability={liveToolResult.answerability}
+              evidenceLabels={liveToolResult.evidence?.items.map((i) => i.label)}
             />
           )}
 
@@ -395,9 +402,13 @@ function rankCell(value: number | null | undefined) {
 export function RetrievalDetails({
   retrieval,
   chunks,
+  answerability,
+  evidenceLabels,
 }: {
   retrieval: RagRetrievalMeta;
   chunks: RagToolChunk[];
+  answerability?: RagAnswerability;
+  evidenceLabels?: string[];
 }) {
   const degraded = retrieval.degraded.length > 0;
   return (
@@ -422,6 +433,42 @@ export function RetrievalDetails({
           </span>
         ) : null}
       </div>
+      {answerability ? (
+        <div
+          data-testid="answerability"
+          className="space-y-1 border border-border/50 bg-card px-2 py-1.5 font-mono text-[10px]"
+        >
+          <div className="flex flex-wrap items-center gap-2 uppercase">
+            <span>Gate</span>
+            <span
+              data-testid="gate-state"
+              className={
+                answerability.state === "ANSWERABLE"
+                  ? "rounded-sm bg-rag/15 px-1.5 py-0.5 text-rag"
+                  : "rounded-sm bg-destructive/15 px-1.5 py-0.5 text-destructive"
+              }
+            >
+              {answerability.state}
+            </span>
+            {!answerability.tauCalibrated ? (
+              <span data-testid="gate-uncalibrated" className="rounded-sm bg-muted px-1.5 py-0.5 text-muted-foreground">
+                gate uncalibrated
+              </span>
+            ) : null}
+            {answerability.gateDegraded ? (
+              <span data-testid="gate-degraded" className="rounded-sm bg-destructive/15 px-1.5 py-0.5 text-destructive">
+                no rerank score
+              </span>
+            ) : null}
+          </div>
+          <div className="text-muted-foreground">
+            {answerability.reason} · top score{" "}
+            {answerability.topRerankScore === null ? "-" : answerability.topRerankScore.toFixed(3)} · τ{" "}
+            {answerability.tau}
+            {evidenceLabels && evidenceLabels.length > 0 ? ` · ${evidenceLabels.join(" ")}` : ""}
+          </div>
+        </div>
+      ) : null}
       <ol aria-label="Stage timeline" className="space-y-1">
         {STAGES.map((stage) => {
           const ms = stageMs(retrieval.stageMs, stage.msKeys);

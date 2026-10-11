@@ -17,6 +17,7 @@ import { decodeJwt } from "jose";
 import {
   SEARCH_UNAVAILABLE_MESSAGE,
   getRetrievalEngine,
+  NO_SOURCES_MESSAGE,
   retrieveViaPython,
   shouldUseSupermemory,
 } from "@/lib/python-retrieval";
@@ -41,7 +42,25 @@ const okBody = {
   },
   counts: { dense: 40, lexical: 40, fused: 50, reranked: 10, packed: 1, returned: 1 },
   context: {
-    entries: [{ chunk_id: "c1", text: "Employees get 20 days.", heading_text: "Leave policy", doc_name: "Handbook.pdf", source_id: 7 }],
+    entries: [
+      {
+        chunk_id: "c1", text: "Employees get 20 days.", heading_text: "Leave policy", doc_name: "Handbook.pdf",
+        source_id: 7, label: "E1", evidence_item_id: "item-1",
+      },
+    ],
+  },
+  answerability: {
+    state: "ANSWERABLE", reason: "ok", top_rerank_score: 0.9, tau: 0, tau_calibrated: false, gate_degraded: false,
+  },
+  evidence: {
+    bundle_id: "bundle-1",
+    next_label: 2,
+    items: [
+      {
+        id: "item-1", label: "E1", chunk_id: "c1", source_id: 7, source_name: "Handbook.pdf", source_version_id: "v1",
+        page_start: 3, page_end: 3, heading_path: ["Leave policy"],
+      },
+    ],
   },
 };
 
@@ -77,7 +96,7 @@ describe("retrieveViaPython", () => {
     expect(url).toBe("http://py.test/api/py/retrieve");
     expect(init.method).toBe("POST");
     const body = JSON.parse(init.body as string);
-    expect(body).toEqual({ query: "leave?", limit: 10 });
+    expect(body).toEqual({ query: "leave?", profile: "hybrid-rrf-rerank", limit: 10, next_label: 1 });
     expect(body.workspace_id).toBeUndefined();
     const auth = new Headers(init.headers).get("authorization")!;
     const claims = decodeJwt(auth.replace("Bearer ", ""));
@@ -86,7 +105,7 @@ describe("retrieveViaPython", () => {
 
     expect(result.status).toBe("retrieved");
     expect(result.engine).toBe("python");
-    expect(result.context).toContain("Source: [Handbook.pdf](/files/7) | Section: Leave policy");
+    expect(result.context).toContain("[E1] Source: Handbook.pdf | page 3 | Section: Leave policy");
     expect(result.retrieval?.profile).toBe("hybrid-rerank");
     expect(result.chunks[0].stageRanks).toEqual({ dense: 2, lexical: 1, fused: 1, reranked: 1 });
     expect(result.chunks[0].selected).toBe(true);
@@ -114,12 +133,25 @@ describe("retrieveViaPython", () => {
     expect(result.context).toContain("degraded (rerank_unavailable)");
   });
 
-  it("returns an empty status when nothing is retrieved", async () => {
+  it("an empty workspace is insufficient evidence with a no-sources message, not a failure", async () => {
     mockFetch(async () =>
-      new Response(JSON.stringify({ ...okBody, candidates: [], context: { entries: [] } }), { status: 200 }),
+      new Response(
+        JSON.stringify({
+          ...okBody,
+          candidates: [],
+          context: { entries: [] },
+          evidence: { bundle_id: "b", next_label: 1, items: [] },
+          answerability: { ...okBody.answerability, state: "INSUFFICIENT_EVIDENCE", reason: "no_sources", top_rerank_score: null },
+        }),
+        { status: 200 },
+      ),
     );
     const result = await retrieveViaPython({ query: "q", userId: "u", workspaceId: WID });
     expect(result.status).toBe("empty");
+    expect(result.answerability?.state).toBe("INSUFFICIENT_EVIDENCE");
+    expect(result.message).toBe(NO_SOURCES_MESSAGE);
+    expect(result.context).toContain("INSUFFICIENT_EVIDENCE");
+    expect(result.context).not.toContain("SEARCH_UNAVAILABLE");
   });
 
   it.each([503, 500, 403])("HTTP %s becomes the unavailable state with no chunks", async (status) => {

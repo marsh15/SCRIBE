@@ -36,11 +36,42 @@ export type RagRetrievalMeta = {
   counts: Record<string, number>;
 };
 
+/** D13 answerability gate result (Python engine). RETRIEVAL_FAILED is distinct from INSUFFICIENT_EVIDENCE. */
+export type AnswerabilityState = "ANSWERABLE" | "INSUFFICIENT_EVIDENCE" | "RETRIEVAL_FAILED";
+
+export type RagAnswerability = {
+  state: AnswerabilityState;
+  reason: string;
+  topRerankScore: number | null;
+  tau: number;
+  /** false until T17 sets tau from dev/validation runs: the UI says "gate uncalibrated". */
+  tauCalibrated: boolean;
+  /** true when no reranker score existed (gate failed open, INV-16). */
+  gateDegraded: boolean;
+};
+
+/** One stored evidence item (a cited child span). `label` is unique across all searches of one chat turn. */
+export type RagEvidenceItem = {
+  id: string;
+  label: string;
+  sourceId: number;
+  sourceName: string;
+  pageStart: number | null;
+  pageEnd: number | null;
+  headingPath: string[];
+};
+
+export type RagEvidence = {
+  bundleId: string | null;
+  items: RagEvidenceItem[];
+  nextLabel: number;
+};
+
 export type RagToolResult = {
   type: typeof RAG_TOOL_RESULT_TYPE;
   traceId?: string;
   query: string;
-  status: "retrieved" | "empty" | "failed" | "unavailable";
+  status: "retrieved" | "empty" | "insufficient" | "failed" | "unavailable";
   message?: string;
   context: string;
   timings: SearchDocumentsResult["timings"];
@@ -49,6 +80,9 @@ export type RagToolResult = {
   chunks: RagToolChunk[];
   engine?: "legacy" | "python";
   retrieval?: RagRetrievalMeta;
+  /** Python engine only (T25). */
+  answerability?: RagAnswerability;
+  evidence?: RagEvidence;
 };
 
 export function extractRagToolResult(output: unknown): RagToolResult | null {

@@ -4,7 +4,8 @@ import { useChat, type UIMessage } from "@ai-sdk/react";
 import { useEffect, useRef, useState } from "react";
 import { useChatState } from "@/components/chat-context";
 import { ArrowUp, CornerDownLeft, Database, Loader2 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
+import { CitedMarkdown } from "@/components/cited-markdown";
+import { collectEvidenceByLabel } from "@/lib/evidence/citations";
 import { createChat } from "@/app/chat/actions";
 import { useRouter } from "next/navigation";
 import { notifyChatCreated } from "@/lib/chat-events";
@@ -159,29 +160,15 @@ export default function Ragchatbot() {
                   )}
 
                     <div className="prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-pre:bg-primary prose-pre:text-primary-foreground max-w-none prose-a:text-rag prose-a:no-underline hover:prose-a:underline">
-                    <ReactMarkdown
-                      components={{
-                        a: ({ href, children, ...props }) => {
-                          const isInternal = href?.startsWith("/");
-                          return (
-                            <a
-                              href={href}
-                              target={isInternal ? undefined : "_blank"}
-                              rel={isInternal ? undefined : "noopener noreferrer"}
-                              className="text-rag hover:underline font-medium inline-flex items-center gap-1"
-                              {...props}
-                            >
-                              {children}
-                            </a>
-                          );
-                        },
-                      }}
-                    >
-                      {m.parts
+                    <CitedMarkdown
+                      evidence={collectEvidenceByLabel(m.parts)}
+                      text={
+                        m.parts
                         ?.filter((p) => p.type === "text")
                         .map((p) => ("text" in p ? p.text : ""))
-                        .join("") || ""}
-                    </ReactMarkdown>
+                        .join("") || ""
+                      }
+                    />
                   </div>
                 </div>
               </div>

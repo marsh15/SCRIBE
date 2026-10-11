@@ -44,12 +44,32 @@ class ProfileConfig(BaseModel):
     budget_tokens: int = 6000
 
 
+class GateConfig(BaseModel):
+    """Answerability gate (DESIGN D13): reranker top score vs `tau`; never cosine similarity.
+
+    UNCALIBRATED PLACEHOLDER. `tau=0.0` rejects nothing; `tau_calibrated=False` says so, and the flag is
+    surfaced in the /retrieve response, the chat prompt and the RAG inspector ("gate uncalibrated").
+    TODO(T17): set `tau` (and `tau_calibrated=True`) from the dev/validation runs of profiles A-E; do not
+    invent a value before then.
+
+    Lives on the profile but OUTSIDE `ProfileConfig`: `retrieval_profiles` rows are immutable and pinned by
+    `config_hash` (migration 0012 seeds the hashes), so adding a field to `ProfileConfig` would change every
+    stored hash and force new profile rows. Revisit when T17 creates the calibrated profile rows.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    tau: float = 0.0
+    tau_calibrated: bool = False
+
+
 class RetrievalProfile(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
     description: str
     config: ProfileConfig
+    gate: GateConfig = GateConfig()
 
     @property
     def config_json(self) -> dict[str, Any]:
@@ -96,6 +116,12 @@ PROFILE_E = RetrievalProfile(
 SEED_PROFILES: tuple[RetrievalProfile, ...] = (PROFILE_A, PROFILE_B, PROFILE_C, PROFILE_D, PROFILE_E)
 DEFAULT_PROFILE = PROFILE_E
 BY_NAME = {p.name: p for p in SEED_PROFILES}
+
+
+def gate_for(profile_name: str) -> GateConfig:
+    """The answerability gate of a profile; strategies that are not seeded profiles get the uncalibrated default."""
+    p = BY_NAME.get(profile_name)
+    return p.gate if p is not None else GateConfig()
 
 UPSERT_SQL = (
     'INSERT INTO retrieval_profiles (id, name, config, config_hash) VALUES (%s::uuid, %s, %s::jsonb, %s) '

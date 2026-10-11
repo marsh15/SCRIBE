@@ -5,6 +5,13 @@ body), 404 UNKNOWN_PROFILE, 500 RERANK_CACHE_MISS (replay-mode configuration pro
 RETRIEVAL_FAILED (embedding provider or database failure: never a silent empty result, INV-16/B4). A retrieval trace is written in a separate short transaction after
 the read snapshot closes; if that write fails the response still succeeds and carries the degraded flag
 ``trace_persist_failed``. Document text is never logged (INV-13).
+
+T25: for profiles that pack a context, the trace, an evidence bundle and its labelled items (`E<next_label>`,
+`E<next_label+1>`, ...) are written in ONE transaction, and the response carries `evidence`
+(bundle_id, items, next_label) and `answerability` (the D13 gate, see `evidence_bundle`). A failed retrieval
+answers 503 with `answerability.state == "RETRIEVAL_FAILED"`, distinct from INSUFFICIENT_EVIDENCE. If the trace/bundle
+write fails the response still succeeds but carries NO labels and `evidence.bundle_id` null (nothing citable can
+exist without a stored item) plus the degraded flag `evidence_not_recorded`.
 """
 
 from __future__ import annotations
@@ -30,7 +37,8 @@ from scribe_ingest.embedding import (Embedder, EmbeddingError, FakeEmbedder, Fak
 from .auth import Principal, require_scope
 from .config import get_settings
 from .db import get_pool
-from .retrieval.profiles import BY_NAME
+from . import evidence_bundle as eb
+from .retrieval.profiles import BY_NAME, gate_for
 from .retrieval.registry import DEFAULT_PROFILE, RetrieveContext, StrategyResult, get_handler, profile_names
 from .retrieval.packing import PackedContext
 from .retrieval.rerank import CacheMiss, FakeReranker, VoyageReranker
@@ -49,6 +57,9 @@ class RetrieveBody(BaseModel):
     profile: str = DEFAULT_PROFILE
     source_ids: list[int] | None = Field(default=None, max_length=500)
     limit: int = Field(default=10, ge=1, le=50)
+    # First evidence label number for this call. The caller (one chat turn) passes the `evidence.next_label` of the
+    # previous search so that E-labels are unique across all searches of the turn.
+    next_label: int = Field(default=1, ge=1, le=eb.MAX_LABEL_START)
 
     @field_validator("query")
     @classmethod
@@ -110,7 +121,8 @@ def span_json(s: SpanRef) -> dict[str, Any]:
             "ocr": s.ocr, "ocr_notice": OCR_NOTICE if s.ocr else None, "row_number": s.row_number}
 
 
-def context_json(p: PackedContext) -> dict[str, Any]:
+def context_json(p: PackedContext, items: dict[Any, "eb.ItemDraft"] | None = None) -> dict[str, Any]:
+    items = items or {}
     return {
         "budget_tokens": p.budget_tokens, "used_tokens": p.used_tokens,
         "entries": [{
@@ -122,6 +134,8 @@ def context_json(p: PackedContext) -> dict[str, Any]:
             "merged_chunk_ids": [str(x) for x in e.merged_chunk_ids],
             "duplicates": [str(x) for x in e.duplicates],
             "spans": [span_json(s) for s in e.item.spans],
+            "label": items[e.item.chunk_id].label if e.item.chunk_id in items else None,
+            "evidence_item_id": str(items[e.item.chunk_id].id) if e.item.chunk_id in items else None,
         } for e in p.entries],
         "dropped": [{"chunk_id": str(d.chunk_id), "reason": d.reason, "token_count": d.token_count}
                     for d in p.dropped],
@@ -157,8 +171,10 @@ def trace_config_hash(body: RetrieveBody) -> str:
 
 
 async def persist_trace(pool, wid: str, body: RetrieveBody, status: str, *, result: StrategyResult | None,
-                        returned: int, stage_ms: dict[str, int], degraded: list[str]) -> uuid.UUID:
-    """Separate short write transaction (the read snapshot is already closed)."""
+                        returned: int, stage_ms: dict[str, int], degraded: list[str],
+                        drafts: list["eb.ItemDraft"] | None = None) -> tuple[uuid.UUID, "eb.EvidenceOutcome | None"]:
+    """Separate short write transaction (the read snapshot is already closed). With `drafts` (a packed profile) the
+    evidence bundle + items are written in the same transaction and returned."""
     counts: dict[str, Any] = {"profile": body.profile, "returned": returned}
     if result is not None:
         counts.update(result.counts)
@@ -179,6 +195,10 @@ async def persist_trace(pool, wid: str, body: RetrieveBody, status: str, *, resu
                 (wid, body.query, cfg_hash, status, ",".join(degraded) or None,
                  Jsonb(stage_ms), Jsonb(counts), profile_name, profile_hash))
             trace_id = (await cur.fetchone())[0]
+            outcome = None
+            if drafts is not None and result is not None:
+                outcome = await eb.persist_bundle(conn, wid, trace_id, gate_for(body.profile), drafts,
+                                                  result.extra.get("top_rerank_score"), body.next_label)
             if result is not None and result.ranked:
                 async with conn.cursor() as c2:
                     await c2.executemany(
@@ -188,7 +208,7 @@ async def persist_trace(pool, wid: str, body: RetrieveBody, status: str, *, resu
                         [(trace_id, wid, rc.chunk_id, rc.dense_rank, rc.dense_score, rc.lexical_rank, rc.lexical_score,
                           rc.fusion_rank, rc.rerank_rank, rc.rerank_score, rc.selected if packed else i < body.limit)
                          for i, rc in enumerate(result.ranked)])
-    return trace_id
+    return trace_id, outcome
 
 
 @router.post("/retrieve")
@@ -237,35 +257,54 @@ async def retrieve(body: RetrieveBody, principal: Principal = Depends(require_sc
         log.warning("retrieval failed profile=%s workspace=%s cause=%s", body.profile, wid, code)
         trace_id = None
         try:
-            trace_id = str(await persist_trace(pool, wid, body, "failed", result=None, returned=0,
-                                               stage_ms={"total": int((time.monotonic() - started) * 1000)},
-                                               degraded=[]))
+            trace_id = str((await persist_trace(pool, wid, body, "failed", result=None, returned=0,
+                                                stage_ms={"total": int((time.monotonic() - started) * 1000)},
+                                                degraded=[]))[0])
         except Exception:  # noqa: BLE001
             log.warning("trace persist failed (failed retrieval) workspace=%s", wid)
+        failed = eb.retrieval_failed(gate_for(body.profile)).as_json()
         if cache_miss:
             return _error(500, "RERANK_CACHE_MISS", "rerank cache miss in replay mode (configuration problem)",
-                          False, cause=code, trace_id=trace_id)
+                          False, cause=code, trace_id=trace_id, answerability=failed)
         msg = ("embedding provider failed" if isinstance(exc, EmbeddingError) else "retrieval backend failed")
-        return _error(503, "RETRIEVAL_FAILED", f"{msg} ({code})", retryable, cause=code, trace_id=trace_id)
+        return _error(503, "RETRIEVAL_FAILED", f"{msg} ({code})", retryable, cause=code, trace_id=trace_id,
+                      answerability=failed)
 
     degraded = list(result.degraded)
     returned = result.ranked[: body.limit]
     stage_ms = dict(result.stage_ms)
     trace_id: str | None = None
+    gate = gate_for(body.profile)
+    top_score = result.extra.get("top_rerank_score")
+    drafts = (eb.plan_items(result.packed, result.ranked, body.next_label) if result.packed is not None else None)
+    outcome: eb.EvidenceOutcome | None = None
     t = time.monotonic()
     try:
-        trace_id = str(await persist_trace(pool, wid, body, "ok", result=result, returned=len(returned),
-                                           stage_ms=stage_ms, degraded=degraded))
+        tid, outcome = await persist_trace(pool, wid, body, "ok", result=result, returned=len(returned),
+                                           stage_ms=stage_ms, degraded=degraded, drafts=drafts)
+        trace_id = str(tid)
     except Exception as exc:  # noqa: BLE001 - tracing must never fail the request
         log.warning("trace persist failed workspace=%s cause=%s", wid, type(exc).__name__)
         degraded.append("trace_persist_failed")
+        if drafts is not None:
+            degraded.append("evidence_not_recorded")  # no stored item exists, so no label may be offered
     stage_ms["trace_persist"] = int((time.monotonic() - t) * 1000)
     stage_ms["request_total"] = int((time.monotonic() - started) * 1000)
+    if outcome is not None:
+        answer = outcome.answerability
+        evidence: dict[str, Any] = {"bundle_id": str(outcome.bundle_id), "next_label": outcome.next_label,
+                                    "items": [eb.item_json(d) for d in outcome.items]}
+    else:
+        # strategy without a packed context (T13 single-retriever) or the bundle write failed: no labels exist
+        answer = eb.evaluate_gate(gate, entries=len(drafts) if drafts is not None else len(returned),
+                                  top_rerank_score=top_score)
+        evidence = {"bundle_id": None, "next_label": body.next_label, "items": []}
     out: dict[str, Any] = {
         "profile": body.profile, "trace_id": trace_id, "degraded": degraded, "config_hash": trace_config_hash(body),
         "candidates": [candidate_json(i, rc) for i, rc in enumerate(returned, 1)],
         "stage_ms": stage_ms, "counts": {**result.counts, "returned": len(returned)}, "meta": result.extra,
+        "answerability": answer.as_json(), "evidence": evidence,
     }
     if result.packed is not None:
-        out["context"] = context_json(result.packed)
+        out["context"] = context_json(result.packed, {d.chunk_id: d for d in outcome.items} if outcome else None)
     return out
