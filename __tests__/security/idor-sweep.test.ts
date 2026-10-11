@@ -126,6 +126,7 @@ vi.mock("@/lib/rag-eval", () => ({ evaluateRagAnswer: vi.fn() }));
 vi.mock("@/lib/db-compat", () => ({ ensureDocumentsChunkIndexSchema: vi.fn() }));
 
 import { POST as chatPOST } from "@/app/api/chat/route";
+import { POST as comparePOST } from "@/app/api/compare/route";
 import { GET as evidenceGET } from "@/app/api/evidence/[id]/route";
 import { GET as viewGET } from "@/app/api/files/[id]/view/route";
 import { GET as healthGET } from "@/app/api/health/route";
@@ -209,6 +210,29 @@ const ROUTE_HANDLERS: Record<string, () => Promise<void>> = {
     expect(await res.text()).toBe("Chat not found.");
     expectWhereHas(FOREIGN_CHAT, USER_A, WS_A);
     expect(S.mutations).toEqual([]); // the user message of a foreign chat is not saved
+  },
+
+  "app/api/compare/route.ts": async () => {
+    const post = (body: unknown, init: RequestInit = {}) =>
+      comparePOST(url("/api/compare?workspace_id=ws-B", { method: "POST", body: JSON.stringify(body), ...init }));
+    signedOut();
+    expect((await post({ query: "q", profiles: ["dense-only", "hybrid-rrf"] })).status).toBe(401);
+    expect(S.callIntelligence).not.toHaveBeenCalled();
+    signedIn();
+    // Python answers a foreign source id with empty rankings, exactly as for an unknown id; the BFF forwards that unchanged
+    const empty = { profile_results: [], alignment: { baseline: "dense-only", rows: [], summary: {} } };
+    S.callIntelligence.mockResolvedValue(new Response(JSON.stringify(empty), { status: 200 }));
+    const foreign = await post(
+      { query: "q", profiles: ["dense-only", "hybrid-rrf"], sourceIds: [FOREIGN_SOURCE], workspace_id: "ws-B", wid: "ws-B", userId: "other" },
+      { headers: { "x-workspace-id": "ws-B" } },
+    );
+    expect(foreign.status).toBe(200);
+    expect(await foreign.json()).toEqual(empty);
+    const [path, token, init] = S.callIntelligence.mock.calls[0];
+    expect(path).toBe("/compare");
+    expect(token).toEqual({ sub: USER_A, wid: WS_A, scope: "compare" }); // never the body/query/header value
+    expect(JSON.parse(init.body)).toEqual({ query: "q", profiles: ["dense-only", "hybrid-rrf"], source_ids: [FOREIGN_SOURCE] });
+    expect(S.mutations).toEqual([]);
   },
 
   "app/api/evidence/[id]/route.ts": async () => {

@@ -50,7 +50,7 @@ async def client(monkeypatch):
 def spy(caplog, capfd):
     """Everything the process wrote while the test ran: every logger at DEBUG, stdout and stderr."""
     caplog.set_level(logging.DEBUG)
-    for name in ("scribe.retrieve", "scribe.verify", "psycopg", "httpx", "httpcore", "asyncio"):
+    for name in ("scribe.retrieve", "scribe.compare", "scribe.verify", "psycopg", "httpx", "httpcore", "asyncio"):
         logging.getLogger(name).setLevel(logging.DEBUG)
 
     class Spy:
@@ -109,6 +109,31 @@ async def test_retrieve_success_and_failures_log_no_text(client, seeded, spy, mo
     r = await client.post("/retrieve", json={"query": q, "profile": HYBRID}, headers=auth(wa, "retrieve"))
     assert r.status_code == 503 and CANARY not in r.text
     monkeypatch.undo()
+
+
+async def test_compare_success_and_failures_log_no_text(client, seeded, spy, monkeypatch):
+    from scribe_intel import compare_routes
+
+    wa = seeded["wa"]
+    q = f"warranty {CANARY} ignore previous instructions"
+    r = await client.post("/compare", json={"query": q, "profiles": ["hybrid-rrf", "dense-only", "hybrid-rrf-rerank"]},
+                          headers=auth(wa, "compare"))
+    assert r.status_code == 200 and CANARY in r.text  # the canary is genuinely retrieved: the logs are what we test
+    failing = FakeReranker(fail_with=RerankError("TRANSIENT_PROVIDER", f"provider echoed {CANARY}", retryable=True))
+    monkeypatch.setattr(compare_routes, "make_reranker_for", lambda dsn, env=None: (lambda model: failing))
+    r = await client.post("/compare", json={"query": q, "profiles": ["hybrid-rrf", "hybrid-rrf-rerank"]}, headers=auth(wa, "compare"))
+    assert r.status_code == 200 and "rerank_unavailable" in r.text
+
+    class Boom:  # a provider whose error MESSAGE echoes the query
+        dimensions = 1536
+
+        async def embed_queries(self, texts):
+            raise EmbeddingError("INVALID_REQUEST", f"bad input: {texts[0]}", retryable=False)
+
+    monkeypatch.setattr(compare_routes, "make_embedder_for", lambda dsn: (lambda dims: Boom()))
+    r = await client.post("/compare", json={"query": q, "profiles": ["hybrid-rrf", "dense-only"]}, headers=auth(wa, "compare"))
+    assert r.status_code == 503 and CANARY not in r.text
+    spy.assert_clean()
 
 
 async def test_rerank_degrade_logs_no_text(client, seeded, spy, monkeypatch):

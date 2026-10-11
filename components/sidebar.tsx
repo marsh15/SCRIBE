@@ -246,7 +246,13 @@ export function Sidebar() {
             New Chat
           </Button>
         </Link>
-        <div className="mb-3 grid grid-cols-2 gap-2">
+        <div className="mb-3 grid grid-cols-3 gap-2">
+          <Link
+            href="/compare"
+            className="rounded-sm border border-border px-2 py-1.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-muted"
+          >
+            Lab
+          </Link>
           <Link
             href="/settings/billing"
             className="rounded-sm border border-border px-2 py-1.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-muted"

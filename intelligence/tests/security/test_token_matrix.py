@@ -24,6 +24,7 @@ ROUTES = [
     ("POST", "/ingest/sweep", "ingest_step", False),
     ("POST", "/ingest/purge", "ingest_step", False),
     ("POST", "/retrieve", "retrieve", True),
+    ("POST", "/compare", "compare", True),
     ("POST", "/evidence/open", "evidence_read", True),
     ("POST", "/verify", "verify", True),
     ("POST", "/verify/read", "verify", True),

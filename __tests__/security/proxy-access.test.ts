@@ -25,7 +25,7 @@ async function isProtected(pathname: string, method = "GET") {
 
 describe("proxy.ts public paths", () => {
   it.each([
-    "/api/py/retrieve", "/api/py/health", "/api/py/ingest/step", "/api/py/evidence/open", "/api/py/verify",
+    "/api/py/retrieve", "/api/py/health", "/api/py/ingest/step", "/api/py/evidence/open", "/api/py/verify", "/api/py/compare",
     "/api/internal/ingest/tick", "/api/internal/ingest/sweep", "/api/internal/ingest/run",
     "/api/webhooks/razorpay", "/api/sources/upload-complete", "/api/health", "/sign-in", "/sign-up/x",
   ])("%s skips the Clerk session check (it authenticates itself)", async (p) => {
@@ -33,7 +33,7 @@ describe("proxy.ts public paths", () => {
   });
 
   it.each([
-    "/api/chat", "/api/evidence/22222222-2222-4222-8222-222222222222", "/api/files/1/view", "/api/rag/latest",
+    "/api/chat", "/api/compare", "/compare", "/api/evidence/22222222-2222-4222-8222-222222222222", "/api/files/1/view", "/api/rag/latest",
     "/api/sources/reserve", "/api/sources/process-now", "/api/sources/7/versions", "/api/billing/usage",
     "/api/billing/checkout", "/api/ingest/batch", "/api/uploads/sign", "/chat/abc", "/files/1", "/upload",
     "/api/pyx", "/api/internal/ingest/other", "/api/internal", "/api/internal/anything-else",

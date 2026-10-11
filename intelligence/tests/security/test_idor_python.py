@@ -129,6 +129,22 @@ async def test_retrieve_source_ids_of_another_workspace_return_nothing(client, s
         assert r.status_code == 200 and r.json()["candidates"] == [], profile
 
 
+async def test_compare_source_ids_of_another_workspace_return_nothing_in_every_profile(client, seeded):
+    """T29: /compare takes source_ids too; a foreign id is indistinguishable from an unknown one (empty rankings)."""
+    fid_b = next(iter(seeded["b_ids"].values()))
+    names = ["dense-only", "lexical-only", "hybrid-rrf", "hybrid-rrf-rerank"]
+    foreign = await client.post("/compare", json=with_ws({"query": "Bravo launch codename BRAVO-ONLY-SECRET-4821",
+                                                          "profiles": names, "source_ids": [fid_b]}, seeded["wb"]),
+                                headers=auth(seeded["wa"], "compare"))
+    unknown = await client.post("/compare", json={"query": "Bravo launch codename BRAVO-ONLY-SECRET-4821",
+                                                  "profiles": names, "source_ids": [2_000_000_000]},
+                                headers=auth(seeded["wa"], "compare"))
+    assert foreign.status_code == unknown.status_code == 200
+    for r in (foreign, unknown):
+        assert all(p["results"] == [] for p in r.json()["profile_results"]) and r.json()["alignment"]["rows"] == []
+        assert "BRAVO-ONLY-SECRET-4821" not in r.text.replace("Bravo launch codename BRAVO-ONLY-SECRET-4821", "")
+
+
 async def test_a_token_for_workspace_b_does_not_see_workspace_a(client, seeded):
     """The mirror image: the only thing that selects the tenant is the token."""
     fid_a = seeded["a_ids"]["ignore-previous.md"]
