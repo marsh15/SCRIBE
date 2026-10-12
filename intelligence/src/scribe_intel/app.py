@@ -36,7 +36,7 @@ async def lifespan(_: FastAPI):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="scribe-intel", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title="scribe-intel", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     # Vercel rewrites may or may not strip the /api/py prefix; serve both.
     app.include_router(router)
     app.include_router(router, prefix="/api/py", include_in_schema=False)

@@ -5,37 +5,35 @@
 [![Live Demo (Scribe 1.0)](https://img.shields.io/badge/Live-scribe--marsh.vercel.app-00C4A0?style=flat-square&logo=vercel)](https://scribe-marsh.vercel.app)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
-**Read this first (honesty box).** Scribe 2.0 is code on branch `scribe2/m0-foundation`. It has **not** been deployed to Vercel, run against Neon, or run against the real Gemini or Voyage APIs. The labeled evaluation set has not been human-reviewed, the CI retrieval gate is not armed, the answerability threshold is uncalibrated, Postgres FORCE RLS is deferred, and task T17 (profile tuning and the milestone report) was not done. No retrieval-quality number has been measured (the only measurements in the repo are synthetic database timings, see the performance summary). Details: [Status and known gaps](#status-and-known-gaps). The live site linked above is the earlier Scribe 1.0 deployment.
+> **Status: not yet proven in production.** Scribe 2.0 is code on branch `scribe2/m0-foundation`. It has not been deployed to Vercel, run against Neon, or run against the real Gemini or Voyage APIs. The labeled evaluation set has not been human-reviewed, the CI retrieval gate is not armed, the answerability threshold is uncalibrated, Postgres FORCE RLS is deferred, and task T17 (profile tuning and the milestone report) is not done. No retrieval-quality number has been measured; the only measurements in the repo are synthetic database timings (see [Performance summary](#performance-summary)). The live site linked above is the earlier Scribe 1.0 deployment. Full list: [Status and known gaps](#status-and-known-gaps).
+
+## Contents
+
+[What it is](#what-it-is) · [Architecture](#architecture) · [Features](#features-mapped-to-the-tasks-that-are-done) · [Status and known gaps](#status-and-known-gaps) · [Quick start](#quick-start) · [Tests](#running-the-tests) · [Evaluation](#evaluation-workflow) · [Demo data](#demo-data) · [Security](#security-summary) · [Performance](#performance-summary) · [Repository map](#repository-map) · [Deployment](#deployment)
 
 ## What it is
 
-Scribe 2.0 upgrades the original Scribe app (Next.js 16, Clerk, Drizzle, Neon Postgres with pgvector, Vercel Blob, Vercel AI SDK, Gemini) into a retrieval system whose claims are meant to be measured:
+Scribe 2.0 upgrades the original Scribe app (Next.js 16, Clerk, Drizzle, Neon Postgres with pgvector, Vercel Blob, Vercel AI SDK, Gemini) into a retrieval system whose claims can be measured. It adds:
 
-- **Hybrid retrieval owned by a Python service:** dense vectors plus Postgres full-text search, fused by reciprocal rank fusion (k=60), optionally reranked by Voyage rerank behind an adapter.
-- **Versioned sources and index generations** with atomic activation, so a new upload never leaves a Source unsearchable.
-- **Exact citations** from stored source spans (page, bounding box, CSV row), evidence labels `[E1]`, and **post-stream claim verification**.
-- **Personal workspaces** with Postgres row-level security policies (not yet forced; see gaps).
-- **An evaluation toolkit:** golden set, metrics CLI, run dashboard, profile compare lab, regression gate, scaling harness.
+- **Hybrid retrieval in a Python service.** Dense vectors and Postgres full-text search are fused with reciprocal rank fusion (k=60) and optionally reranked by Voyage rerank behind an adapter.
+- **Versioned sources and index generations.** Activation is atomic, so a new upload never leaves a Source unsearchable.
+- **Exact citations.** Each citation points to a stored source span (page, bounding box, or CSV row) and carries an evidence label such as `[E1]`. Claims are verified after the answer streams.
+- **Personal workspaces.** Postgres row-level security policies are in place but not yet forced (see the gaps below).
+- **An evaluation toolkit.** It includes a golden set, a metrics CLI, a run dashboard, a profile compare lab, a regression gate and a scaling harness.
 
-Design decisions and invariants: [`docs/scribe2/DESIGN.md`](docs/scribe2/DESIGN.md). Code-level tour: [`docs/scribe2/ARCHITECTURE.md`](docs/scribe2/ARCHITECTURE.md). Hand-over notes for the next engineer: [`docs/scribe2/HANDOVER.md`](docs/scribe2/HANDOVER.md).
+Where to go next: [`DESIGN.md`](docs/scribe2/DESIGN.md) for decisions and invariants, [`ARCHITECTURE.md`](docs/scribe2/ARCHITECTURE.md) for a code-level tour, and [`HANDOVER.md`](docs/scribe2/HANDOVER.md) for notes to the next engineer.
 
 ## Architecture
 
-```mermaid
-flowchart LR
-  B[Browser] --> N["Next.js on Vercel<br/>Clerk, chat stream, uploads, mints 60 s internal token"]
-  N -->|"/api/py/* with token"| P["Python FastAPI<br/>/retrieve /compare /verify /evidence/open /ingest/*"]
-  N --> DB[("Postgres + pgvector<br/>RLS policies, FTS, queue functions")]
-  P --> DB
-  N -->|"direct upload"| BL[("Vercel Blob, private")]
-  P -->|"download originals"| BL
-  P --> G["Gemini<br/>embeddings, OCR, verifier"]
-  P --> V["Voyage rerank"]
-  N --> G
-  CLI["scribe-eval / scribe-perf (local or GitHub Actions)"] --> DB
-```
+![Scribe 2.0 architecture: browser, Next.js on Vercel, Python FastAPI, Postgres with pgvector, Vercel Blob, Gemini, Voyage rerank and the eval CLIs](docs/assets/architecture.svg)
 
-Query path: authenticate and resolve the workspace in Next.js, call `POST /api/py/retrieve`, one `REPEATABLE READ` transaction, dense and lexical search, RRF, rerank, dedup, parent expansion and packing, answerability gate, evidence bundle with `[E#]` labels. Ingestion path: upload to Blob, leased resumable steps PARSE, OCR, CHUNK, EMBED, ACTIVATE. Details in `docs/scribe2/ARCHITECTURE.md`.
+The diagram is hand-drawn style and editable: open [`docs/assets/architecture.excalidraw`](docs/assets/architecture.excalidraw) at [excalidraw.com](https://excalidraw.com), or change the spec in [`scripts/gen_architecture_diagram.py`](scripts/gen_architecture_diagram.py) and rerun it to regenerate both files.
+
+**Query path.** Next.js authenticates the user and resolves the workspace, then calls `POST /api/py/retrieve`. The Python service runs one `REPEATABLE READ` transaction that does dense and lexical search, RRF, rerank, dedup, parent expansion and packing, then applies the answerability gate and returns an evidence bundle with `[E#]` labels.
+
+**Ingestion path.** The browser uploads straight to Blob. Leased, resumable steps then run in order: PARSE, OCR, CHUNK, EMBED, ACTIVATE.
+
+More in [`docs/scribe2/ARCHITECTURE.md`](docs/scribe2/ARCHITECTURE.md).
 
 ## Features (mapped to the tasks that are done)
 
@@ -53,8 +51,8 @@ Source: `git log` on this branch and `docs/scribe2/HANDOVER.md`. "Done" means co
 | Schema | Versioned index tables, FTS columns, HNSW, immutability triggers, seed profiles, legacy backfill script | T08 |
 | Parsing and chunking | PDF, Markdown, TXT, DOCX, CSV parsers with exact provenance; parent/child chunker with source spans | T09, T10, T11 |
 | Indexing | Gemini embedder adapter (1536 dims), staged idempotent indexer with the activation transaction, `INGEST_ENGINE` flag | T12 |
-| Retrieval | Dense (exact and HNSW) and lexical search, RRF, rerank adapter with cache and fake, dedup, packing, five seeded profiles, `/retrieve` | T13, T14 |
-| RLS | Policies, `scribe_app` role, SECURITY DEFINER queue functions, `scoped()` helper (policies enabled, **not forced**) | T15 |
+| Retrieval | Dense (exact scan; the HNSW index exists but the shipped ANN query was measured not to use it) and lexical search, RRF, rerank adapter with cache and fake, dedup, packing, five seeded profiles, `/retrieve` | T13, T14 |
+| RLS | Policies, `scribe_app` role, SECURITY DEFINER queue functions, `scoped()` helper (policies enabled, **not forced**: not enforced for the owner connection used today) | T15 |
 | Chat engine | `RETRIEVAL_ENGINE=python\|legacy` (default `legacy`), stage-timeline inspector | T16 |
 | Ingestion robustness | Leased resumable steps, tick/sweep routes, retry taxonomy, status UI; new versions while the old stays searchable; soft delete with background purge; OCR for scanned pages; guarded legacy backfill | T18-T22 |
 | Citations | Open a citation at the exact page or passage (PDF highlight, text quote, CSV row), access re-checked; source detail tabs (Original, Structure, Chunks, Versions, History) | T23, T24 |
@@ -171,7 +169,7 @@ Scene-by-scene demo plan, with what must be live-verified first: [`docs/scribe2/
 
 ## Security summary
 
-Workspace boundary on every row (policies enabled, not forced), 60-second audience-bound internal tokens, document text treated as untrusted data (fixed markers, one server-scoped tool, labels issued by the server), "Verified" only when deterministic checks and the verifier agree, and no document text in logs. An adversarial suite and IDOR sweep hold these in place. This is an engineering review with tests, **not** a penetration test, and the injection tests prove what the code does with hostile text, not how a real model behaves. Open residual risks (FORCE RLS, a single static internal secret, no rate limiting on `/api/py/*`, uncalibrated gate, and others): [`docs/scribe2/threat-model.md`](docs/scribe2/threat-model.md) section 6.
+Workspace boundary on every row (policies enabled, not forced: not enforced for the owner connection used today, so isolation currently rests on application filters plus tests), 60-second audience-bound internal tokens, document text treated as untrusted data (fixed markers, one server-scoped tool, labels issued by the server), "Verified" only when deterministic checks and the verifier agree, and no document text in logs. An adversarial suite and IDOR sweep hold these in place. This is an engineering review with tests, **not** a penetration test, and the injection tests prove what the code does with hostile text, not how a real model behaves. Open residual risks (FORCE RLS, a single static internal secret, no rate limiting on `/api/py/*`, uncalibrated gate, and others): [`docs/scribe2/threat-model.md`](docs/scribe2/threat-model.md) section 6.
 
 ## Performance summary
 

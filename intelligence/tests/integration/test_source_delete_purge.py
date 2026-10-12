@@ -8,7 +8,7 @@ import uuid
 import httpx
 import psycopg
 import pytest
-from _db import aconnect, doc, new_file, new_workspace
+from _db import aconnect, doc, new_file, new_workspace, skip_or_fail_if_foreign_jobs
 from conftest import DATABASE_URL_TEST, needs_db
 from scribe_ingest import purge as purge_mod
 from scribe_ingest.embedding import FakeEmbedder
@@ -99,10 +99,7 @@ async def searchable(conn, wid, fid) -> tuple[int, int, int]:
 @pytest.fixture()
 async def env(monkeypatch):
     conn = await aconnect(DATABASE_URL_TEST)
-    cur = await conn.execute("select count(*) from ingestion_jobs where status in ('queued','retrying','processing')")
-    if (await cur.fetchone())[0]:
-        await conn.close()
-        pytest.skip("foreign claimable jobs present in the shared DB")
+    await skip_or_fail_if_foreign_jobs(conn)
     wid = await new_workspace(conn)
     real = ingest_steps.embed_generation
     monkeypatch.setattr(ingest_steps, "embed_generation", lambda *a, **k: real(*a, **{**k, "batch_size": 2}))
@@ -507,3 +504,51 @@ async def test_purge_endpoint_requires_scope_and_purges(env, monkeypatch):
     assert r.status_code == 200, r.text
     assert any(x["source_id"] == fid and x["status"] == "purged" for x in r.json()["results"])
     assert store.blobs == set() and await count(conn, "files", fid) == 0
+
+
+# ------------------------------------------------------------------ P2a lock order
+
+async def test_activation_locks_the_files_row_before_the_job_row(env, monkeypatch):
+    """scribe_soft_delete_source locks files then jobs; activation must use the same order or the two deadlock.
+    A blocker holds the files row: the activating transaction must wait there WITHOUT already holding the job row."""
+    import asyncio
+
+    conn, wid = env
+    fid, jid = await make_job(conn, wid)
+    real = ingest_steps.activate_generation
+    seen: dict = {}
+
+    async def blocked_activate(*a, **k):
+        blocker = await aconnect(DATABASE_URL_TEST)
+        probe = await aconnect(DATABASE_URL_TEST)
+        try:
+            await blocker.execute("begin")
+            await blocker.execute("select 1 from files where id=%s for update", (fid,))
+            task = asyncio.ensure_future(real(*a, **k))
+            for _ in range(200):  # wait until the activation is queued behind the blocker's row lock
+                cur = await probe.execute(
+                    "select count(*) from pg_stat_activity where datname=current_database() and wait_event_type='Lock' "
+                    "and query ilike '%%from files%%for update%%'")
+                if (await cur.fetchone())[0]:
+                    break
+                await asyncio.sleep(0.05)
+            else:
+                pytest.fail("activation never blocked on the files row")
+            try:  # the job row must still be free: NOWAIT raises if the activation already locked it
+                await probe.execute("begin")
+                await probe.execute("select 1 from ingestion_jobs where id=%s for update nowait", (jid,))
+                seen["job_free_while_blocked"] = True
+            except psycopg.errors.LockNotAvailable:
+                seen["job_free_while_blocked"] = False
+            finally:
+                await probe.execute("rollback")
+            await blocker.execute("commit")
+            return await task
+        finally:
+            await blocker.close()
+            await probe.close()
+
+    monkeypatch.setattr(ingest_steps, "activate_generation", blocked_activate)
+    r = await run_step(conn, FakeEmbedder(), download=dl(doc(1)))
+    assert r["outcome"] == "completed", r
+    assert seen == {"job_free_while_blocked": True}

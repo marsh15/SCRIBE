@@ -6,7 +6,7 @@ import time
 import httpx
 import jwt
 import pytest
-from _db import aconnect, new_file, new_workspace
+from _db import aconnect, new_file, new_workspace, skip_or_fail_if_foreign_jobs
 from conftest import DATABASE_URL_TEST, SECRET, needs_db
 from test_source_delete_purge import build_live_source, soft_delete
 
@@ -39,10 +39,7 @@ async def client(monkeypatch):
 async def env(monkeypatch):
     from scribe_intel import ingest_steps
     conn = await aconnect(DATABASE_URL_TEST)
-    cur = await conn.execute("select count(*) from ingestion_jobs where status in ('queued','retrying','processing')")
-    if (await cur.fetchone())[0]:
-        await conn.close()
-        pytest.skip("foreign claimable jobs present in the shared DB")
+    await skip_or_fail_if_foreign_jobs(conn)
     wid = await new_workspace(conn)
     real = ingest_steps.embed_generation
     monkeypatch.setattr(ingest_steps, "embed_generation", lambda *a, **k: real(*a, **{**k, "batch_size": 2}))

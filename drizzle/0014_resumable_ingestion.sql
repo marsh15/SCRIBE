@@ -1,4 +1,5 @@
 -- T18: resumable leased ingestion (DESIGN B3). Hand-written; never `drizzle-kit push` over RLS objects.
+-- Edited in place for P0-1 (non-superuser migrator): this file had not been applied to any real database.
 ALTER TABLE "ingestion_jobs" ADD COLUMN IF NOT EXISTS "stage" text;
 --> statement-breakpoint
 
@@ -10,6 +11,27 @@ CREATE UNIQUE INDEX IF NOT EXISTS "ingestion_jobs_file_version_unique"
   ON "ingestion_jobs" ("file_id", COALESCE("source_version_id", '00000000-0000-0000-0000-000000000000'::uuid));
 --> statement-breakpoint
 
+-- P0-1 (Neon / any non-superuser migrator): CREATE OR REPLACE / ALTER FUNCTION on functions owned by scribe_definer needs
+-- ownership, and ALTER ... OWNER TO needs membership in scribe_definer plus CREATE on the schema for it. Make the migrating
+-- role a member of scribe_definer WITH INHERIT TRUE, SET TRUE (PG16+; plain GRANT before PG16, where the creator inherits),
+-- and lend CREATE on schema public for the duration of this file. Superusers skip all of it. Safe to repeat. Needs the
+-- migrating role to have created scribe_definer (it then holds ADMIN OPTION) or to be a superuser.
+DO $$
+BEGIN
+  IF (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN
+    RETURN;
+  END IF;
+  IF current_setting('server_version_num')::int >= 160000 THEN
+    IF NOT (pg_has_role(current_user, 'scribe_definer', 'USAGE') AND pg_has_role(current_user, 'scribe_definer', 'SET')) THEN
+      EXECUTE format('GRANT scribe_definer TO %I WITH INHERIT TRUE, SET TRUE', current_user);
+    END IF;
+  ELSIF NOT pg_has_role(current_user, 'scribe_definer', 'USAGE') THEN
+    EXECUTE format('GRANT scribe_definer TO %I', current_user);
+  END IF;
+END $$;
+--> statement-breakpoint
+GRANT CREATE ON SCHEMA public TO scribe_definer;
+--> statement-breakpoint
 -- Sweep now also fails the Source when the job ran out of attempts (nothing else would ever update it).
 CREATE OR REPLACE FUNCTION public.app_sweep_expired_leases(p_max_attempts integer DEFAULT 5)
 RETURNS TABLE(job_id integer)
@@ -53,3 +75,5 @@ GRANT EXECUTE ON FUNCTION public.app_count_live_leases(), public.app_count_claim
 ALTER FUNCTION public.app_count_live_leases() OWNER TO scribe_definer;
 --> statement-breakpoint
 ALTER FUNCTION public.app_count_claimable_jobs(integer) OWNER TO scribe_definer;
+--> statement-breakpoint
+REVOKE CREATE ON SCHEMA public FROM scribe_definer;

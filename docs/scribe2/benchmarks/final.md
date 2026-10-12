@@ -1,8 +1,8 @@
 # Scribe 2.0 final benchmark report: PLACEHOLDER
 
-**STATUS: NOT MEASURED. This file contains no results.** Every cell below says "NOT MEASURED". Do not quote anything from this file until a person has run the commands in section 2, replaced this skeleton with the real output, and removed this banner.
+**STATUS: NOT MEASURED. This file contains no results.** Every cell below says "NOT MEASURED". Do not quote anything from this file until a person has run the commands in section 2, replaced this skeleton with the real output and removed this banner.
 
-Why it is empty: the preconditions in section 1 are not met today (golden set unreviewed, no real baseline, `tau` uncalibrated, retrieval profile not chosen, live providers never called). The test split may be scored exactly once for the milestone report (INV-12); running it early would spend it.
+It is empty because the preconditions in section 1 are not met today: the golden set is unreviewed, there is no real baseline, `tau` is uncalibrated, no retrieval profile is chosen, and live providers have never been called. The test split may be scored exactly once, for the milestone report (INV-12), so running it early would spend it.
 
 ## 1. Preconditions (all must be true first)
 
@@ -40,7 +40,9 @@ uv run --project intelligence scribe-eval compare <run dir A> <run dir B>
 uv run --project intelligence scribe-eval answer --rankings R.jsonl --split test --profile <chosen> --milestone-report
 ```
 
-## 3. Report skeleton (fill from run records only; copy numbers, never retype from memory)
+## 3. Report skeleton
+
+Fill this in from run records only. Copy numbers; never retype them from memory.
 
 Run record ids (INV-11): dataset version NOT MEASURED, profile hash NOT MEASURED, commit NOT MEASURED, model ids NOT MEASURED.
 

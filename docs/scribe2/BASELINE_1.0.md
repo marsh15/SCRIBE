@@ -1,6 +1,6 @@
 # Scribe 1.0 baseline behavior
 
-Documented from the code on branch `codex/production-readiness` (commit `62ccb1a`) before any Scribe 2.0 change. Measured retrieval numbers for this baseline come from T07 (`benchmarks/baseline-1.0.md`).
+This table was documented from the code on branch `codex/production-readiness` (commit `62ccb1a`), before any Scribe 2.0 change. Measured retrieval numbers for this baseline are in T07 (`benchmarks/baseline-1.0.md`).
 
 | Area | Current behavior | Where |
 |---|---|---|

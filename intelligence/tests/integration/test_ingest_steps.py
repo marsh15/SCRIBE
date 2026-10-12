@@ -7,7 +7,7 @@ import uuid
 import httpx
 import jwt
 import pytest
-from _db import aconnect, doc, new_file, new_workspace
+from _db import aconnect, doc, new_file, new_workspace, skip_or_fail_if_foreign_jobs
 from conftest import DATABASE_URL_TEST, SECRET, needs_db
 from scribe_ingest.embedding import EmbeddingError, FakeEmbedder
 from scribe_ingest.indexer import Fence, LeaseLost, embed_generation
@@ -53,10 +53,7 @@ async def n_children(conn, fid):
 @pytest.fixture()
 async def env(monkeypatch):
     conn = await aconnect(DATABASE_URL_TEST)
-    cur = await conn.execute("select count(*) from ingestion_jobs where status in ('queued','retrying','processing')")
-    if (await cur.fetchone())[0]:
-        await conn.close()
-        pytest.skip("foreign claimable jobs present in the shared DB")
+    await skip_or_fail_if_foreign_jobs(conn)
     wid = await new_workspace(conn)
     real = ingest_steps.embed_generation
 

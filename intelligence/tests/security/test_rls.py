@@ -13,7 +13,7 @@ import psycopg
 import pytest
 
 from conftest import DATABASE_URL_TEST, needs_db
-from _db import purge_workspaces
+from _db import fail_or_skip_foreign_jobs, purge_workspaces
 
 pytestmark = needs_db
 
@@ -347,8 +347,10 @@ def _queue_job(world, key: str, **set_sql) -> int:
 
 def _park_other_jobs(c, keep_ids):
     """Other test modules leave no rows (purged), but be defensive: only our jobs may be claimable."""
-    assert c.execute("select count(*) from ingestion_jobs where id <> all(%s) and status in ('queued','retrying')",
-                     (list(keep_ids),)).fetchone()[0] == 0 or pytest.skip("foreign queued jobs present in shared DB")
+    foreign = c.execute("select count(*) from ingestion_jobs where id <> all(%s) and status in ('queued','retrying')",
+                        (list(keep_ids),)).fetchone()[0]
+    if foreign:
+        fail_or_skip_foreign_jobs()
 
 
 def test_claim_job_returns_ids_only_with_skip_locked(world):

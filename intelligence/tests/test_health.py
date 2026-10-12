@@ -49,3 +49,8 @@ def test_health_200(monkeypatch, path):
             assert body["pgvector_version"]  # pgvector image has the extension
     finally:
         get_settings.cache_clear()
+
+
+@pytest.mark.parametrize("path", ["/openapi.json", "/api/py/openapi.json", "/docs", "/redoc"])
+def test_no_api_schema_or_docs_are_served(client, path):
+    assert client.get(path).status_code == 404

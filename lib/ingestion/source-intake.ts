@@ -11,6 +11,7 @@ import { deleteBlob, downloadBlobToBuffer } from "@/lib/storage/blob";
 import { env, requireEnv } from "@/lib/env";
 import { ingestSourceViaPython, PermanentIngestError } from "@/lib/ingestion/python-engine";
 import { ensurePersonalWorkspace } from "@/lib/workspace";
+import { hardDeleteSource, pythonEngineConfigured } from "@/lib/ingestion/source-delete";
 import { ensureDocumentsChunkIndexSchema } from "@/lib/db-compat";
 import {
   completeReservedSourceUpload,
@@ -484,15 +485,30 @@ export async function runQueuedSourceIntake(
 }
 
 /**
- * Delete a Source (T20, INV-14). SOFT delete: one database function sets `deleted_at` and cancels the Source's
- * queued/processing/retrying jobs in a single transaction, so the Source is gone from search and evidence reads the
- * moment it commits (every retrieval path filters `files.deleted_at IS NULL`). Blobs, chunks, embeddings and rows are
- * removed later by the purge that runs from the daily sweep (`/api/py/ingest/purge`, after the grace period).
- * Returns false when the Source does not exist for this owner or was already deleted.
+ * Delete a Source. Two modes (P0-3), chosen by `pythonEngineConfigured()`:
+ *
+ * - Python engine configured (T20, INV-14): SOFT delete. One database function sets `deleted_at` and cancels the
+ *   Source's queued/processing/retrying jobs in a single transaction, so the Source is gone from search and evidence
+ *   reads the moment it commits (every retrieval path filters `files.deleted_at IS NULL`). Blobs, chunks, embeddings
+ *   and rows are removed later by the purge that runs from the daily sweep (`/api/py/ingest/purge`).
+ * - Otherwise (legacy engine, the default): nothing would run that purge, so user data is removed NOW: every blob
+ *   (original and versions), then the file row with its cascade. If a blob cannot be deleted the Source is soft-deleted
+ *   instead (invisible immediately) and the sweep's legacy cleanup retries with backoff.
+ *
+ * Returns false when the Source does not exist for this owner (or, in Python mode, was already deleted).
  */
 export async function deleteSource(userId: string, sourceId: number) {
   if (!Number.isInteger(sourceId) || sourceId <= 0) return false;
   const workspaceId = await ensurePersonalWorkspace(userId);
+  if (!pythonEngineConfigured()) {
+    const outcome = await hardDeleteSource({ workspaceId, userId, sourceId });
+    if (outcome === "deleted") {
+      console.info("[SourceIntake] deleted", { sourceId });
+      return true;
+    }
+    if (outcome === "missing") return false;
+    // blob_failed: hide it now, let the sweep finish the job
+  }
   const rows = (await sql`
     SELECT scribe_soft_delete_source(${workspaceId}::uuid, ${userId}, ${sourceId}::int) AS deleted
   `) as Array<{ deleted: boolean }>;

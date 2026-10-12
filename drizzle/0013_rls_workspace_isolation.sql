@@ -23,9 +23,9 @@
 --      the owner subject to the policies; run on an owner without BYPASSRLS it would hide every row from the legacy app.
 --   Rollback: drizzle/rollback/0013_rls_workspace_isolation.down.sql.
 --
--- RE-RUNS: everything is idempotent for a superuser. The function section creates functions owned by scribe_definer, so
--- re-running it as a non-superuser needs `SET ROLE scribe_definer` first (CREATE OR REPLACE requires ownership); drizzle's
--- journal runs it once, so this only matters for manual re-application.
+-- RE-RUNS: idempotent, for a superuser AND for a non-superuser CREATEROLE migrator (Neon): the function section replaces
+-- functions owned by scribe_definer, so the migrator is made a member of scribe_definer (INHERIT + SET) first, see the
+-- P0-1 block below. Verified on pg17 only: scripts/test-migrations-nosuperuser.sh (CI python job). Not verified on Neon.
 -- Never use `drizzle-kit push` against a database with these policies (see HANDOVER follow-ups).
 
 DO $$
@@ -153,11 +153,22 @@ BEGIN
 END $$;
 --> statement-breakpoint
 
--- Let the migrating role hand function ownership to scribe_definer (needs SET on the role and CREATE on the schema).
+-- P0-1 (Neon / any non-superuser migrator): CREATE OR REPLACE / ALTER FUNCTION on functions owned by scribe_definer needs
+-- ownership, and ALTER ... OWNER TO needs membership in scribe_definer plus CREATE on the schema for it. Make the migrating
+-- role a member of scribe_definer WITH INHERIT TRUE, SET TRUE (PG16+; plain GRANT before PG16, where the creator inherits),
+-- and lend CREATE on schema public for the duration of this file. Superusers skip all of it. Safe to repeat. Needs the
+-- migrating role to have created scribe_definer (it then holds ADMIN OPTION) or to be a superuser.
 DO $$
 BEGIN
-  IF NOT (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN
-    EXECUTE format('GRANT scribe_definer TO %I WITH SET TRUE, INHERIT FALSE', current_user);
+  IF (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN
+    RETURN;
+  END IF;
+  IF current_setting('server_version_num')::int >= 160000 THEN
+    IF NOT (pg_has_role(current_user, 'scribe_definer', 'USAGE') AND pg_has_role(current_user, 'scribe_definer', 'SET')) THEN
+      EXECUTE format('GRANT scribe_definer TO %I WITH INHERIT TRUE, SET TRUE', current_user);
+    END IF;
+  ELSIF NOT pg_has_role(current_user, 'scribe_definer', 'USAGE') THEN
+    EXECUTE format('GRANT scribe_definer TO %I', current_user);
   END IF;
 END $$;
 --> statement-breakpoint

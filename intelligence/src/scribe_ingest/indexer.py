@@ -525,6 +525,10 @@ async def activate_generation(
     """Design B3 ACTIVATE: one transaction. Returns the superseded generation id (if any)."""
     async with conn.transaction():
         await _begin(conn, workspace_id)
+        # LOCK ORDER (files row, THEN job row), the same as scribe_soft_delete_source (drizzle/0016): a delete that runs
+        # between our two statements would otherwise hold the files lock while waiting for our job lock, and we the
+        # reverse (deadlock). The lease check (and its LeaseLost outcome) still comes before the desired-version check.
+        await conn.execute("select 1 from files where id = %s and workspace_id = %s for update", (source_id, workspace_id))
         if fence:  # job -> completed commits (or rolls back) together with the activation
             await fence.touch(conn, stage="DONE", complete=True)
         await _check_still_desired(conn, workspace_id, source_id, version_id, lock=True)
@@ -590,6 +594,11 @@ async def fail_generation(conn: psycopg.AsyncConnection, workspace_id: str, sour
                 "update files set status = 'failed', processing_error = %s, updated_at = now() "
                 "where id = %s and workspace_id = %s and active_version_id is null and deleted_at is null",
                 (message[:500], source_id, workspace_id))
+        # No lease predicate on purpose (P2e). Every caller reaches this line only AFTER the fenced terminal write of the
+        # job (`_terminal`, `lease_token = mine`) succeeded, so the job is already failed/cancelled/superseded and is never
+        # claimed again; a worker that lost its lease gets LeaseLost from `_terminal` and returns before calling this.
+        # Fencing here could not work either: `_terminal` clears lease_token. The update only annotates that terminal
+        # job with generation_id and error_code. Direct (fence-less) callers have no job lease to hold.
         # only the job that built THIS generation (a Source has one job per version)
         await conn.execute(
             "update ingestion_jobs set generation_id = %s, error_code = %s where file_id = %s and "

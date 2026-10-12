@@ -1,14 +1,16 @@
 # Scribe: Complete Project Theory and WBD SDE Fresher Interview Guide
 
-This is the single preparation document for explaining **Scribe** in an SDE fresher interview. It covers the project, computer-science theory behind it, design decisions, trade-offs, likely questions, and ready-to-speak answers.
+This is a single preparation document for explaining Scribe in an SDE fresher interview. It covers the project, the computer-science theory behind it, design decisions, trade-offs, likely questions, and sample answers.
 
-> Important: Understand the answers and say them naturally. Do not claim traffic, team size, or production impact that you did not actually have. Replace any sample personal contribution with what you personally implemented.
+> Understand the answers and say them in your own words. Do not claim traffic, team size, or production impact you did not have. Replace any sample description of your contribution with what you personally implemented.
+
+> This guide describes the Scribe 1.0 pipeline (3072-dimension vectors, dense-only retrieval). Scribe 2.0 adds hybrid retrieval, reranking and claim verification; see the [README](../README.md) and [ARCHITECTURE.md](scribe2/ARCHITECTURE.md).
 
 ---
 
 ## 1. Project in One Line
 
-**Scribe is a multi-tenant RAG knowledge workspace where users privately upload documents and ask questions whose answers are grounded in retrieved document chunks and linked to citations.**
+Scribe is a multi-tenant RAG knowledge workspace. Users upload documents privately and ask questions. Answers are grounded in retrieved document chunks and link back to citations.
 
 ## 2. Thirty-Second Interview Introduction
 
@@ -16,21 +18,21 @@ This is the single preparation document for explaining **Scribe** in an SDE fres
 
 ## 3. Two-Minute Project Explanation
 
-> The problem I wanted to solve was that normal chatbots can give fluent but unsupported answers, while users often need answers from their own private documents. Scribe uses Retrieval-Augmented Generation, or RAG, to solve that.
+> Normal chatbots can give fluent but unsupported answers, while users often need answers from their own private documents. Scribe uses Retrieval-Augmented Generation, or RAG, to close that gap.
 >
-> The system has two main pipelines. The first is ingestion. The browser requests a constrained private upload token, uploads the original file directly to Vercel Blob, and the server creates an ingestion job. A worker claims queued jobs, extracts text according to file type, splits it into overlapping chunks, creates 3072-dimensional Gemini embeddings in batches, and stores each chunk and vector in PostgreSQL using pgvector. The source moves through visible states such as uploading, queued, processing, retrying, ready, or failed.
+> The system has two pipelines. The first is ingestion. The browser requests a constrained private upload token, uploads the original file directly to Vercel Blob, and the server creates an ingestion job. A worker claims queued jobs, extracts text according to file type, splits it into overlapping chunks, creates 3072-dimensional Gemini embeddings in batches, and stores each chunk and vector in PostgreSQL using pgvector. The source moves through visible states such as uploading, queued, processing, retrying, ready, or failed.
 >
 > The second pipeline is question answering. Every user question must call the knowledge-base search tool. Scribe embeds the query and calculates cosine similarity against that user's document chunks. It selects up to ten chunks above a threshold, formats them with file and location metadata, and passes them to Gemini as evidence. The response streams to the UI and includes links back to the source. Chat messages, retrieved chunks, timings, and optional evaluation scores are persisted.
 >
-> The most important engineering concerns were tenant isolation, reliability, and explainability. Every data query is scoped by the authenticated Clerk user ID. Queue jobs use atomic state transitions, retries with exponential backoff, stale-job recovery, and `FOR UPDATE SKIP LOCKED` to prevent two workers from claiming the same job. The evidence inspector shows what was retrieved and how long each stage took. If I scaled it further, I would improve hybrid retrieval, add OCR, add stricter authorization tests, and move ingestion to a dedicated queue platform.
+> The main engineering concerns were tenant isolation, reliability, and explainability. Every data query is scoped by the authenticated Clerk user ID. Queue jobs use atomic state transitions, retries with exponential backoff, stale-job recovery, and `FOR UPDATE SKIP LOCKED` so two workers cannot claim the same job. The evidence inspector shows what was retrieved and how long each stage took. To scale further, I would add hybrid retrieval, OCR, stricter authorization tests, and a dedicated queue platform for ingestion.
 
 ---
 
 ## 4. Problem Statement
 
-Users have private documents such as policies, research, notes, contracts, and operational guides. Reading every document for each question is slow. A general-purpose LLM may not know these documents and can hallucinate.
+Users have private documents such as policies, research, notes, contracts, and operational guides. Reading every document for each question is slow, and a general-purpose LLM does not know these documents and can hallucinate.
 
-Scribe aims to provide:
+Scribe provides:
 
 - private per-user document storage;
 - semantic search across all uploaded sources;
@@ -57,13 +59,13 @@ Scribe aims to provide:
 
 ### Non-functional requirements
 
-- **Security:** one user must never access another user's files, chats, or search results.
-- **Reliability:** failed or interrupted ingestion should be retryable.
-- **Idempotency:** repeated callbacks or usage writes must not create incorrect duplicate state.
-- **Performance:** uploads should not proxy large files through the application server; chat should stream.
-- **Scalability:** background jobs must be claimable by multiple workers without duplicate processing.
-- **Observability:** retrieval and generation stages should be measurable.
-- **Accessibility:** core workflows target WCAG 2.2 AA, keyboard access, reduced motion, zoom, and adequate touch targets.
+- Security: one user must never access another user's files, chats, or search results.
+- Reliability: failed or interrupted ingestion must be retryable.
+- Idempotency: repeated callbacks or usage writes must not create duplicate state.
+- Performance: large uploads do not pass through the application server, and chat streams.
+- Scalability: multiple workers can claim background jobs without duplicate processing.
+- Observability: retrieval and generation stages are measurable.
+- Accessibility: core workflows target WCAG 2.2 AA, with keyboard access, reduced motion, zoom support, and adequate touch targets.
 
 ---
 
@@ -89,7 +91,7 @@ Scribe aims to provide:
 
 ### Why PostgreSQL plus pgvector instead of a separate vector database?
 
-> For this project, PostgreSQL already stores users' source metadata, chats, and ingestion state. pgvector lets me store embeddings next to document chunks and join them with the files table during search. This simplifies consistency, deletion, tenant filtering, backups, and operations. A specialized vector database may offer better distributed scale or retrieval features, but it would add another system and a synchronization problem. PostgreSQL is the simpler choice for the current scale.
+> PostgreSQL already stores source metadata, chats, and ingestion state. pgvector lets me keep embeddings next to the document chunks and join them with the files table during search. That simplifies consistency, deletion, tenant filtering, backups, and operations. A specialized vector database may scale better or offer more retrieval features, but it adds another system and a synchronization problem. At the current scale, PostgreSQL is the simpler choice.
 
 ---
 
@@ -122,11 +124,11 @@ Scribe aims to provide:
 +----------------------------------+
 ```
 
-### The three main product areas
+### The three product areas
 
-1. **Sources:** upload, state, preview, deletion, and metadata.
-2. **Conversation:** chat history and streaming answers.
-3. **Evidence:** citations, retrieved chunks, similarity, latency, and evaluations.
+1. Sources: upload, state, preview, deletion, and metadata.
+2. Conversation: chat history and streaming answers.
+3. Evidence: citations, retrieved chunks, similarity, latency, and evaluations.
 
 ---
 
@@ -152,7 +154,7 @@ Select file
 
 ### Why direct-to-blob upload?
 
-If the file passed through the Next.js server, the server would use bandwidth and memory and could hit request-body or execution-time limits. A constrained, short-lived token lets the browser upload directly while the server still controls the path, MIME type, maximum size, and callback.
+A file that passes through the Next.js server uses its bandwidth and memory and can hit request-body or execution-time limits. A constrained, short-lived token lets the browser upload directly while the server still controls the path, MIME type, maximum size, and callback.
 
 ### Source state machine
 
@@ -180,25 +182,25 @@ uploading -> queued -> processing -> ready
 | CSV | Parse rows, join columns with spaces, join rows with newlines |
 | TXT/Markdown | UTF-8 decoding |
 
-An empty extraction is rejected. Scanned or image-only PDFs currently need OCR and are explicitly reported as unsupported rather than silently indexing no content.
+An empty extraction is rejected. Scanned or image-only PDFs need OCR, which is not implemented, so they are reported as unsupported instead of being indexed with no content.
 
 ### Chunking
 
 Scribe uses recursive character splitting with:
 
-- chunk size: **4000 characters**;
-- overlap: **400 characters**;
+- chunk size: 4000 characters;
+- overlap: 400 characters;
 - separator preference: paragraph, newline, space, then character boundary.
 
 Metadata includes chunk index, total chunks, estimated page, section, percentage position, character offset, and character length.
 
 ### Why overlap chunks?
 
-An important sentence may begin at the end of one chunk and finish in the next. Overlap preserves local context at boundaries, improving retrieval and answer quality. The cost is duplicated text, more embedding storage, and possible retrieval redundancy.
+An important sentence may begin at the end of one chunk and finish in the next. Overlap keeps local context across boundaries, which helps retrieval and answer quality. The cost is duplicated text, more embedding storage, and possible redundancy in retrieved results.
 
 ### Why is PDF page location approximate?
 
-The extractor returns flattened text and total pages, not exact character-to-page mappings. Scribe estimates a page from the chunk's relative character position. This is useful but not exact. A stronger design would extract page-by-page and preserve precise page metadata.
+The extractor returns flattened text and the total page count, not a mapping from characters to pages. Scribe estimates a page from the chunk's relative character position, which is useful but not exact. A better design would extract page by page and store precise page metadata.
 
 ---
 
@@ -206,19 +208,19 @@ The extractor returns flattened text and total pages, not exact character-to-pag
 
 ### Why asynchronous processing?
 
-Extraction and embedding can be slow and can fail due to provider limits. Keeping all work inside the upload request would cause timeouts and a poor user experience. The queue separates accepting the file from making it searchable.
+Extraction and embedding are slow and can fail on provider limits. Doing all of it inside the upload request would cause timeouts and a poor user experience. The queue separates accepting the file from making it searchable.
 
 ### How a worker safely claims jobs
 
-The worker selects eligible jobs inside SQL using `FOR UPDATE SKIP LOCKED`, then updates them to `processing`. If two workers run together, one locks a candidate and the other skips it, reducing duplicate processing.
+The worker selects eligible jobs in SQL with `FOR UPDATE SKIP LOCKED`, then updates them to `processing`. If two workers run together, one locks a candidate and the other skips it, which reduces duplicate processing.
 
 ### Retry strategy
 
-Retryable errors are re-queued with exponential backoff. Delay grows roughly as `2^attempts` and is capped. Non-retryable errors, such as unsupported formats or no extractable text, fail immediately. Attempts are capped at five.
+Retryable errors are re-queued with exponential backoff. The delay grows roughly as `2^attempts` and is capped. Non-retryable errors, such as unsupported formats or no extractable text, fail immediately. Attempts are capped at five.
 
 ### Stale-job recovery
 
-A serverless function can die after claiming a job. Scribe detects jobs left in `processing` beyond a time threshold, returns them to the queue, and marks the source as retrying. It also marks uploads that never complete within 24 hours as failed.
+A serverless function can die after claiming a job. Scribe finds jobs left in `processing` beyond a time threshold, returns them to the queue, and marks the source as retrying. Uploads that never complete within 24 hours are marked failed.
 
 ### Idempotency examples
 
@@ -231,11 +233,11 @@ A serverless function can die after claiming a job. Scribe detects jobs left in 
 
 ### Interview answer: What is idempotency?
 
-> An operation is idempotent when repeating the same request has the same final effect as performing it once. It matters in distributed systems because callbacks, network requests, and jobs may be delivered more than once. In Scribe, duplicate upload callbacks do not create duplicate jobs, and usage events can use unique idempotency keys so retries do not double-charge the user.
+> An operation is idempotent when repeating the same request has the same final effect as doing it once. This matters in distributed systems because callbacks, network requests, and jobs can be delivered more than once. In Scribe, duplicate upload callbacks do not create duplicate jobs, and usage events can carry unique idempotency keys so retries do not double-charge the user.
 
 ### At-least-once vs exactly-once processing
 
-The practical model is **at-least-once execution with idempotent effects**, not magical exactly-once execution. A job can be retried after an uncertain failure, but uniqueness constraints and atomic replacement make repeated processing safe.
+The practical model is at-least-once execution with idempotent effects, not exactly-once execution. A job can be retried after an uncertain failure, and uniqueness constraints plus atomic replacement make the repeat safe.
 
 ---
 
@@ -245,15 +247,15 @@ The practical model is **at-least-once execution with idempotent effects**, not 
 
 Retrieval-Augmented Generation has three stages:
 
-1. **Retrieve** relevant private knowledge.
-2. **Augment** the model prompt with that evidence.
-3. **Generate** an answer based on the evidence.
+1. Retrieve relevant private knowledge.
+2. Augment the model prompt with that evidence.
+3. Generate an answer based on the evidence.
 
 RAG does not train the model on uploaded documents. It retrieves relevant passages at request time.
 
 ### What is an embedding?
 
-An embedding is a dense numeric vector representing semantic meaning. The current schema stores **3072 floating-point dimensions** for each chunk. Semantically related passages should be close in vector space even if their exact wording differs.
+An embedding is a dense numeric vector that represents semantic meaning. The current schema stores 3072 floating-point dimensions for each chunk. Related passages end up close together in vector space even when their wording differs.
 
 ### Cosine similarity
 
@@ -269,30 +271,30 @@ It measures orientation rather than raw magnitude. Scribe uses:
 similarity = 1 - cosine_distance
 ```
 
-The query selects up to **10 chunks** with similarity greater than **0.3**, ordered from highest to lowest.
+The query selects up to 10 chunks with similarity greater than 0.3, ordered from highest to lowest.
 
 ### Why semantic search instead of SQL `LIKE`?
 
-Keyword search looks for matching text. Semantic search can match meaning. For example, “cancellation policy” may retrieve a chunk containing “terminate the subscription” even if the exact words differ. Keyword search remains valuable for names, codes, and exact phrases, which is why hybrid retrieval is a good future improvement.
+Keyword search matches text. Semantic search can match meaning. For example, "cancellation policy" can retrieve a chunk containing "terminate the subscription" even though the words differ. Keyword search still works better for names, codes, and exact phrases, which is why hybrid retrieval is a good future improvement.
 
 ### Top-K and threshold trade-off
 
-- Low `K` or high threshold: less noise and lower prompt cost, but may miss evidence.
-- High `K` or low threshold: better recall, but more irrelevant context, cost, and possible model confusion.
-- Scribe currently uses fixed defaults. A production system should tune them on an evaluation dataset.
+- A low `K` or high threshold gives less noise and lower prompt cost, but may miss evidence.
+- A high `K` or low threshold gives better recall, but adds irrelevant context and cost and can confuse the model.
+- Scribe uses fixed defaults. A production system should tune them on an evaluation dataset.
 
 ### Chunk-size trade-off
 
 - Small chunks improve retrieval precision but may lose surrounding context.
-- Large chunks preserve context but may contain several topics and waste tokens.
+- Large chunks keep context but may mix several topics and waste tokens.
 - Overlap improves continuity but increases duplicate storage and context.
 
 ### Retrieval precision and recall
 
-- **Precision:** among retrieved chunks, how many are relevant?
-- **Recall:** among all relevant chunks, how many were retrieved?
+- Precision: of the retrieved chunks, how many are relevant?
+- Recall: of all the relevant chunks, how many were retrieved?
 
-A strict threshold may improve precision while hurting recall. RAG tuning seeks an acceptable balance for the product's question types.
+A strict threshold can raise precision while hurting recall. RAG tuning looks for an acceptable balance for the product's question types.
 
 ### Hallucination prevention
 
@@ -305,7 +307,7 @@ Scribe uses several layers:
 - generated citations must use supplied links;
 - traces and optional judge evaluations expose whether answers were grounded.
 
-This reduces hallucination but cannot mathematically eliminate it. LLM instructions are probabilistic. Stronger enforcement could validate citations after generation, use structured output, and block unsupported claims.
+This reduces hallucination but cannot eliminate it, because LLM instructions are followed probabilistically. Stronger enforcement would validate citations after generation, use structured output, and block unsupported claims.
 
 ### RAG vs fine-tuning
 
@@ -316,7 +318,7 @@ This reduces hallucination but cannot mathematically eliminate it. LLM instructi
 | Can cite retrieved evidence | Does not naturally provide source citations |
 | Good for private, changing knowledge | Good for style, task behavior, or specialized patterns |
 
-For Scribe's changing private documents, RAG is the appropriate primary technique.
+For Scribe's changing private documents, RAG is the right primary technique.
 
 ---
 
@@ -343,11 +345,11 @@ User sends message
 
 ### Why save the user message before streaming?
 
-The provider or network may fail halfway through the stream. If both messages were saved only after completion, the user's question would be lost. Saving it first preserves intent and allows the UI or system to retry.
+The provider or network can fail halfway through the stream. If both messages were saved only after completion, the user's question would be lost. Saving it first keeps the question and lets the UI or system retry.
 
 ### Why streaming?
 
-LLM generation has noticeable latency. Streaming improves perceived performance by showing tokens as they arrive, reduces time to first visible result, and makes long answers feel responsive. It does not reduce total model computation time.
+LLM generation has noticeable latency. Streaming shows tokens as they arrive, so the first visible result appears sooner and long answers feel responsive. It does not reduce total model computation time.
 
 ### Tool calling
 
@@ -400,21 +402,21 @@ User (Clerk ID)
 
 ### Why cascade delete?
 
-Document chunks have no meaning without their source, and messages/traces have no meaning without their chat. `ON DELETE CASCADE` preserves referential integrity and prevents orphan rows.
+Document chunks mean nothing without their source, and messages and traces mean nothing without their chat. `ON DELETE CASCADE` keeps referential integrity and prevents orphan rows.
 
 ### Why store retrieval snapshots?
 
-If a source is later re-indexed, live search results may change. Saving the retrieved chunk preview, score, rank, and metadata gives an audit trail of what supported a particular answer at that moment.
+If a source is re-indexed later, live search results can change. Saving the retrieved chunk preview, score, rank, and metadata gives an audit trail of what supported a particular answer at that moment.
 
 ### Relational normalization discussion
 
-The design separates entities that change independently: files, chunks, chats, messages, jobs, traces, and billing. Some trace data deliberately duplicates file names and previews. That is denormalization for historical observability: the trace should remain interpretable even if current source metadata changes.
+The design separates entities that change independently: files, chunks, chats, messages, jobs, traces, and billing. Some trace data deliberately duplicates file names and previews. This is denormalization for historical observability: the trace should stay interpretable even if the current source metadata changes.
 
 ---
 
 ## 13. API and Server Boundaries
 
-### Important route groups
+### Route groups
 
 - `/api/sources/reserve`: authenticate, validate allowance, create source, issue upload token.
 - `/api/sources/upload-complete`: handle trusted Blob completion and queue the source.
@@ -428,12 +430,12 @@ The design separates entities that change independently: files, chunks, chats, m
 
 ### Route handler vs server action
 
-- Route handlers are suitable for HTTP APIs, streaming chat, webhooks, callbacks, and cron.
-- Server actions are suitable for authenticated UI mutations such as creating/deleting chats or sources with path revalidation.
+- Route handlers fit HTTP APIs, streaming chat, webhooks, callbacks, and cron.
+- Server actions fit authenticated UI mutations such as creating or deleting chats or sources, with path revalidation.
 
 ### Validation
 
-Validation occurs at trust boundaries:
+Validation happens at trust boundaries:
 
 - upload name, extension, MIME type, byte size, plan limit;
 - Blob path, size, and content type against the reservation;
@@ -449,14 +451,14 @@ Validation occurs at trust boundaries:
 
 ### Authentication vs authorization
 
-- **Authentication:** Who is the user? Clerk verifies the session and returns a user ID.
-- **Authorization:** May this user access this row or operation? Queries filter by that user ID.
+- Authentication asks who the user is. Clerk verifies the session and returns a user ID.
+- Authorization asks whether this user may access this row or operation. Queries filter by that user ID.
 
-Authentication alone is insufficient. A signed-in user must not be able to pass another source or chat ID and access it.
+Authentication alone is not enough. A signed-in user must not be able to pass someone else's source or chat ID and get access to it.
 
 ### Multi-tenant isolation
 
-Tenant scoping appears in the most important paths:
+Tenant scoping applies in the main paths:
 
 - vector search joins chunks to files and filters `files.user_id = currentUser`;
 - file listing and deletion filter by owner;
@@ -473,15 +475,15 @@ Tenant scoping appears in the most important paths:
 
 ### HMAC theory
 
-HMAC combines a secret key with message content to create a tamper-evident signature. The upload-signature helper uses HMAC-SHA256 and checks signatures with `timingSafeEqual`. An attacker who changes a signed payload cannot calculate a valid new signature without the secret.
+HMAC combines a secret key with the message content to produce a tamper-evident signature. The upload-signature helper uses HMAC-SHA256 and checks signatures with `timingSafeEqual`. An attacker who changes a signed payload cannot compute a valid new signature without the secret.
 
 ### Security improvements to discuss honestly
 
 - Add PostgreSQL row-level security as defense in depth.
 - Add rate limiting per user and IP.
-- Virus-scan uploads and enforce content sniffing, not only declared MIME type.
+- Virus-scan uploads and sniff content instead of trusting the declared MIME type.
 - Encrypt especially sensitive content with managed keys.
-- Use short retention periods for raw model/trace content when required.
+- Use short retention periods for raw model and trace content when required.
 - Run a formal authorization test matrix for every ID-based route.
 - Apply a content-security policy and audit dependency vulnerabilities.
 
@@ -494,14 +496,14 @@ HMAC combines a secret key with message content to create a tamper-evident signa
 Scribe groups state that must change together:
 
 - upload completion changes source state and inserts the queue job in one SQL statement;
-- successful ingestion replaces chunks and marks the source/job complete in one database batch;
-- job claiming changes a selected candidate to processing within one database operation.
+- successful ingestion replaces chunks and marks the source and job complete in one database batch;
+- job claiming moves a selected candidate to processing within one database operation.
 
 Atomicity avoids partial states such as `ready` without chunks or a queued source without a job.
 
 ### Database constraints as the last line of defense
 
-Application checks improve error messages, but database constraints protect correctness during races:
+Application checks give better error messages, but database constraints protect correctness during races:
 
 - unique job per file;
 - unique chunk position per file;
@@ -524,7 +526,7 @@ Application checks improve error messages, but database constraints protect corr
 
 ### CAP theorem relevance
 
-CAP concerns distributed data systems during a network partition. Scribe relies mainly on managed PostgreSQL and external providers rather than implementing a distributed database. The useful interview point is that cross-system operations—Blob, database, Gemini, Razorpay—cannot share one ACID transaction. Scribe therefore uses state machines, callbacks, retries, idempotency, and reconciliation.
+CAP concerns distributed data systems during a network partition. Scribe relies on managed PostgreSQL and external providers and does not implement a distributed database. The useful interview point is that operations spanning Blob, the database, Gemini, and Razorpay cannot share one ACID transaction. Scribe therefore uses state machines, callbacks, retries, idempotency, and reconciliation.
 
 ---
 
@@ -541,11 +543,11 @@ Usage is represented as append-only events:
 
 ### Why append-only usage events?
 
-Events provide an audit trail, allow aggregation by billing cycle, and are safer than repeatedly overwriting one counter. Idempotency keys prevent known retries from adding the same usage twice.
+Events give an audit trail, can be aggregated by billing cycle, and are safer than overwriting a single counter. Idempotency keys stop known retries from adding the same usage twice.
 
 ### Webhook pattern
 
-The application should treat the payment provider webhook as the source of truth for asynchronous subscription changes. Events are signature-verified, stored with a unique provider ID, and processed idempotently.
+The payment provider's webhook is the source of truth for asynchronous subscription changes. Events are signature-verified, stored with a unique provider ID, and processed idempotently.
 
 ---
 
@@ -563,7 +565,7 @@ Each retrieval trace can store:
 
 ### Why observability matters
 
-A generated answer may look good even when retrieval is poor. Without traces, it is difficult to distinguish:
+A generated answer can look good even when retrieval is poor. Without traces, it is hard to tell these cases apart:
 
 - retrieval failure;
 - irrelevant context;
@@ -572,32 +574,32 @@ A generated answer may look good even when retrieval is poor. Without traces, it
 
 ### LLM-as-judge limitations
 
-An optional Gemini judge scores the answer. This is useful for trends and regression detection but is not absolute truth. It can be biased, inconsistent, and correlated with the answering model. Better evaluation combines human-labeled test questions, deterministic citation checks, retrieval metrics, and model-based scoring.
+An optional Gemini judge scores the answer. The scores help with trends and regression detection but are not ground truth. The judge can be biased and inconsistent, and it is correlated with the answering model. Better evaluation combines human-labeled test questions, deterministic citation checks, retrieval metrics, and model-based scoring.
 
 ---
 
 ## 18. Frontend and User Experience
 
-The interface is organized as a resizable three-pane workspace:
+The interface is a resizable three-pane workspace:
 
-- left: sources/navigation;
+- left: sources and navigation;
 - center: conversation;
-- right: evidence/RAG inspector.
+- right: evidence and RAG inspector.
 
-On narrower screens, secondary panels collapse so one primary task remains visible. The design emphasizes quiet surfaces, visible focus, semantic status, evidence anatomy, and reduced motion.
+On narrower screens, secondary panels collapse so one primary task stays visible. The design uses quiet surfaces, visible focus, semantic status, an evidence layout, and reduced motion.
 
-### Important React/Next.js concepts used
+### React and Next.js concepts used
 
 - Server Components for data-oriented rendering where client state is unnecessary.
 - Client Components for upload progress, resizable panels, and chat interaction.
 - Server actions for authenticated mutations and revalidation.
 - Route handlers for streaming, webhooks, and external callbacks.
-- Context for shared chat/evidence state.
-- Custom upload hook for the reservation, upload, processing, and error state machine.
+- Context for shared chat and evidence state.
+- A custom upload hook for the reservation, upload, processing, and error state machine.
 
 ### Why a custom hook for upload?
 
-The hook encapsulates UI state transitions and network orchestration. Components can render progress and errors without owning the protocol details. This improves separation of concerns and makes the flow easier to test and change.
+The hook holds the UI state transitions and network orchestration. Components can render progress and errors without knowing the protocol details, which separates concerns and makes the flow easier to test and change.
 
 ---
 
@@ -619,7 +621,7 @@ Let:
 - Sorting all scores would be `O(M log M)` conceptually; top-K database execution can optimize this.
 - Storage for embeddings: `O(C * D)`.
 
-The migration history initially created an HNSW cosine index, but a later embedding-dimension migration dropped it and the current schema does not recreate one. Therefore, do **not** claim that the present 3072-dimensional search is definitely HNSW-backed. At growing scale, an important improvement is to create and verify a compatible HNSW index. HNSW trades extra memory and index-build cost for much faster approximate retrieval. Whenever the embedding dimension or model changes, the vector column and index must remain compatible and all existing chunks need re-embedding.
+The migration history first created an HNSW cosine index, but a later embedding-dimension migration dropped it and the current schema does not recreate one. Do not claim that the present 3072-dimensional search is HNSW-backed. As data grows, an important improvement is to create and verify a compatible HNSW index. HNSW spends extra memory and index-build time to get much faster approximate retrieval. Whenever the embedding dimension or model changes, the vector column and index must stay compatible and all existing chunks need re-embedding.
 
 ### Current performance choices
 
@@ -647,7 +649,7 @@ The migration history initially created an HNSW cosine index, but a later embedd
 
 ## 20. Testing Strategy
 
-The repository uses Vitest. Existing tests cover areas such as:
+The repository uses Vitest. Existing tests cover:
 
 - upload signatures;
 - source intake policy and upload completion behavior;
@@ -660,12 +662,12 @@ The repository uses Vitest. Existing tests cover areas such as:
 
 ### Testing pyramid for Scribe
 
-1. **Unit tests:** pure validation, retry classification, price calculation, parsing, formatting.
-2. **Integration tests:** database ownership filters, job claiming, upload transitions, vector search.
-3. **API tests:** auth, invalid payloads, callbacks, chat failure modes, webhook replay.
-4. **End-to-end tests:** sign in, upload a known fixture, wait for ready, ask a known question, open the citation.
-5. **RAG evaluation suite:** labeled questions with expected source chunks and acceptable answers.
-6. **Load/failure tests:** concurrent workers, provider 429s, timeout recovery, large files, and duplicate callbacks.
+1. Unit tests: pure validation, retry classification, price calculation, parsing, formatting.
+2. Integration tests: database ownership filters, job claiming, upload transitions, vector search.
+3. API tests: auth, invalid payloads, callbacks, chat failure modes, webhook replay.
+4. End-to-end tests: sign in, upload a known fixture, wait for ready, ask a known question, open the citation.
+5. RAG evaluation suite: labeled questions with expected source chunks and acceptable answers.
+6. Load and failure tests: concurrent workers, provider 429s, timeout recovery, large files, and duplicate callbacks.
 
 ### Interview answer: How would you test RAG?
 
@@ -677,59 +679,59 @@ The repository uses Vitest. Existing tests cover areas such as:
 
 ### Decision 1: Async ingestion
 
-**Benefit:** resilient uploads and shorter request lifetimes.
-**Cost:** more states, retries, worker coordination, and eventual consistency.
+Benefit: resilient uploads and shorter request lifetimes.
+Cost: more states, retries, worker coordination, and eventual consistency.
 
 ### Decision 2: pgvector in PostgreSQL
 
-**Benefit:** simpler architecture, joins, ownership filtering, and transactional deletion.
-**Cost:** a specialized vector store may scale or tune ANN search better.
+Benefit: simpler architecture, joins, ownership filtering, and transactional deletion.
+Cost: a specialized vector store may scale or tune ANN search better.
 
 ### Decision 3: Private object storage
 
-**Benefit:** original binaries do not bloat relational tables and can be previewed.
-**Cost:** database and blob state can diverge, requiring callbacks and cleanup.
+Benefit: original binaries stay out of relational tables and can be previewed.
+Cost: database and blob state can diverge, which needs callbacks and cleanup.
 
 ### Decision 4: Fixed-size overlapping chunks
 
-**Benefit:** simple and predictable.
-**Cost:** boundaries are not truly semantic and retrieval can contain duplicates.
+Benefit: simple and predictable.
+Cost: boundaries are not semantic, and retrieval can contain duplicates.
 
 ### Decision 5: Mandatory retrieval tool call
 
-**Benefit:** encourages evidence-first answers.
-**Cost:** adds latency and cost even for conversational messages and is still prompt-enforced.
+Benefit: pushes the model toward evidence-first answers.
+Cost: adds latency and cost even for conversational messages, and it is still enforced only by the prompt.
 
 ### Decision 6: Save traces
 
-**Benefit:** debugging, audits, and evaluation.
-**Cost:** extra database writes, sensitive content retention, and storage.
+Benefit: debugging, audits, and evaluation.
+Cost: extra database writes, retention of sensitive content, and storage.
 
 ### Decision 7: User ID filters in queries
 
-**Benefit:** direct, understandable multi-tenant isolation.
-**Cost:** every new query must remember the rule; database RLS would add defense in depth.
+Benefit: direct, easy-to-understand multi-tenant isolation.
+Cost: every new query must remember the rule. Database RLS would add defense in depth.
 
 ---
 
 ## 22. Current Limitations and Best Future Improvements
 
-Say these confidently. Knowing limitations shows engineering maturity.
+State these plainly. Knowing the limitations shows engineering maturity.
 
-1. **Scanned PDFs are unsupported.** Add OCR and preserve page-level coordinates.
-2. **Page numbers are approximate.** Extract per page and store exact page metadata.
-3. **Retrieval is dense-vector only.** Add BM25/full-text search, reciprocal rank fusion, and reranking.
-4. **Fixed chunking is not document-aware.** Add heading-, paragraph-, table-, and page-aware chunking.
-5. **Prompt rules cannot guarantee grounding.** Add structured citations and post-generation claim validation.
-6. **Fixed threshold and K are not tuned.** Build a labeled evaluation set and tune by document/query type.
-7. **Serverless cron is a basic queue driver.** Use a durable queue for higher throughput and dead-letter handling.
-8. **Evaluation can add latency and cost.** Run it asynchronously or sample requests.
-9. **Application filters are the primary tenant guard.** Add PostgreSQL row-level security.
-10. **Embedding model changes require migration.** Version embeddings, dual-write during migration, and switch indexes safely.
+1. Scanned PDFs are unsupported. Add OCR and keep page-level coordinates.
+2. Page numbers are approximate. Extract per page and store exact page metadata.
+3. Retrieval is dense-vector only. Add BM25 or full-text search, reciprocal rank fusion, and reranking.
+4. Fixed chunking is not document-aware. Add heading-, paragraph-, table-, and page-aware chunking.
+5. Prompt rules cannot guarantee grounding. Add structured citations and post-generation claim validation.
+6. The threshold and K are fixed, not tuned. Build a labeled evaluation set and tune by document and query type.
+7. Serverless cron is a basic queue driver. Use a durable queue for higher throughput and dead-letter handling.
+8. Evaluation adds latency and cost. Run it asynchronously or sample requests.
+9. Application filters are the primary tenant guard. Add PostgreSQL row-level security.
+10. Embedding model changes require a migration. Version embeddings, dual-write during the migration, and switch indexes safely.
 
 ### Strong answer: What would you improve first?
 
-> I would first build a small labeled retrieval dataset and measure recall@K, because without a baseline I could make the system more complex without improving answer quality. Based on those results, my likely next technical change would be hybrid retrieval with a reranker. It would improve exact-term queries and reduce irrelevant context while preserving semantic matching.
+> I would first build a small labeled retrieval dataset and measure recall@K. Without a baseline, I could make the system more complex without improving answer quality. Depending on those results, my likely next change is hybrid retrieval with a reranker, which would help exact-term queries and cut irrelevant context while keeping semantic matching.
 
 ---
 
@@ -849,11 +851,11 @@ Say these confidently. Knowing limitations shows engineering maturity.
 
 ### Q29. Why should we hire you as a fresher?
 
-> I may be early in my career, but Scribe demonstrates that I can connect fundamentals to a complete system. I worked across UI, APIs, authentication, relational modeling, vector search, background jobs, failure handling, testing, and observability. More importantly, I can explain trade-offs, identify current limitations, and learn from measurements rather than treating a working demo as finished engineering.
+> I am early in my career, but Scribe shows I can connect fundamentals to a complete system. I worked across UI, APIs, authentication, relational modeling, vector search, background jobs, failure handling, testing, and observability. I can also explain trade-offs, name the current limitations, and learn from measurements instead of treating a working demo as finished engineering.
 
 ### Q30. Why WBD?
 
-> WBD operates products where content, metadata, search, reliability, personalization, and user experience meet at large scale. Scribe gave me practical experience with document pipelines, retrieval, streaming interfaces, multi-user data isolation, and observability. I want to apply those foundations to consumer-scale media systems while learning from engineers who handle much larger traffic, availability, and data challenges.
+> WBD runs products where content, metadata, search, reliability, personalization, and user experience meet at large scale. Scribe gave me practical experience with document pipelines, retrieval, streaming interfaces, multi-user data isolation, and observability. I want to apply those foundations to consumer-scale media systems and learn from engineers who handle much larger traffic, availability, and data problems.
 
 Do not memorize the WBD answer word for word. Add one genuine reason based on the exact team and job description.
 
@@ -863,31 +865,31 @@ Do not memorize the WBD answer word for word. Add one genuine reason based on th
 
 ### Story A: Reliability problem
 
-**Situation:** Document processing depended on several slow external and serverless steps.
-**Task:** Prevent uploads from becoming silently stuck or partially indexed.
-**Action:** Added explicit states, durable jobs, atomic claims, retry classification, exponential backoff, stale-job recovery, and unique constraints.
-**Result:** The design can expose failure, retry transient errors, and safely recover interrupted jobs.
+Situation: Document processing depended on several slow external and serverless steps.
+Task: Prevent uploads from getting silently stuck or partially indexed.
+Action: Added explicit states, durable jobs, atomic claims, retry classification, exponential backoff, stale-job recovery, and unique constraints.
+Result: The design exposes failures, retries transient errors, and recovers interrupted jobs safely.
 
 ### Story B: Security boundary
 
-**Situation:** The product stores private documents for multiple users.
-**Task:** Prevent cross-user access even when IDs are guessed.
-**Action:** Used Clerk for identity and added owner filters to search, chat, file, trace, and processing queries; validated private storage reservations and callbacks.
-**Result:** Retrieval and source operations stay inside the authenticated tenant boundary.
+Situation: The product stores private documents for multiple users.
+Task: Prevent cross-user access even when IDs are guessed.
+Action: Used Clerk for identity, added owner filters to search, chat, file, trace, and processing queries, and validated private storage reservations and callbacks.
+Result: Retrieval and source operations stay inside the authenticated tenant boundary.
 
 ### Story C: Debugging RAG quality
 
-**Situation:** A plausible answer alone did not reveal whether retrieval was correct.
-**Task:** Make the RAG pipeline inspectable.
-**Action:** Stored query, chunks, ranks, similarities, timing stages, answer linkage, and optional evaluation scores; exposed them in an evidence inspector.
-**Result:** Retrieval problems and generation problems can be diagnosed separately.
+Situation: A plausible answer did not show whether retrieval was correct.
+Task: Make the RAG pipeline inspectable.
+Action: Stored the query, chunks, ranks, similarities, timing stages, answer linkage, and optional evaluation scores, and exposed them in an evidence inspector.
+Result: Retrieval problems and generation problems can be diagnosed separately.
 
 ### Story D: User experience under latency
 
-**Situation:** Uploading, indexing, and generation are not instant.
-**Task:** Keep the application understandable and responsive.
-**Action:** Used direct uploads with progress, explicit source states, a process-now fallback, streaming chat, and a three-pane Sources/Conversation/Evidence layout.
-**Result:** Users see progress and evidence instead of waiting on an unexplained blocking request.
+Situation: Uploading, indexing, and generation are not instant.
+Task: Keep the application understandable and responsive.
+Action: Used direct uploads with progress, explicit source states, a process-now fallback, streaming chat, and a three-pane Sources, Conversation, and Evidence layout.
+Result: Users see progress and evidence instead of waiting on an unexplained blocking request.
 
 ---
 
@@ -958,14 +960,14 @@ WBD may care about content platforms, streaming, metadata, personalization, high
 
 Keep the demo under five minutes.
 
-1. **Open Scribe:** “The workspace has Sources, Conversation, and Evidence.”
-2. **Upload a small known PDF:** point out direct upload progress and source states.
-3. **Wait until ready:** explain extraction, chunking, embedding, and the job worker.
-4. **Ask a question whose answer exists:** show streaming and citation.
-5. **Open the citation:** show the source and chunk metadata.
-6. **Show Evidence inspector:** explain similarity ranks and stage latency.
-7. **Ask an unsupported question:** demonstrate the intended refusal behavior.
-8. **Close with one limitation:** mention OCR or hybrid retrieval and how you would add it.
+1. Open Scribe and say: "The workspace has Sources, Conversation, and Evidence."
+2. Upload a small known PDF and point out the direct upload progress and source states.
+3. Wait until the source is ready, and explain extraction, chunking, embedding, and the job worker.
+4. Ask a question whose answer exists, and show the streaming and the citation.
+5. Open the citation and show the source and chunk metadata.
+6. Show the Evidence inspector and explain the similarity ranks and stage latency.
+7. Ask an unsupported question to show the intended refusal behavior.
+8. Close with one limitation, such as OCR or hybrid retrieval, and how you would add it.
 
 Have a ready source already indexed in case an external API is slow during the interview.
 
@@ -975,7 +977,7 @@ Have a ready source already indexed in case an external API is slow during the i
 
 Use only bullets that match your actual contribution.
 
-- Built **Scribe**, a multi-tenant RAG knowledge workspace using Next.js, TypeScript, PostgreSQL/pgvector, Clerk, Vercel Blob, and Google Gemini.
+- Built Scribe, a multi-tenant RAG knowledge workspace using Next.js, TypeScript, PostgreSQL/pgvector, Clerk, Vercel Blob, and Google Gemini.
 - Designed an asynchronous document-ingestion pipeline for PDF, DOCX, CSV, Markdown, and text with private direct uploads, chunking, batched embeddings, retries, and stale-job recovery.
 - Implemented user-scoped cosine-similarity retrieval and streaming grounded answers with source citations and an evidence inspector.
 - Added RAG observability covering retrieved chunks, similarity ranks, embedding/retrieval/generation latency, and optional groundedness evaluation.
@@ -1030,4 +1032,4 @@ Also prepare normal fresher topics outside this project: arrays, strings, linked
 
 ## 31. Best Final Closing Answer
 
-> Scribe taught me to think beyond a happy-path AI demo. I had to connect data modeling, asynchronous processing, authorization, semantic retrieval, streaming, billing, testing, and observability. The current system is intentionally simple enough to operate, but I can identify where it would need stronger queues, retrieval evaluation, hybrid search, OCR, and database-level tenant controls. That combination of building, measuring, and recognizing trade-offs is what I would bring to an entry-level SDE role.
+> Scribe taught me to think beyond a happy-path AI demo. I had to connect data modeling, asynchronous processing, authorization, semantic retrieval, streaming, billing, testing, and observability. The current system is deliberately simple enough to operate, and I can say where it needs stronger queues, retrieval evaluation, hybrid search, OCR, and database-level tenant controls. Building, measuring, and weighing trade-offs is what I would bring to an entry-level SDE role.

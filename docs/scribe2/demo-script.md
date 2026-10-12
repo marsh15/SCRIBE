@@ -1,10 +1,10 @@
 # Scribe 2.0 demo script (15 scenes)
 
-Scaled to what exists on branch `scribe2/m0-foundation`. The original plan text with its scene list is not in the repository, so the 15 scenes below are reconstructed from the feature set; scenes the original plan may have contained but that rely on unavailable work are listed at the end as REPLACED or SKIPPED.
+This script is scaled to what exists on branch `scribe2/m0-foundation`. The original plan text with its scene list is not in the repository, so the 15 scenes below are reconstructed from the feature set. Scenes the original plan may have contained but that depend on unavailable work are listed at the end as REPLACED or SKIPPED.
 
 ## Before you record: what must be live-verified first
 
-Nothing in this script has been run against a deployed app or real providers. Do these first, in order, and do not demo a scene whose prerequisite failed.
+Nothing in this script has been run against a deployed app or real providers. Work through these prerequisites in order, and do not demo a scene whose prerequisite failed.
 
 | # | Prerequisite | How | Needed by scenes |
 |---|---|---|---|
@@ -17,7 +17,7 @@ Nothing in this script has been run against a deployed app or real providers. Do
 
 Seeded Sources have no stored original (no Blob object), so the Original tab and PDF highlighting do not work for them. For scenes 8 and 10 upload at least one document through the browser instead (for example `fixtures/corpus/onboarding-handbook.pdf` and `hr-leave-policy-2026.pdf`).
 
-Do not state any accuracy, speed or "verified" claim aloud that you have not measured; say "not yet measured" instead. The golden set is unreviewed and the answerability threshold is uncalibrated.
+Do not make any accuracy, speed or "verified" claim aloud that you have not measured. Say "not yet measured" instead. The golden set is unreviewed and the answerability threshold is uncalibrated.
 
 ## The scenes
 

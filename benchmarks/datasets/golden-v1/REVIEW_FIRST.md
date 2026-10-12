@@ -1,6 +1,6 @@
 # Cases to human-review first
 
-**T28 update: 80 of the 200 cases (`origin: machine-drafted-t28`, `reviewed: false`) were drafted by a model and are completely unreviewed. Review them via [`UNREVIEWED_T28.md`](UNREVIEWED_T28.md), which lists every one with its question, UNVERIFIED reference answer and the specific concerns. No reference answer in this dataset, old or new, is verified. The original 120 cases below are also still pending human review. Do not publish milestone numbers from the test split until both sets are reviewed.**
+T28 update: 80 of the 200 cases (`origin: machine-drafted-t28`, `reviewed: false`) were drafted by a model and are completely unreviewed. Review them via [`UNREVIEWED_T28.md`](UNREVIEWED_T28.md), which lists every one with its question, UNVERIFIED reference answer and the specific concerns. No reference answer in this dataset, old or new, is verified. The original 120 cases below are also still pending human review. Do not publish milestone numbers from the test split until both sets are reviewed.
 
 Human review status: NOT YET REVIEWED. Every case needs a person to confirm the fact, quote and label before test-split numbers are published. Start with the cases the author was least sure of:
 

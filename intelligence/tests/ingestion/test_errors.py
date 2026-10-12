@@ -68,6 +68,9 @@ def test_register_parser_extension_point():
 # ---- blob download ----------------------------------------------------------
 
 
+OK_URL = "https://store123.private.blob.vercel-storage.com/uploads/x"
+
+
 def test_blob_download_sends_bearer_and_returns_body():
     seen = {}
 
@@ -76,7 +79,7 @@ def test_blob_download_sends_bearer_and_returns_body():
         seen["method"] = request.method
         return httpx.Response(200, content=b"abc")
 
-    out = download_private_blob("https://blob.example/x", "tok-123", transport=httpx.MockTransport(handler))
+    out = download_private_blob(OK_URL, "tok-123", transport=httpx.MockTransport(handler))
     assert out == b"abc" and seen == {"auth": "Bearer tok-123", "method": "GET"}
 
 
@@ -84,7 +87,7 @@ def test_blob_download_sends_bearer_and_returns_body():
 def test_blob_http_errors(status, retryable):
     t = httpx.MockTransport(lambda r: httpx.Response(status))
     with pytest.raises(BlobDownloadError) as e:
-        download_private_blob("https://blob.example/x", "secret-token", transport=t)
+        download_private_blob(OK_URL, "secret-token", transport=t)
     assert e.value.status == status and e.value.retryable is retryable
     assert "secret-token" not in str(e.value)
 
@@ -92,7 +95,7 @@ def test_blob_http_errors(status, retryable):
 def test_blob_size_cap_by_header_and_by_stream():
     big = httpx.MockTransport(lambda r: httpx.Response(200, content=b"x" * 100))
     with pytest.raises(BlobDownloadError):
-        download_private_blob("https://b/x", "t", max_bytes=10, transport=big)
+        download_private_blob(OK_URL, "t", max_bytes=10, transport=big)
 
     def chunked(request):
         def gen():
@@ -102,8 +105,8 @@ def test_blob_size_cap_by_header_and_by_stream():
         return httpx.Response(200, content=gen())
 
     with pytest.raises(BlobDownloadError):
-        download_private_blob("https://b/x", "t", max_bytes=25, transport=httpx.MockTransport(chunked))
-    assert download_private_blob("https://b/x", "t", max_bytes=50, transport=httpx.MockTransport(chunked)) == b"y" * 50
+        download_private_blob(OK_URL, "t", max_bytes=25, transport=httpx.MockTransport(chunked))
+    assert download_private_blob(OK_URL, "t", max_bytes=50, transport=httpx.MockTransport(chunked)) == b"y" * 50
 
 
 def test_blob_timeout_and_network_errors_are_retryable():
@@ -111,12 +114,45 @@ def test_blob_timeout_and_network_errors_are_retryable():
         raise httpx.ReadTimeout("slow", request=request)
 
     with pytest.raises(BlobDownloadError) as e:
-        download_private_blob("https://b/x", "t", transport=httpx.MockTransport(boom))
+        download_private_blob(OK_URL, "t", transport=httpx.MockTransport(boom))
     assert e.value.retryable
 
     def refuse(request):
         raise httpx.ConnectError("no", request=request)
 
     with pytest.raises(BlobDownloadError) as e:
-        download_private_blob("https://b/x", "t", transport=httpx.MockTransport(refuse))
+        download_private_blob(OK_URL, "t", transport=httpx.MockTransport(refuse))
     assert e.value.retryable
+
+
+@pytest.mark.parametrize("url", [
+    "http://store.private.blob.vercel-storage.com/x",            # not https
+    "https://evil.example/x",
+    "https://blob.vercel-storage.com.evil.example/x",            # suffix trick
+    "https://evilblob.vercel-storage.com/x",                     # no dot boundary
+    "https://store.private.blob.vercel-storage.com@evil.example/x",  # userinfo trick
+    "https://store.private.blob.vercel-storage.com:8443/x",
+    "https://127.0.0.1/x",
+    "uploads/u/1/note.md",                                       # a pathname is not a URL
+    "",
+])
+def test_blob_download_refuses_hosts_outside_vercel_blob_and_never_sends_the_token(url):
+    calls = []
+    t = httpx.MockTransport(lambda r: calls.append(r) or httpx.Response(200, content=b"x"))
+    with pytest.raises(BlobDownloadError) as e:
+        download_private_blob(url, "secret-token", transport=t)
+    assert e.value.retryable is False and "secret-token" not in str(e.value)
+    assert calls == []
+
+
+def test_blob_download_does_not_follow_redirects():
+    calls = []
+
+    def handler(request):
+        calls.append(str(request.url))
+        return httpx.Response(302, headers={"location": "https://evil.example/steal"})
+
+    with pytest.raises(BlobDownloadError) as e:
+        download_private_blob(OK_URL, "secret-token", transport=httpx.MockTransport(handler))
+    assert e.value.status == 302 and e.value.retryable is False
+    assert calls == [OK_URL]  # the redirect target was never requested

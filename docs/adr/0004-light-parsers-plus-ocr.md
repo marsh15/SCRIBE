@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-Docling needs 2–4 GB RAM and local models, which do not fit Vercel Python functions.
+Docling needs 2 to 4 GB RAM and local models, which do not fit Vercel Python functions.
 
 ## Decision
 

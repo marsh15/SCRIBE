@@ -54,6 +54,11 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+      # P0-1: migrations 0008+ must apply (twice) as a NOSUPERUSER CREATEROLE database owner, like on Neon. Runs BEFORE
+      # the superuser replay below so scribe_app / scribe_definer are created by the unprivileged role, as on a fresh
+      # managed database. Uses a throwaway database (scribe_nosuper_test) and drops it. Postgres 17 only.
+      - name: Migrations apply as a non-superuser (throwaway database)
+        run: scripts/test-migrations-nosuperuser.sh "$DATABASE_URL_TEST"
       # Drizzle owns the schema; replay its SQL so the schema-contract test can run.
       - name: Apply Drizzle migrations to test database
         run: scripts/apply-migrations.sh

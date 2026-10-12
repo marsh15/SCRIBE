@@ -1,6 +1,6 @@
 # Rankings file format
 
-Input to `scribe-eval score --rankings <file>`. JSONL, one line per case, items ordered best first:
+`scribe-eval score --rankings <file>` takes a JSONL file with one line per case and items ordered best first:
 
 ```json
 {"case_id": "sf-01",
@@ -8,9 +8,9 @@ Input to `scribe-eval score --rankings <file>`. JSONL, one line per case, items 
  "latency_ms": 123.4, "cost": {"embed_usd": 0.0001}, "degraded": false}
 ```
 
-- `case_id`, `ranking` (list, may be empty) required. `chunk_id`, `doc`, `score`, `method`, `latency_ms`, `cost`, `degraded` may be null/absent. Each item needs `text`.
-- Every case of the requested split must be present (missing ids are an error); duplicates are an error; extra ids are ignored.
-- Relevance (D17): an item is relevant to an evidence entry iff `normalize(text)` contains `normalize(quote)`.
-- Metrics: recall@1/5/10 = matched evidence entries in top k / all entries; hit@k = any; MRR = 1/rank of first relevant item; nDCG@10 with grades 1/2 (each entry credited to its first matching item, ideal = grades sorted descending); precision@5 = relevant in top 5 / 5. Unanswerable cases are excluded and reported separately with the top score (if any).
+- `case_id` and `ranking` (a list, which may be empty) are required. `chunk_id`, `doc`, `score`, `method`, `latency_ms`, `cost` and `degraded` may be null or absent. Each item needs `text`.
+- Every case of the requested split must be present; a missing id is an error. Duplicates are an error. Extra ids are ignored.
+- Relevance (D17): an item is relevant to an evidence entry if and only if `normalize(text)` contains `normalize(quote)`.
+- Metrics: recall@1/5/10 is matched evidence entries in the top k divided by all entries. hit@k is the any-match version. MRR is 1/rank of the first relevant item. nDCG@10 uses grades 1/2 (each entry is credited to its first matching item, and the ideal ranking sorts grades descending). precision@5 is relevant items in the top 5 divided by 5. Unanswerable cases are excluded and reported separately with the top score (if any).
 - Runs are written to `<out>/<run_id>/run.json` and `results.jsonl` (default `benchmarks/runs`).
 - `--split test` requires `--milestone-report` (INV-12).

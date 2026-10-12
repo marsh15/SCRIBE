@@ -1,4 +1,5 @@
 -- T20: soft delete that takes effect in one transaction (INV-14), plus the bookkeeping the background purge needs.
+-- Edited in place for P0-1 (non-superuser migrator): this file had not been applied to any real database.
 -- Hand-written and idempotent. Rollback: drizzle/rollback/0016_soft_delete_purge.down.sql. Never `drizzle-kit push` over RLS objects.
 --
 -- 1. files.purge_* : retry state of the purge (attempts, next due time, last error code/message). A Source whose purge
@@ -19,6 +20,27 @@ ALTER TABLE "files" ADD COLUMN IF NOT EXISTS "purge_error_code" text;
 ALTER TABLE "files" ADD COLUMN IF NOT EXISTS "purge_last_error" text;
 --> statement-breakpoint
 
+-- P0-1 (Neon / any non-superuser migrator): CREATE OR REPLACE / ALTER FUNCTION on functions owned by scribe_definer needs
+-- ownership, and ALTER ... OWNER TO needs membership in scribe_definer plus CREATE on the schema for it. Make the migrating
+-- role a member of scribe_definer WITH INHERIT TRUE, SET TRUE (PG16+; plain GRANT before PG16, where the creator inherits),
+-- and lend CREATE on schema public for the duration of this file. Superusers skip all of it. Safe to repeat. Needs the
+-- migrating role to have created scribe_definer (it then holds ADMIN OPTION) or to be a superuser.
+DO $$
+BEGIN
+  IF (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN
+    RETURN;
+  END IF;
+  IF current_setting('server_version_num')::int >= 160000 THEN
+    IF NOT (pg_has_role(current_user, 'scribe_definer', 'USAGE') AND pg_has_role(current_user, 'scribe_definer', 'SET')) THEN
+      EXECUTE format('GRANT scribe_definer TO %I WITH INHERIT TRUE, SET TRUE', current_user);
+    END IF;
+  ELSIF NOT pg_has_role(current_user, 'scribe_definer', 'USAGE') THEN
+    EXECUTE format('GRANT scribe_definer TO %I', current_user);
+  END IF;
+END $$;
+--> statement-breakpoint
+GRANT CREATE ON SCHEMA public TO scribe_definer;
+--> statement-breakpoint
 CREATE OR REPLACE FUNCTION public.app_list_purgeable_sources(p_older_than_seconds integer DEFAULT 86400, p_limit integer DEFAULT 100)
 RETURNS TABLE(source_id integer, workspace_id uuid)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public
@@ -34,6 +56,8 @@ REVOKE ALL ON FUNCTION public.app_list_purgeable_sources(integer, integer) FROM 
 GRANT EXECUTE ON FUNCTION public.app_list_purgeable_sources(integer, integer) TO scribe_app;
 --> statement-breakpoint
 ALTER FUNCTION public.app_list_purgeable_sources(integer, integer) OWNER TO scribe_definer;
+--> statement-breakpoint
+REVOKE CREATE ON SCHEMA public FROM scribe_definer;
 --> statement-breakpoint
 
 -- Returns true when this call deleted the Source, false when it does not exist for this owner or was already deleted.

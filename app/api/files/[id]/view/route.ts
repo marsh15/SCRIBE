@@ -5,6 +5,7 @@ import { resolveWorkspace } from "@/lib/workspace";
 import { isNotAuthenticatedError } from "@/lib/auth";
 import { downloadBlobToBuffer } from "@/lib/storage/blob";
 import { resolveVersionBlob } from "@/lib/files/source-detail";
+import { inlineDisposition } from "@/lib/files/content-disposition";
 
 export async function GET(
     req: Request,
@@ -29,7 +30,7 @@ export async function GET(
             return new Response(bytes, {
                 headers: {
                     "Content-Type": blob.mimeType,
-                    "Content-Disposition": `inline; filename="${encodeURIComponent(blob.fileName)}"`,
+                    "Content-Disposition": inlineDisposition(blob.fileName),
                     "Cache-Control": "private, max-age=3600",
                 },
             });
@@ -54,7 +55,7 @@ export async function GET(
             return new Response(blobBuffer, {
                 headers: {
                     "Content-Type": file.type || "application/octet-stream",
-                    "Content-Disposition": `inline; filename=\"${file.name}\"`,
+                    "Content-Disposition": inlineDisposition(file.name),
                     "Cache-Control": "private, max-age=3600",
                 },
             });
@@ -77,7 +78,7 @@ export async function GET(
         return new Response(binaryData, {
             headers: {
                 "Content-Type": mimeType,
-                "Content-Disposition": `inline; filename="${file.name}"`,
+                "Content-Disposition": inlineDisposition(file.name),
                 "Cache-Control": "private, max-age=3600",
             },
         });

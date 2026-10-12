@@ -1,8 +1,8 @@
 # Scribe 2.0 design
 
-Source of truth for every Scribe 2.0 task (T01–T33). Tasks cite sections of this file as "Design §". If code and this file disagree, fix one of them in the same PR.
+This is the source of truth for every Scribe 2.0 task (T01-T33). Tasks cite its sections as "Design §". If code and this file disagree, fix one of them in the same PR.
 
-## Part A — Decisions
+## Part A: Decisions
 
 ### A1. Product decisions
 
@@ -18,11 +18,11 @@ Source of truth for every Scribe 2.0 task (T01–T33). Tasks cite sections of th
 
 ### A2. Constraints that follow
 
-- Hobby limits: functions run at most 300 s with 2 GB memory; Python bundles up to 500 MB; about 4 CPU-hours per month; cron runs at most once a day. Therefore ingestion runs as resumable steps of 300 s or less that re-trigger themselves, and the daily cron is only a safety sweep.
-- Evaluation runs and performance tests run from a CLI (locally or in GitHub Actions), never on Vercel. The 100k-chunk performance test runs on local Docker Postgres because Neon's free 0.5 GB cannot hold it.
-- Hobby is non-commercial only, so `FEATURE_BILLING_ENABLED` stays off in production. Usage metering still runs because it powers cost tracking.
-- The `drizzle-orm/neon-http` driver cannot hold a transaction open. TS sets workspace context inside each batch transaction with `set_config('app.workspace_id', …, true)`. Python uses psycopg 3 with real transactions.
-- `gemini-embedding-2` is stable and normalizes reduced-dimension output automatically; code still re-normalizes defensively. `gemini-embedding-2-preview` (3072) and `gemini-embedding-2` (1536) vectors are treated as incompatible spaces unless T12 measures otherwise.
+- Hobby limits: functions run at most 300 s with 2 GB memory, Python bundles are capped at 500 MB, the plan allows about 4 CPU-hours per month, and cron runs at most once a day. Ingestion therefore runs as resumable steps of 300 s or less that re-trigger themselves. The daily cron is only a safety sweep.
+- Evaluation runs and performance tests run from a CLI (locally or in GitHub Actions), never on Vercel. The 100k-chunk performance test uses local Docker Postgres because Neon's free 0.5 GB cannot hold it.
+- Hobby is non-commercial only, so `FEATURE_BILLING_ENABLED` stays off in production. Usage metering still runs, because cost tracking depends on it.
+- The `drizzle-orm/neon-http` driver cannot hold a transaction open, so TypeScript sets the workspace context inside each batch transaction with `set_config('app.workspace_id', …, true)`. Python uses psycopg 3 with real transactions.
+- `gemini-embedding-2` is stable and normalizes reduced-dimension output automatically, but the code re-normalizes anyway as a precaution. Vectors from `gemini-embedding-2-preview` (3072) and `gemini-embedding-2` (1536) are treated as incompatible spaces unless T12 measures otherwise.
 
 ### A3. Engineering decisions
 
@@ -41,14 +41,14 @@ Source of truth for every Scribe 2.0 task (T01–T33). Tasks cite sections of th
 | D11 | Dense: `vector(1536)` + HNSW (m=16, ef_construction=64); query-time `hnsw.ef_search=100`, `iterative_scan=relaxed_order` (pgvector ≥ 0.8). `dense_mode: exact \| ann \| auto`; auto = exact below 20k chunks per workspace. T32 measures | Personal workspaces are small |
 | D12 | Snapshot pinning: each retrieval runs in one `REPEATABLE READ READ ONLY` transaction | Dense and lexical see the same active versions |
 | D13 | Answerability gate uses the reranker's top score against τ calibrated on dev/validation, stored in the profile; never cosine similarity. States: `ANSWERABLE`, `INSUFFICIENT_EVIDENCE`, `RETRIEVAL_FAILED`. `CONFLICTING_EVIDENCE` is model-flagged in P0, detected in P1 | Calibrated, not guessed |
-| D14 | The model cites `[E1]`-style labels from the evidence bundle; labels are unique across all searches in one turn. After streaming, a verification step sends states through `createUIMessageStream`. The fake "No source links were generated" fallback in `ensureStructuredAnswer` is deleted | Honest verification states |
-| D15 | Semantic verifier: one Gemini Flash call, JSON schema, up to 20 claims. Beyond that, or on a 20 s timeout, claims are `UNVERIFIED`. Prompt version is stored | Bounded cost and latency |
+| D14 | The model cites `[E1]`-style labels from the evidence bundle, unique across all searches in one turn. After streaming, a verification step sends states through `createUIMessageStream`. The fake "No source links were generated" fallback in `ensureStructuredAnswer` is deleted | Honest verification states |
+| D15 | Semantic verifier: one Gemini Flash call, JSON schema, up to 20 claims. Claims beyond that, or any claim when the call times out after 20 s, are `UNVERIFIED`. Prompt version is stored | Bounded cost and latency |
 | D16 | Supermemory is off whenever evidence mode is on | Injected memory cannot be cited |
-| D17 | Eval labels are profile-independent: `(doc, version, quote, page, grade)`. A retrieved chunk is relevant if its normalized text contains the normalized quote. CSV quotes are raw record lines, so for `.csv` documents a chunk also matches when every non-empty cell of the record appears in order in the chunk text (legacy joins cells with spaces; 2.0 renders `col: val`) | One label set for legacy, new, and future parsers |
+| D17 | Eval labels are profile-independent: `(doc, version, quote, page, grade)`. A retrieved chunk is relevant if its normalized text contains the normalized quote. CSV quotes are raw record lines, so for `.csv` documents a chunk also matches when every non-empty cell of the record appears in the chunk text in order (legacy joins cells with spaces; 2.0 renders `col: val`) | One label set for legacy, new, and future parsers |
 | D18 | Embedding and rerank responses cached by `(model, dims, task, sha256(text))` | Cheap, deterministic repeat runs and CI |
 | D19 | Observability: stage timings and costs go to database trace tables and structured logs carrying `trace_id`. OpenTelemetry is P1 | Hobby has no log drains |
 | D20 | A superseded generation keeps chunks and spans (historical citations resolve) but its embeddings are deleted. Legacy 3072-dim embeddings are kept only in the eval workspace. halfvec is a measured experiment | Neon free-tier storage |
-| D21 | Limits: 300 pages/source, 50 OCR pages/source, 5,000 indexed CSV rows. Over limit → `RESOURCE_LIMIT` with a plain message | Bounded Hobby CPU and cost |
+| D21 | Limits: 300 pages/source, 50 OCR pages/source, 5,000 indexed CSV rows. Exceeding a limit produces `RESOURCE_LIMIT` with a plain message | Bounded Hobby CPU and cost |
 | D22 | P0 searches active versions only. "2024 vs 2026" questions use separate sources. Searching old versions is P1 | Simple activation rules |
 
 ### A4. Departures from the rough plan
@@ -60,7 +60,7 @@ Source of truth for every Scribe 2.0 task (T01–T33). Tasks cite sections of th
 - `documents` migrates into the new chunk schema as a legacy generation, so there ends up being one retrieval schema.
 - `lib/ingestion/worker.ts` and `/api/uploads/complete` are removed (T04).
 
-## Part B — Shared design
+## Part B: Shared design
 
 ### B1. Runtime topology
 
@@ -77,7 +77,7 @@ Browser ─► Next.js (Vercel, Node) ─────────────►
            Vercel Blob (private)   Gemini (embed, OCR, verifier) · Voyage (rerank)
 ```
 
-`/ingest/step` triggers: upload-complete callback → `after()` tick; a tick re-fires itself while claimable work remains; user "process now"; daily cron sweep. Eval and perf run via `uv run scribe-eval` / `scribe-perf` in GitHub Actions.
+`/ingest/step` has four triggers: the upload-complete callback (through an `after()` tick), a tick that re-fires itself while claimable work remains, the user's "process now" action, and the daily cron sweep. Eval and perf run through `uv run scribe-eval` and `scribe-perf` in GitHub Actions.
 
 ### B2. Data model
 
@@ -104,7 +104,7 @@ All new keys are UUIDs.
 
 `PARSE → CHUNK → EMBED (batched, repeatable) → ACTIVATE`.
 
-Each invocation claims one job with `FOR UPDATE SKIP LOCKED` inside a `SECURITY DEFINER` claim function that sets a fresh `lease_token` and a lease of now + 330 s. The step does work, then writes progress with `WHERE lease_token = :mine`. Zero rows updated means the lease was lost: stop and write nothing. Each step first checks that its version is still the desired one and the source is not deleted; otherwise the job becomes `SUPERSEDED` or `CANCELLED`.
+Each invocation claims one job with `FOR UPDATE SKIP LOCKED` inside a `SECURITY DEFINER` claim function. The function sets a fresh `lease_token` and a lease of now + 330 s. The step does its work, then writes progress with `WHERE lease_token = :mine`. If zero rows are updated, the lease was lost, so the step stops and writes nothing. Before working, each step checks that its version is still the desired one and the source is not deleted. If either check fails, the job becomes `SUPERSEDED` or `CANCELLED`.
 
 `ACTIVATE` is a single transaction:
 1. Lock the source row.
@@ -113,7 +113,7 @@ Each invocation claims one job with `FOR UPDATE SKIP LOCKED` inside a `SECURITY 
 4. Upsert `active_indexes`, mark the old generation `SUPERSEDED`, set `active_version_id` and `status='ready'`.
 5. Delete the old generation's embeddings (D20).
 
-Retry taxonomy: `RATE_LIMITED`, `TRANSIENT_PROVIDER`, `DATABASE_UNAVAILABLE`, `STORAGE_UNAVAILABLE` retry with backoff `2^n` minutes plus jitter, up to 5 attempts. `INVALID_DOCUMENT`, `UNSUPPORTED_FORMAT`, `RESOURCE_LIMIT`, `EMPTY_EXTRACTION` are permanent. Unknown failures get 2 attempts.
+Retry taxonomy: `RATE_LIMITED`, `TRANSIENT_PROVIDER`, `DATABASE_UNAVAILABLE` and `STORAGE_UNAVAILABLE` retry with backoff of `2^n` minutes plus jitter, up to 5 attempts. `INVALID_DOCUMENT`, `UNSUPPORTED_FORMAT`, `RESOURCE_LIMIT` and `EMPTY_EXTRACTION` are permanent. Unknown failures get 2 attempts.
 
 ### B4. Query path
 
@@ -128,7 +128,7 @@ Retry taxonomy: `RATE_LIMITED`, `TRANSIENT_PROVIDER`, `DATABASE_UNAVAILABLE`, `S
 9. Answerability gate runs.
 10. Bundle, trace, and candidates persisted; bundle returned.
 
-If the reranker fails, fused order is used and the result is `degraded: "rerank_unavailable"`. If the database or embedding call fails, the result is `RETRIEVAL_FAILED`. The legacy TS path is available only through `RETRIEVAL_ENGINE=legacy`; there is no silent fallback.
+If the reranker fails, the fused order is used and the result is marked `degraded: "rerank_unavailable"`. If the database or embedding call fails, the result is `RETRIEVAL_FAILED`. The legacy TypeScript path is reachable only through `RETRIEVAL_ENGINE=legacy`; there is no silent fallback.
 
 ### B5. Invariants
 
@@ -179,16 +179,22 @@ If the reranker fails, fused order is used and the result is `degraded: "rerank_
 | Neon pooler and prepared statements | `prepare_threshold=None` | T02 |
 | Free-tier rate limits for Voyage or Gemini during evals | Response cache; add a payment method to Voyage to lift RPM | T06 |
 
-## Part C — Schedule and risks
+## Part C: Schedule and risks
 
 | Weeks | Milestone | Tasks |
 |---|---|---|
-| 1 | M0 Foundation | T01–T04 |
-| 2–5 | M1 Measured hybrid retrieval | T05–T17 |
-| 6–8 | M2 Versioned ingestion, exact provenance | T18–T24 |
-| 9–11 | M3 Evidence, verification, security | T25–T28 |
-| 12–14 | M4 Lab, performance, release | T29–T33 |
+| 1 | M0 Foundation | T01-T04 |
+| 2-5 | M1 Measured hybrid retrieval | T05-T17 |
+| 6-8 | M2 Versioned ingestion, exact provenance | T18-T24 |
+| 9-11 | M3 Evidence, verification, security | T25-T28 |
+| 12-14 | M4 Lab, performance, release | T29-T33 |
 
-Risks: (1) Python/Next.js may not co-deploy — T02 tests first, fallback is a second Vercel project. (2) Hobby CPU hours — evals run in CI; lower OCR cap if needed. (3) Voyage/Gemini free-tier limits — payment method, caching, concurrency limits. (4) Neon 0.5 GB — D20 and dropping legacy 3072 embeddings (T22). (5) Labeling time for T05/T28 needs human review.
+Risks and mitigations:
+
+1. Python and Next.js may not co-deploy. T02 tests this first; the fallback is a second Vercel project.
+2. Hobby CPU hours. Evals run in CI, and the OCR cap can be lowered if needed.
+3. Voyage and Gemini free-tier limits. Mitigated with a payment method, caching and concurrency limits.
+4. Neon's 0.5 GB. Mitigated by D20 and by dropping the legacy 3072 embeddings (T22).
+5. Labeling time for T05 and T28, which needs human review.
 
 Deferred to P1/P2 (ADR-0012): query decomposition, automatic contradiction detection, reusing embeddings for unchanged chunks, searching old versions, shared workspaces and roles, OpenTelemetry, pg_trgm/true BM25, Docling as offline comparison, graph and multimodal retrieval, MCP tools.

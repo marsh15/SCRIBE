@@ -1,6 +1,6 @@
 # Retrieval gate data (T31)
 
-This directory holds the two files the CI gate needs. **Neither exists yet**, so the gate reports `GATE NOT ARMED` (CI passes) until both are committed. Rules and the full procedure: `docs/scribe2/release-rules.md`.
+This directory holds the two files the CI gate needs. Neither exists yet, so the gate reports `GATE NOT ARMED` (CI passes) until both are committed. Rules and the full procedure: `docs/scribe2/release-rules.md`.
 
 | File | What | Produced by | Size |
 |---|---|---|---|

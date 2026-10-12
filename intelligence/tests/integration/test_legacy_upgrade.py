@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import pytest
-from _db import aconnect, doc, new_workspace
+from _db import aconnect, doc, new_workspace, skip_or_fail_if_foreign_jobs
 from _legacy import legacy_source
 from conftest import DATABASE_URL_TEST, needs_db
 from scribe_ingest import upgrade
@@ -21,10 +21,7 @@ class Killed(BaseException):
 @pytest.fixture()
 async def env():
     conn = await aconnect(DATABASE_URL_TEST)
-    cur = await conn.execute("select count(*) from ingestion_jobs where status in ('queued','retrying','processing')")
-    if (await cur.fetchone())[0]:
-        await conn.close()
-        pytest.skip("foreign claimable jobs present in the shared DB")
+    await skip_or_fail_if_foreign_jobs(conn)
     wid = await new_workspace(conn, kind="personal")
     yield conn, wid
     await conn.execute("delete from usage_events where source_id in (select id::text from files where workspace_id=%s)", (wid,))

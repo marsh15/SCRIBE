@@ -1,11 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { after, callIntelligence, afterCallbacks } = vi.hoisted(() => {
+const { after, callIntelligence, afterCallbacks, envMock, purgeLegacy } = vi.hoisted(() => {
   const afterCallbacks: Array<() => Promise<void>> = [];
   return {
     afterCallbacks,
     after: vi.fn((cb: () => Promise<void>) => void afterCallbacks.push(cb)),
     callIntelligence: vi.fn(),
+    envMock: {
+      CRON_SECRET: "cron-secret",
+      INTELLIGENCE_BASE_URL: "https://scribe.example",
+      VERCEL_AUTOMATION_BYPASS_SECRET: undefined,
+      INGEST_ENGINE: "python",
+      INTERNAL_SERVICE_SECRET: "internal",
+    } as Record<string, string | undefined>,
+    purgeLegacy: vi.fn(),
   };
 });
 
@@ -13,9 +21,11 @@ vi.mock("next/server", async () => {
   const actual = await vi.importActual<typeof import("next/server")>("next/server");
   return { ...actual, after };
 });
-vi.mock("@/lib/env", () => ({
-  env: { CRON_SECRET: "cron-secret", INTELLIGENCE_BASE_URL: "https://scribe.example", VERCEL_AUTOMATION_BYPASS_SECRET: undefined },
-}));
+vi.mock("@/lib/env", () => ({ env: envMock }));
+vi.mock("@/lib/ingestion/source-delete", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/ingestion/source-delete")>("@/lib/ingestion/source-delete").catch(() => null);
+  return { ...(actual ?? {}), purgeSoftDeletedSources: purgeLegacy, pythonEngineConfigured: () => envMock.INGEST_ENGINE === "python" && Boolean(envMock.INTERNAL_SERVICE_SECRET) };
+});
 vi.mock("@/lib/intelligence-client", () => ({
   callIntelligence,
   baseUrl: () => "https://scribe.example",
@@ -133,5 +143,48 @@ describe("ingest sweep route", () => {
     const res = await sweep(new Request("https://scribe.example/api/internal/ingest/sweep", { headers: auth }));
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ ok: true, swept: 1, purge: { error: "purge_failed" } });
+  });
+});
+
+describe("ingest sweep route, Python engine not configured (P0-3)", () => {
+  beforeEach(() => {
+    callIntelligence.mockReset();
+    purgeLegacy.mockReset();
+    envMock.INGEST_ENGINE = "legacy";
+  });
+  afterEach(() => {
+    envMock.INGEST_ENGINE = "python";
+    envMock.INTERNAL_SERVICE_SECRET = "internal";
+  });
+
+  it("answers 200 with a note, never calls Python, and purges leftover soft-deleted rows", async () => {
+    purgeLegacy.mockResolvedValue({ listed: 2, purged: 2, blobFailed: 0 });
+    const res = await sweep(new Request("https://scribe.example/api/internal/ingest/sweep", { headers: auth }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      ok: true,
+      swept: 0,
+      more: false,
+      note: "python engine not configured",
+      purge: { listed: 2, purged: 2 },
+    });
+    expect(callIntelligence).not.toHaveBeenCalled();
+    expect(purgeLegacy).toHaveBeenCalledTimes(1);
+  });
+
+  it("is also legacy-mode when INTERNAL_SERVICE_SECRET is missing even if INGEST_ENGINE=python", async () => {
+    envMock.INGEST_ENGINE = "python";
+    envMock.INTERNAL_SERVICE_SECRET = undefined;
+    purgeLegacy.mockResolvedValue({ listed: 0, purged: 0, blobFailed: 0 });
+    const res = await sweep(new Request("https://scribe.example/api/internal/ingest/sweep", { headers: auth }));
+    expect(res.status).toBe(200);
+    expect(callIntelligence).not.toHaveBeenCalled();
+  });
+
+  it("a failing legacy cleanup still answers 200", async () => {
+    purgeLegacy.mockRejectedValue(new Error("db down"));
+    const res = await sweep(new Request("https://scribe.example/api/internal/ingest/sweep", { headers: auth }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, purge: { error: "purge_failed" } });
   });
 });

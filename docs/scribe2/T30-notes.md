@@ -3,8 +3,8 @@
 Pages: `/eval` (runs), `/eval/[runId]` (detail, per-category table, failing questions), `/eval/compare?a=&b=`.
 
 **Access rule.** `eval_runs`/`eval_results` are global (no workspace column). A signed-in user may open /eval only if they
-own a `workspaces` row of kind `eval` (`owner_user_id`) or hold a `workspace_members` row in one. Everyone else, and signed-out
-users, get `notFound()` from `app/eval/layout.tsx` (same as a missing path). The sidebar link appears only when
+own a `workspaces` row of kind `eval` (`owner_user_id`) or hold a `workspace_members` row in one. Everyone else, including signed-out
+users, gets `notFound()` from `app/eval/layout.tsx` (same as a missing path). The sidebar link appears only when
 `getEvalAccess()` (server action, registered as `session` in the T27 table) returns true. Grant access out of band, e.g.
 `INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ('<eval workspace id>', '<clerk user id>', 'member')`.
 Only rows with `eval_runs.meta->>'workspace_kind' = 'eval'` are read; personal workspace data is never touched.

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import os
 import uuid
 from pathlib import Path
 
 import psycopg
+import pytest
 
 REPO = Path(__file__).resolve().parents[3]
 CORPUS = REPO / "fixtures" / "corpus"
@@ -60,3 +62,26 @@ async def new_file(conn, wid: str, name="note.md", mime="text/markdown", storage
 def doc(n: int) -> bytes:
     body = "\n\n".join(f"Paragraph {i} of version {n}. " + "The quick brown fox jumps. " * 12 for i in range(6))
     return f"# Title {n}\n\n{body}\n\n## Second\n\nMore text for version {n}.\n".encode()
+
+
+_FOREIGN_JOBS_MSG = (
+    "foreign claimable ingestion jobs (queued/retrying/processing) are present in the shared test DB: leftovers from a "
+    "killed run would be claimed by these tests. Purge them with "
+    "`tests/integration/_db.py::purge_workspaces(url, workspace_ids(url))` (see purge_workspaces) on the throwaway test DB."
+)
+
+
+def fail_or_skip_foreign_jobs() -> None:
+    """One policy for every suite that cannot run next to claimable jobs it does not own: FAIL when the CI env var is
+    set (a skip there would silently disable the suite), otherwise skip locally and name the purge helper."""
+    if os.environ.get("CI"):
+        pytest.fail("CI: " + _FOREIGN_JOBS_MSG, pytrace=False)
+    pytest.skip(_FOREIGN_JOBS_MSG)
+
+
+async def skip_or_fail_if_foreign_jobs(conn) -> None:
+    """Call first thing in a DB fixture; closes `conn` before skipping or failing."""
+    cur = await conn.execute("select count(*) from ingestion_jobs where status in ('queued','retrying','processing')")
+    if (await cur.fetchone())[0]:
+        await conn.close()
+        fail_or_skip_foreign_jobs()

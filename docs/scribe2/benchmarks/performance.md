@@ -1,11 +1,11 @@
 # Scribe 2.0 performance report (T32)
 
-Scale, speed, ANN accuracy and storage of the dense and lexical retrievers as the corpus grows.
-Tool: `scribe-perf` (`intelligence/src/scribe_perf`). Raw results: `benchmarks/perf/results-m1-orbstack.json` (about 63 KB).
+This report covers scale, speed, ANN accuracy and storage of the dense and lexical retrievers as the corpus grows.
+The tool is `scribe-perf` (`intelligence/src/scribe_perf`). Raw results: `benchmarks/perf/results-m1-orbstack.json` (about 63 KB).
 
-READ THIS FIRST. These numbers come from a Mac laptop running Postgres in an OrbStack Docker VM with SYNTHETIC
+READ THIS FIRST. These numbers come from a Mac laptop running Postgres in an OrbStack Docker VM, with SYNTHETIC
 vectors and text. They are not Neon, not Vercel, and not real embeddings. Absolute milliseconds will differ in
-production; use them for shape (how cost grows, which settings matter), not as promises. The laptop was shared with other activity during the runs (free disk swung between 2.8 and 12 GB while the database size stayed constant; CPU contention was not measured), so several p95/p99 values are noisy (see Caveats).
+production, so use the numbers for shape (how cost grows, which settings matter), not as promises. The laptop was shared with other activity during the runs. Free disk swung between 2.8 and 12 GB while the database size stayed constant, and CPU contention was not measured, so several p95/p99 values are noisy (see Caveats).
 
 ## 1. Findings
 
@@ -13,23 +13,23 @@ production; use them for shape (how cost grows, which settings matter), not as p
    chunks, 79 ms at 7,000, 300 ms at 21,000 (workspace sizes, vector(1536), k=40).
 2. The shipped `ann` SQL did NOT use the HNSW index in any measured case (0 of 15 workspace/scale combinations).
    The planner chose the primary-key lookup over the eligible-id array and sorted those rows. That plan is still faster
-   than exact for workspaces of 700 chunks or more (1.6x to 1.7x at 2,000 to 21,000 chunks, 1.3x to 1.5x at 700) and returned recall@10 = 1.0 in
-   every case, because it is effectively exact over the eligible set. So today `auto` above 20k gives a modest speed-up,
-   not an index lookup. Whether the planner picks HNSW at larger table sizes was NOT measured (see section 3).
+   than exact for workspaces of 700 chunks or more (1.6x to 1.7x at 2,000 to 21,000 chunks, 1.3x to 1.5x at 700). It returned recall@10 = 1.0 in
+   every case, because it is effectively exact over the eligible set. Today, then, `auto` above 20k gives a modest speed-up
+   rather than an index lookup. Whether the planner picks HNSW at larger table sizes was NOT measured (see section 3).
 3. When HNSW is forced (pkey and workspace btree dropped inside a rolled-back transaction, the same trick as
    `tests/retrieval/test_dense.py`), it is 3x to 3.4x faster than exact for a workspace that is most of the table
-   (21,000 of 30,000 chunks: p50 100 ms vs 300 ms, recall@10 0.99), but it is SLOWER than exact for a workspace that is a small
+   (21,000 of 30,000 chunks: p50 100 ms vs 300 ms, recall@10 0.99). It is SLOWER than exact for a workspace that is a small
    share of a large index (300 of 30,000 chunks: 78 ms vs 7 ms). The crossover depends on the workspace's share of the
    whole table, not on its chunk count alone.
 4. `hnsw.iterative_scan` matters. With it off, a selective workspace filter silently returns fewer than k rows
    (30,000-chunk table, 300-chunk workspace, ef_search=100: 16.5 of 40 rows, recall@10 0.84). With `relaxed_order`
-   the rows are always 40, recall@10 is 0.99 to 1.0, at the cost of a slower scan (78 ms vs 35 ms for that workspace).
-   recall@40 with `relaxed_order` stays below 1 for small workspaces (0.86 to 0.91 at 30,000 chunks); the cause was not isolated
-   (hypothesis: the default `hnsw.max_scan_tuples` of 20,000 is hit before the whole selective set is seen).
+   the rows are always 40 and recall@10 is 0.99 to 1.0, at the cost of a slower scan (78 ms vs 35 ms for that workspace).
+   recall@40 with `relaxed_order` stays below 1 for small workspaces (0.86 to 0.91 at 30,000 chunks). The cause was not isolated;
+   a hypothesis is that the default `hnsw.max_scan_tuples` of 20,000 is hit before the whole selective set is seen.
 5. halfvec(1536) halves storage (3,076 vs 6,148 bytes per embedding, HNSW 4.1 KB vs 8.2 KB per embedding) with a small
    accuracy cost on this data: exact-halfvec vs exact-vector recall@10 0.999 to 1.0, recall@40 0.9995 to 1.0 at the largest workspaces.
-6. `AUTO_ANN_THRESHOLD` stays 20,000 (unchanged). Reasoning in section 8.
-7. The 100,000-chunk step was started and loaded (404 s) but its measurement phase was ABORTED because free disk on the
+6. `AUTO_ANN_THRESHOLD` stays 20,000 (unchanged). The reasoning is in section 10.
+7. The 100,000-chunk step loaded (404 s), but its measurement phase was ABORTED because free disk on the
    Mac fell to 2.8 GB. No 100k latency or recall numbers exist. See section 3.
 
 ## 2. Environment
@@ -58,22 +58,22 @@ Database: a throwaway `perf_t32_dev` created by the tool, schema replayed with `
 | 30,000 (EXTRA step, added to bracket the 20k threshold) | yes | 12.05 / 11.41 / 11.46 | 146.0 s |
 | 100,000 | load only, measurement aborted | 11.41 before; 6.16 after load; fell to 2.8 while measuring | load + index 403.8 s |
 
-The 100,000 step passed the 8 GB-free gate (11.41 GB) and loaded. During measurement free disk on the Mac dropped
-from 6.2 GB to 2.8 GB while the database itself was stable (`du` in the container: base 2.9 GB plus WAL 1.1 GB), so
-something else on the machine was consuming disk. I killed the run and dropped the database (`dropped; exists=False`). The 100k
+The 100,000 step passed the 8 GB-free gate (11.41 GB) and loaded. During measurement, free disk on the Mac dropped
+from 6.2 GB to 2.8 GB while the database itself stayed stable (`du` in the container: base 2.9 GB plus WAL 1.1 GB), so
+something else on the machine was consuming disk. The run was killed and the database dropped (`dropped; exists=False`). The 100k
 run wrote no result file. Observed (not extrapolated): at 100,000 chunks the database directory was about 2.9 GB.
 
 ESTIMATE (linear extrapolation of the measured per-chunk bytes in section 7, not measured at 100k): vector table 0.84 GB,
-vector HNSW 0.82 GB, halfvec table 0.42 GB, halfvec HNSW 0.41 GB. Build time at 100k is unknown (the 30k vector HNSW build took 40 s;
-at 100k the graph exceeds the 512 MB `maintenance_work_mem`, so it is not linear).
+vector HNSW 0.82 GB, halfvec table 0.42 GB, halfvec HNSW 0.41 GB. Build time at 100k is unknown. The 30k vector HNSW build took 40 s, but
+at 100k the graph exceeds the 512 MB `maintenance_work_mem`, so build time will not scale linearly.
 
-Workspace layout per scale: 5 workspaces holding 70%, 20%, 7%, 2%, 1% of the chunks, so "ws0" is a large workspace
-and "ws4" a selective 1% one. Workspace sizes below are chunk counts of that workspace.
+Each scale has 5 workspaces holding 70%, 20%, 7%, 2% and 1% of the chunks, so "ws0" is a large workspace
+and "ws4" a selective 1% one. Workspace sizes below are the chunk counts of that workspace.
 
 ## 4. Method
 
-* Data (seed 32, all deterministic): topics (shared by all workspaces) -> documents (10 to 30 chunks each) -> chunks, each level a
-  normalised Gaussian perturbation of its parent (`synth.py`: DOC_NOISE 0.9, CHUNK_NOISE 0.7). Vectors are unit length (checked in the tests).
+* Data (seed 32, all deterministic): topics (shared by all workspaces), then documents (10 to 30 chunks each), then chunks. Each level is a
+  normalized Gaussian perturbation of its parent (`synth.py`: DOC_NOISE 0.9, CHUNK_NOISE 0.7). Vectors are unit length (checked in the tests).
   Text: 60 words per chunk drawn from a seeded 3,000-word pseudo vocabulary with Zipf weights (exponent 1.1), a 3-word heading.
   One parent chunk per document (not embedded, like production); only child chunks carry embeddings.
 * Rows: workspaces, files, source versions, ACTIVE generations, active_indexes, chunks (generated `fts_en`/`fts_simple` columns
@@ -130,8 +130,8 @@ ef_search and iterative_scan on the selective workspaces (30,000-chunk table, re
 | ws0 (21,000, 70%) | off | 0.969 / 31.5 / 113 ms | 0.99 / 39.6 / 99 ms | 1.00 / 40.0 / 104 ms |
 | ws0 (21,000, 70%) | relaxed_order | 0.984 / 40 / 100 ms | 0.99 / 40 / 100 ms | 1.00 / 40 / 101 ms |
 
-Reading: the default ef_search=100 with relaxed_order is a sound setting on this data; `off` is unsafe for workspace-scoped queries (silent shortfall); going to
-ef_search=200 added accuracy at 70% share but no latency penalty that stood out from noise. The 1,000 and 10,000 scale tables are in the appendix.
+Reading: the default ef_search=100 with relaxed_order is a sound setting on this data. `off` is unsafe for workspace-scoped queries because it silently returns too few rows. Going to
+ef_search=200 added accuracy at 70% share, with no latency penalty that stood out from noise. The 1,000 and 10,000 scale tables are in the appendix.
 
 ## 6. Lexical (Postgres FTS, `fts_en` + `fts_simple`, k=40)
 
@@ -144,8 +144,8 @@ ef_search=200 added accuracy at 70% share but no latency penalty that stood out 
 | 30k | 21,000 | 3.6 / 32.6 / 40.4 | 14.5 |
 | 30k | 300 | 2.5 / 2.9 / 3.0 | 1.9 |
 
-Lexical p50 is flat (GIN lookup). Its tail grows with the hit count because every matching chunk is ranked with `ts_rank_cd` before the top 40 are taken.
-Synthetic Zipf text: real term distributions will behave differently.
+Lexical p50 is flat (a GIN lookup). The tail grows with the hit count, because every matching chunk is ranked with `ts_rank_cd` before the top 40 are taken.
+The text is synthetic Zipf text, so real term distributions will behave differently.
 
 ## 7. Storage per chunk (measured, `pg_column_size`, `pg_table_size`, `pg_relation_size`)
 
@@ -157,9 +157,9 @@ Synthetic Zipf text: real term distributions will behave differently.
 | vector + HNSW per chunk | about 16.6 KB | about 8.3 KB |
 | HNSW build time (10k / 30k) | 10.6 s / 40.1 s | 4.9 s / 18.9 s |
 
-Other per-chunk bytes (synthetic 60-word text, includes the two generated tsvector columns): `chunks` table with its indexes 2.9 to 4.8 KB per chunk (the scale-dependent part is
-fixed index overhead at small scale), GIN `fts_en` about 0.3 to 1.0 KB, GIN `fts_simple` about 0.3 to 1.0 KB. Whole database at 30k chunks: 850 MB. The 8.4 KB
-table row for a 6.1 KB vector exists because values over about 2 KB are TOASTed.
+Other per-chunk bytes (synthetic 60-word text, including the two generated tsvector columns): the `chunks` table with its indexes takes 2.9 to 4.8 KB per chunk (the scale-dependent part is
+fixed index overhead at small scale), GIN `fts_en` about 0.3 to 1.0 KB, and GIN `fts_simple` about 0.3 to 1.0 KB. The whole database at 30k chunks is 850 MB. The 8.4 KB
+table row for a 6.1 KB vector arises because values over about 2 KB are TOASTed.
 ESTIMATE (linear, from the above): one million chunk embeddings would take about 16.6 GB as vector + HNSW and about 8.3 GB as halfvec + HNSW. Not measured.
 
 ## 8. Concurrency (`auto`, main workspace, single Python client process)
@@ -177,9 +177,9 @@ ESTIMATE (linear, from the above): one million chunk embeddings would take about
 | 30k | 50 | 11.0 | 4424 / 5276 / 5419 | ann |
 
 Same 30k step, forced `exact`: 3.1 / 5.5 / 5.1 qps and p50 302 / 1791 / 9214 ms; forced `ann`: 3.6 / 10.0 / 10.7 qps and p50 197 / 861 / 4583 ms (1 / 10 / 50 clients).
-Throughput saturates near 10 clients: the dense query is CPU-bound in one Postgres backend per query, the VM has 8 vCPUs and Postgres parallel workers per query were 2,
+Throughput saturates near 10 clients. The dense query is CPU-bound in one Postgres backend per query, the VM has 8 vCPUs, and Postgres parallel workers per query were 2,
 so 50 concurrent users mostly queue (latency grows about linearly with clients).
-With one Neon compute and a Vercel function per request this will behave differently; the shape (saturation near the core count, exact being about 2x worse than ann under load) is the transferable part.
+With one Neon compute and a Vercel function per request this will behave differently. The transferable part is the shape: saturation near the core count, and exact being about 2x worse than ann under load.
 
 ## 9. Cost (documented facts only; no per-query prices)
 
@@ -192,11 +192,11 @@ With one Neon compute and a Vercel function per request this will behave differe
 
 ## 10. `auto` threshold (D11: exact below 20,000 child chunks per workspace)
 
-Decision: `AUTO_ANN_THRESHOLD` stays 20,000. No code change. It is a module constant in `intelligence/src/scribe_intel/retrieval/dense.py`, outside the hashed
-profile config (`ProfileConfig`/`config_hash` carry no dense mode or threshold; the mode actually used is recorded on the snapshot and in the trace), so changing it would not break profile immutability.
-`tests/retrieval/test_dense.py` imports the constant and monkeypatches it; no test pins the value 20,000.
+Decision: `AUTO_ANN_THRESHOLD` stays 20,000, with no code change. It is a module constant in `intelligence/src/scribe_intel/retrieval/dense.py`, outside the hashed
+profile config (`ProfileConfig` and `config_hash` carry no dense mode or threshold; the mode actually used is recorded on the snapshot and in the trace), so changing it would not break profile immutability.
+`tests/retrieval/test_dense.py` imports the constant and monkeypatches it, and no test pins the value 20,000.
 
-Why not change it, from this Mac/OrbStack data (not Neon/Vercel; results do not transfer 1:1):
+Why not change it, based on this Mac/OrbStack data (not Neon or Vercel, so results do not transfer one-to-one):
 
 * There is no single crossover. `HNSW forced` beat exact from about 700 to 2,000 chunks when the workspace was 20% or more of the table, tied at 7% share and about 700 chunks,
   and lost by up to 11x for a 1% workspace (300 chunks: 78 vs 7 ms). A per-workspace chunk-count threshold cannot encode this, and Personal workspaces (D11's rationale) are usually a small share of a shared table.
@@ -205,8 +205,11 @@ Why not change it, from this Mac/OrbStack data (not Neon/Vercel; results do not 
   that is the point to revisit, with data from Neon itself.
 * The regime `auto` targets (>= 20k per workspace, big shared table) was measured only up to 21,000 per workspace and 30,000 total. 100k was not measured, so the planner's choice there is unknown.
 
-Follow-ups worth doing (not done here): profile why exact costs about 14 microseconds per chunk (TOAST fetches and the 4-table scope join are candidates; NOT profiled); check
-`hnsw.max_scan_tuples` against the recall@40 shortfall; rerun on Neon.
+Follow-ups worth doing (not done here):
+
+- Profile why exact costs about 14 microseconds per chunk. TOAST fetches and the 4-table scope join are candidates, but this was NOT profiled.
+- Check `hnsw.max_scan_tuples` against the recall@40 shortfall.
+- Rerun on Neon.
 
 ## 11. Commands
 
@@ -228,14 +231,14 @@ Tests: `intelligence/tests/perf` (latency stats, recall, loader and measurement 
 
 ## 12. Caveats and unverified
 
-* Synthetic, clustered, unit vectors with seeded Gaussian noise; recall on real embeddings (lower intrinsic dimension, different neighbour structure) will differ, and the 1.0 recalls here may be optimistic.
-* One machine, one run per configuration, a laptop with other workloads (disk pressure; CPU contention possible but not measured): single-run p95/p99 are noisy (for example one 30k default-config measurement in an earlier discarded run showed a p99 of 1.5 s that did not recur).
-  Medians are the more trustworthy column. No confidence intervals.
-* Not Neon: different storage, cache, autovacuum, compute size, pgvector build, and connection pooler. Not Vercel.
+* The vectors are synthetic, clustered unit vectors with seeded Gaussian noise. Recall on real embeddings (lower intrinsic dimension, different neighbor structure) will differ, and the 1.0 recalls here may be optimistic.
+* This is one machine and one run per configuration, on a laptop with other workloads (disk pressure; CPU contention is possible but was not measured). Single-run p95/p99 are therefore noisy: for example, one 30k default-config measurement in an earlier discarded run showed a p99 of 1.5 s that did not recur.
+  Medians are the more trustworthy column. There are no confidence intervals.
+* Not Neon, which differs in storage, cache, autovacuum, compute size, pgvector build and connection pooler. Not Vercel either.
 * The "HNSW forced" mode is an experimental condition (indexes dropped inside a rolled-back transaction); it shows HNSW's own behaviour, not what production would plan.
-* RLS policies exist in the schema but the perf role is the table owner (policies not applied), and every query carries the explicit workspace predicate as in production, so RLS overhead is not measured.
-* Postgres and OS caches were warm (5 discarded warm-up queries); cold-cache latency was not measured. The embeddings table (about 0.25 GB at 30k) fit in the VM's page cache.
-* 100,000 chunks: loaded, not measured (section 3). Storage at 100k and 1M are ESTIMATES. `hnsw.max_scan_tuples` was not read back from the server in the JSON (shown as null); the pgvector default of 20,000 is assumed.
+* RLS policies exist in the schema, but the perf role is the table owner, so the policies are not applied. Every query carries the explicit workspace predicate, as in production. RLS overhead is therefore not measured.
+* Postgres and OS caches were warm (5 discarded warm-up queries), and cold-cache latency was not measured. The embeddings table (about 0.25 GB at 30k) fit in the VM's page cache.
+* 100,000 chunks: loaded, not measured (section 3). Storage at 100k and 1M are ESTIMATES. `hnsw.max_scan_tuples` was not read back from the server in the JSON (shown as null), so the pgvector default of 20,000 is assumed.
 * An earlier full run (same code, per-workspace topics, no forced-HNSW section) was discarded and overwritten; it showed the same planner behaviour (HNSW not used).
 
 ## Appendix: raw tables (generated by `scribe-perf render`)
