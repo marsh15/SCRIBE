@@ -1,0 +1,3009 @@
+{
+ "auto_ann_threshold_in_code": 20000,
+ "hardware": {
+  "chip": "Apple M1",
+  "cpus": "8",
+  "docker_vm": "OrbStack cpus=8 mem_bytes=4180443136",
+  "macos": "27.0",
+  "mem_bytes": "8589934592",
+  "python": "3.12.12"
+ },
+ "hnsw": {
+  "ef_construction": 64,
+  "m": 16
+ },
+ "k": 40,
+ "n_queries": 100,
+ "scales": [
+  {
+   "build_s": {
+    "halfvec_table_s": 0.042,
+    "hnsw_halfvec_s": 0.357,
+    "hnsw_vector_s": 0.694
+   },
+   "concurrency": {
+    "auto": [
+     {
+      "clients": 1,
+      "latency_ms": {
+       "max": 84.964,
+       "mean": 15.653,
+       "n": 200,
+       "p50": 14.209,
+       "p95": 20.143,
+       "p99": 40.045
+      },
+      "mode_used": [
+       "exact"
+      ],
+      "qps": 63.7,
+      "queries": 200,
+      "requested_mode": "auto"
+     },
+     {
+      "clients": 10,
+      "latency_ms": {
+       "max": 111.217,
+       "mean": 66.681,
+       "n": 200,
+       "p50": 65.33,
+       "p95": 94.89,
+       "p99": 108.028
+      },
+      "mode_used": [
+       "exact"
+      ],
+      "qps": 146.09,
+      "queries": 200,
+      "requested_mode": "auto"
+     },
+     {
+      "clients": 50,
+      "latency_ms": {
+       "max": 630.654,
+       "mean": 368.888,
+       "n": 250,
+       "p50": 368.344,
+       "p95": 532.326,
+       "p99": 567.443
+      },
+      "mode_used": [
+       "exact"
+      ],
+      "qps": 128.82,
+      "queries": 250,
+      "requested_mode": "auto"
+     }
+    ]
+   },
+   "dense": {
+    "ws0": {
+     "ann_planner": {
+      "latency_ms": {
+       "max": 7.361,
+       "mean": 6.594,
+       "n": 100,
+       "p50": 6.559,
+       "p95": 6.978,
+       "p99": 7.207
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 1.0,
+      "uses_hnsw": false
+     },
+     "eligible_ids_ms": {
+      "max": 3.575,
+      "mean": 2.514,
+      "n": 20,
+      "p50": 2.446,
+      "p95": 2.619,
+      "p99": 3.575
+     },
+     "exact_halfvec": {
+      "latency_ms": {
+       "max": 9.405,
+       "mean": 8.464,
+       "n": 100,
+       "p50": 8.433,
+       "p95": 8.61,
+       "p99": 8.854
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 0.9995
+     },
+     "exact_vector": {
+      "latency_ms": {
+       "max": 11.519,
+       "mean": 10.003,
+       "n": 100,
+       "p50": 9.921,
+       "p95": 10.588,
+       "p99": 11.007
+      },
+      "uses_hnsw": false
+     },
+     "hnsw_forced": {
+      "grid": [
+       {
+        "ef_search": 40,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 5.314,
+         "mean": 4.288,
+         "n": 100,
+         "p50": 4.274,
+         "p95": 4.755,
+         "p99": 5.276
+        },
+        "mean_rows": 32.38,
+        "recall10": 1.0,
+        "recall40": 0.809
+       },
+       {
+        "ef_search": 40,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 5.072,
+         "mean": 4.462,
+         "n": 100,
+         "p50": 4.418,
+         "p95": 4.824,
+         "p99": 4.981
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 0.9988
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 5.382,
+         "mean": 4.425,
+         "n": 100,
+         "p50": 4.4,
+         "p95": 4.581,
+         "p99": 4.959
+        },
+        "mean_rows": 39.73,
+        "recall10": 1.0,
+        "recall40": 0.9933
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 5.253,
+         "mean": 4.496,
+         "n": 100,
+         "p50": 4.432,
+         "p95": 5.135,
+         "p99": 5.25
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 5.525,
+         "mean": 4.651,
+         "n": 100,
+         "p50": 4.603,
+         "p95": 5.176,
+         "p99": 5.211
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 6.229,
+         "mean": 4.86,
+         "n": 100,
+         "p50": 4.769,
+         "p95": 5.558,
+         "p99": 6.03
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       }
+      ],
+      "halfvec_ef100_relaxed": {
+       "latency_ms": {
+        "max": 5.075,
+        "mean": 4.273,
+        "n": 100,
+        "p50": 4.225,
+        "p95": 4.662,
+        "p99": 4.945
+       },
+       "mean_rows": 40.0,
+       "recall10": 1.0,
+       "recall40": 0.9995,
+       "uses_hnsw": true
+      },
+      "uses_hnsw": true
+     },
+     "n_chunks": 700,
+     "n_queries": 100
+    },
+    "ws1": {
+     "ann_planner": {
+      "latency_ms": {
+       "max": 13.554,
+       "mean": 4.829,
+       "n": 100,
+       "p50": 4.578,
+       "p95": 5.512,
+       "p99": 5.918
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 1.0,
+      "uses_hnsw": false
+     },
+     "eligible_ids_ms": {
+      "max": 1.942,
+      "mean": 1.835,
+      "n": 20,
+      "p50": 1.841,
+      "p95": 1.876,
+      "p99": 1.942
+     },
+     "exact_halfvec": {
+      "latency_ms": {
+       "max": 8.917,
+       "mean": 4.568,
+       "n": 100,
+       "p50": 4.484,
+       "p95": 4.766,
+       "p99": 5.639
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 1.0
+     },
+     "exact_vector": {
+      "latency_ms": {
+       "max": 5.216,
+       "mean": 4.874,
+       "n": 100,
+       "p50": 4.866,
+       "p95": 4.982,
+       "p99": 5.134
+      },
+      "uses_hnsw": false
+     },
+     "hnsw_forced": {
+      "grid": [
+       {
+        "ef_search": 40,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 4.159,
+         "mean": 3.713,
+         "n": 100,
+         "p50": 3.719,
+         "p95": 3.937,
+         "p99": 4.066
+        },
+        "mean_rows": 18.1,
+        "recall10": 0.88,
+        "recall40": 0.4525
+       },
+       {
+        "ef_search": 40,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 19.105,
+         "mean": 5.647,
+         "n": 100,
+         "p50": 4.728,
+         "p95": 14.176,
+         "p99": 18.269
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 72.56,
+         "mean": 6.188,
+         "n": 100,
+         "p50": 4.733,
+         "p95": 10.878,
+         "p99": 25.139
+        },
+        "mean_rows": 30.8,
+        "recall10": 0.99,
+        "recall40": 0.77
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 6.973,
+         "mean": 4.74,
+         "n": 100,
+         "p50": 4.565,
+         "p95": 5.662,
+         "p99": 6.112
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 5.802,
+         "mean": 4.702,
+         "n": 100,
+         "p50": 4.603,
+         "p95": 5.269,
+         "p99": 5.438
+        },
+        "mean_rows": 37.7,
+        "recall10": 1.0,
+        "recall40": 0.9425
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 6.583,
+         "mean": 5.047,
+         "n": 100,
+         "p50": 4.849,
+         "p95": 6.397,
+         "p99": 6.514
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       }
+      ],
+      "halfvec_ef100_relaxed": {
+       "latency_ms": {
+        "max": 13.759,
+        "mean": 4.383,
+        "n": 100,
+        "p50": 4.2,
+        "p95": 4.968,
+        "p99": 5.138
+       },
+       "mean_rows": 40.0,
+       "recall10": 1.0,
+       "recall40": 1.0,
+       "uses_hnsw": true
+      },
+      "uses_hnsw": true
+     },
+     "n_chunks": 200,
+     "n_queries": 100
+    },
+    "ws2": {
+     "ann_planner": {
+      "latency_ms": {
+       "max": 4.364,
+       "mean": 3.871,
+       "n": 100,
+       "p50": 3.861,
+       "p95": 3.999,
+       "p99": 4.029
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 1.0,
+      "uses_hnsw": false
+     },
+     "eligible_ids_ms": {
+      "max": 1.774,
+      "mean": 1.707,
+      "n": 20,
+      "p50": 1.705,
+      "p95": 1.747,
+      "p99": 1.774
+     },
+     "exact_halfvec": {
+      "latency_ms": {
+       "max": 3.873,
+       "mean": 3.549,
+       "n": 100,
+       "p50": 3.545,
+       "p95": 3.655,
+       "p99": 3.852
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 1.0
+     },
+     "exact_vector": {
+      "latency_ms": {
+       "max": 4.417,
+       "mean": 3.667,
+       "n": 100,
+       "p50": 3.653,
+       "p95": 3.736,
+       "p99": 3.876
+      },
+      "uses_hnsw": false
+     },
+     "hnsw_forced": {
+      "grid": [
+       {
+        "ef_search": 40,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 4.965,
+         "mean": 4.205,
+         "n": 100,
+         "p50": 4.165,
+         "p95": 4.717,
+         "p99": 4.88
+        },
+        "mean_rows": 11.75,
+        "recall10": 0.775,
+        "recall40": 0.2938
+       },
+       {
+        "ef_search": 40,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 9.978,
+         "mean": 6.448,
+         "n": 100,
+         "p50": 6.403,
+         "p95": 7.079,
+         "p99": 7.192
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 5.913,
+         "mean": 4.315,
+         "n": 100,
+         "p50": 4.203,
+         "p95": 4.943,
+         "p99": 5.688
+        },
+        "mean_rows": 16.5,
+        "recall10": 0.875,
+        "recall40": 0.4125
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 8.049,
+         "mean": 6.423,
+         "n": 100,
+         "p50": 6.358,
+         "p95": 7.092,
+         "p99": 7.568
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 5.232,
+         "mean": 4.488,
+         "n": 100,
+         "p50": 4.38,
+         "p95": 5.07,
+         "p99": 5.208
+        },
+        "mean_rows": 27.75,
+        "recall10": 1.0,
+        "recall40": 0.6937
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 9.638,
+         "mean": 6.74,
+         "n": 100,
+         "p50": 6.62,
+         "p95": 8.061,
+         "p99": 8.532
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       }
+      ],
+      "halfvec_ef100_relaxed": {
+       "latency_ms": {
+        "max": 7.84,
+        "mean": 5.509,
+        "n": 100,
+        "p50": 5.335,
+        "p95": 6.496,
+        "p99": 7.109
+       },
+       "mean_rows": 40.0,
+       "recall10": 1.0,
+       "recall40": 1.0,
+       "uses_hnsw": true
+      },
+      "uses_hnsw": true
+     },
+     "n_chunks": 70,
+     "n_queries": 100
+    },
+    "ws3": {
+     "ann_planner": {
+      "latency_ms": {
+       "max": 3.657,
+       "mean": 3.399,
+       "n": 100,
+       "p50": 3.381,
+       "p95": 3.535,
+       "p99": 3.63
+      },
+      "mean_rows": 20.0,
+      "recall10": 1.0,
+      "recall40": 1.0,
+      "uses_hnsw": false
+     },
+     "eligible_ids_ms": {
+      "max": 1.737,
+      "mean": 1.64,
+      "n": 20,
+      "p50": 1.636,
+      "p95": 1.692,
+      "p99": 1.737
+     },
+     "exact_halfvec": {
+      "latency_ms": {
+       "max": 3.736,
+       "mean": 2.952,
+       "n": 100,
+       "p50": 2.936,
+       "p95": 3.117,
+       "p99": 3.302
+      },
+      "mean_rows": 20.0,
+      "recall10": 1.0,
+      "recall40": 1.0
+     },
+     "exact_vector": {
+      "latency_ms": {
+       "max": 3.17,
+       "mean": 2.983,
+       "n": 100,
+       "p50": 2.974,
+       "p95": 3.057,
+       "p99": 3.152
+      },
+      "uses_hnsw": false
+     },
+     "hnsw_forced": {
+      "grid": [
+       {
+        "ef_search": 40,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 4.986,
+         "mean": 3.952,
+         "n": 100,
+         "p50": 3.924,
+         "p95": 4.541,
+         "p99": 4.781
+        },
+        "mean_rows": 20.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       },
+       {
+        "ef_search": 40,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 10.095,
+         "mean": 6.897,
+         "n": 100,
+         "p50": 6.862,
+         "p95": 7.592,
+         "p99": 8.356
+        },
+        "mean_rows": 20.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 4.445,
+         "mean": 3.781,
+         "n": 100,
+         "p50": 3.739,
+         "p95": 4.192,
+         "p99": 4.419
+        },
+        "mean_rows": 20.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 6.706,
+         "mean": 6.312,
+         "n": 100,
+         "p50": 6.301,
+         "p95": 6.571,
+         "p99": 6.703
+        },
+        "mean_rows": 20.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 4.176,
+         "mean": 3.768,
+         "n": 100,
+         "p50": 3.733,
+         "p95": 4.015,
+         "p99": 4.111
+        },
+        "mean_rows": 20.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 9.194,
+         "mean": 6.536,
+         "n": 100,
+         "p50": 6.504,
+         "p95": 6.918,
+         "p99": 9.071
+        },
+        "mean_rows": 20.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       }
+      ],
+      "halfvec_ef100_relaxed": {
+       "latency_ms": {
+        "max": 15.269,
+        "mean": 6.375,
+        "n": 100,
+        "p50": 6.176,
+        "p95": 7.437,
+        "p99": 9.696
+       },
+       "mean_rows": 20.0,
+       "recall10": 1.0,
+       "recall40": 1.0,
+       "uses_hnsw": true
+      },
+      "uses_hnsw": true
+     },
+     "n_chunks": 20,
+     "n_queries": 100
+    },
+    "ws4": {
+     "ann_planner": {
+      "latency_ms": {
+       "max": 3.66,
+       "mean": 3.057,
+       "n": 100,
+       "p50": 3.032,
+       "p95": 3.229,
+       "p99": 3.429
+      },
+      "mean_rows": 10.0,
+      "recall10": 1.0,
+      "recall40": 1.0,
+      "uses_hnsw": false
+     },
+     "eligible_ids_ms": {
+      "max": 2.742,
+      "mean": 1.485,
+      "n": 20,
+      "p50": 1.391,
+      "p95": 1.72,
+      "p99": 2.742
+     },
+     "exact_halfvec": {
+      "latency_ms": {
+       "max": 4.086,
+       "mean": 2.734,
+       "n": 100,
+       "p50": 2.718,
+       "p95": 2.785,
+       "p99": 3.178
+      },
+      "mean_rows": 10.0,
+      "recall10": 1.0,
+      "recall40": 1.0
+     },
+     "exact_vector": {
+      "latency_ms": {
+       "max": 3.069,
+       "mean": 2.79,
+       "n": 100,
+       "p50": 2.774,
+       "p95": 2.899,
+       "p99": 3.031
+      },
+      "uses_hnsw": false
+     },
+     "hnsw_forced": {
+      "grid": [
+       {
+        "ef_search": 40,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 4.711,
+         "mean": 3.681,
+         "n": 100,
+         "p50": 3.669,
+         "p95": 4.219,
+         "p99": 4.378
+        },
+        "mean_rows": 10.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       },
+       {
+        "ef_search": 40,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 7.38,
+         "mean": 6.568,
+         "n": 100,
+         "p50": 6.491,
+         "p95": 7.074,
+         "p99": 7.238
+        },
+        "mean_rows": 10.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 4.086,
+         "mean": 3.632,
+         "n": 100,
+         "p50": 3.611,
+         "p95": 3.833,
+         "p99": 3.924
+        },
+        "mean_rows": 10.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 10.661,
+         "mean": 7.217,
+         "n": 100,
+         "p50": 6.954,
+         "p95": 9.005,
+         "p99": 10.025
+        },
+        "mean_rows": 10.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 5.817,
+         "mean": 4.672,
+         "n": 100,
+         "p50": 4.553,
+         "p95": 5.522,
+         "p99": 5.816
+        },
+        "mean_rows": 10.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 9.461,
+         "mean": 6.736,
+         "n": 100,
+         "p50": 6.712,
+         "p95": 7.151,
+         "p99": 8.733
+        },
+        "mean_rows": 10.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       }
+      ],
+      "halfvec_ef100_relaxed": {
+       "latency_ms": {
+        "max": 21.62,
+        "mean": 7.624,
+        "n": 100,
+        "p50": 6.372,
+        "p95": 13.725,
+        "p99": 19.798
+       },
+       "mean_rows": 10.0,
+       "recall10": 1.0,
+       "recall40": 1.0,
+       "uses_hnsw": true
+      },
+      "uses_hnsw": true
+     },
+     "n_chunks": 10,
+     "n_queries": 100
+    }
+   },
+   "disk_free_gb_after_load": 12.14,
+   "disk_free_gb_after_measure": 12.29,
+   "disk_free_gb_before": 12.14,
+   "environment": {
+    "iterative_scan_supported": true,
+    "pgvector": "0.8.7",
+    "postgres": "17.11 (Debian 17.11-1.pgdg12+2)",
+    "settings": {
+     "effective_cache_size": "4GB",
+     "hnsw.ef_search": null,
+     "hnsw.iterative_scan": null,
+     "hnsw.max_scan_tuples": null,
+     "max_connections": "100",
+     "max_parallel_workers_per_gather": "2",
+     "shared_buffers": "128MB",
+     "work_mem": "4MB"
+    }
+   },
+   "lexical": {
+    "ws0": {
+     "latency_ms": {
+      "max": 7.563,
+      "mean": 3.157,
+      "n": 100,
+      "p50": 2.891,
+      "p95": 4.19,
+      "p99": 5.652
+     },
+     "mean_hits": 3.48,
+     "n_chunks": 700,
+     "n_queries": 100
+    },
+    "ws4": {
+     "latency_ms": {
+      "max": 7.467,
+      "mean": 2.047,
+      "n": 100,
+      "p50": 1.836,
+      "p95": 2.989,
+      "p99": 4.845
+     },
+     "mean_hits": 0.07,
+     "n_chunks": 10,
+     "n_queries": 100
+    }
+   },
+   "load_and_index_s": 3.3,
+   "scale": 1000,
+   "storage": {
+    "avg_column_bytes_halfvec": 3076.0,
+    "avg_column_bytes_vector": 6148.0,
+    "bytes_per_embedding": {
+     "chunks_gin_fts_en": 1032.2,
+     "chunks_gin_fts_simple": 1040.4,
+     "chunks_total": 4825.1,
+     "hnsw_halfvec": 4104.2,
+     "hnsw_vector": 8200.2,
+     "table_halfvec": 4292.6,
+     "table_pk_vector": 57.3,
+     "table_vector": 8478.7
+    },
+    "children": 1000,
+    "embeddings": 1000,
+    "relation_bytes": {
+     "chunks_gin_fts_en": 1032192,
+     "chunks_gin_fts_simple": 1040384,
+     "chunks_total": 4825088,
+     "database": 40564403,
+     "hnsw_halfvec": 4104192,
+     "hnsw_vector": 8200192,
+     "table_halfvec": 4292608,
+     "table_pk_vector": 57344,
+     "table_vector": 8478720
+    }
+   },
+   "workspaces": [
+    {
+     "id": "1624edec-3447-4e6f-ac1e-0e23bc25c85d",
+     "index": 0,
+     "n_chunks": 700
+    },
+    {
+     "id": "6f372ab5-2130-4842-bc5c-ec1b85c7cfd3",
+     "index": 1,
+     "n_chunks": 200
+    },
+    {
+     "id": "12247a54-7402-4dae-b020-b50757d9c3d2",
+     "index": 2,
+     "n_chunks": 70
+    },
+    {
+     "id": "63912b01-6e76-4419-8823-c043fa46f30d",
+     "index": 3,
+     "n_chunks": 20
+    },
+    {
+     "id": "5c53be2d-d5f0-44dc-b8ce-eb3889b33326",
+     "index": 4,
+     "n_chunks": 10
+    }
+   ]
+  },
+  {
+   "build_s": {
+    "halfvec_table_s": 0.521,
+    "hnsw_halfvec_s": 4.928,
+    "hnsw_vector_s": 10.645
+   },
+   "concurrency": {
+    "auto": [
+     {
+      "clients": 1,
+      "latency_ms": {
+       "max": 338.444,
+       "mean": 96.116,
+       "n": 200,
+       "p50": 89.419,
+       "p95": 128.171,
+       "p99": 184.38
+      },
+      "mode_used": [
+       "exact"
+      ],
+      "qps": 10.4,
+      "queries": 200,
+      "requested_mode": "auto"
+     },
+     {
+      "clients": 10,
+      "latency_ms": {
+       "max": 1794.637,
+       "mean": 795.496,
+       "n": 200,
+       "p50": 637.665,
+       "p95": 1450.424,
+       "p99": 1746.445
+      },
+      "mode_used": [
+       "exact"
+      ],
+      "qps": 12.38,
+      "queries": 200,
+      "requested_mode": "auto"
+     },
+     {
+      "clients": 50,
+      "latency_ms": {
+       "max": 5047.392,
+       "mean": 3607.035,
+       "n": 250,
+       "p50": 3598.638,
+       "p95": 4454.603,
+       "p99": 4827.524
+      },
+      "mode_used": [
+       "exact"
+      ],
+      "qps": 13.59,
+      "queries": 250,
+      "requested_mode": "auto"
+     }
+    ]
+   },
+   "dense": {
+    "ws0": {
+     "ann_planner": {
+      "latency_ms": {
+       "max": 77.907,
+       "mean": 46.56,
+       "n": 100,
+       "p50": 45.542,
+       "p95": 50.982,
+       "p99": 55.455
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 1.0,
+      "uses_hnsw": false
+     },
+     "eligible_ids_ms": {
+      "max": 13.431,
+      "mean": 12.013,
+      "n": 20,
+      "p50": 11.79,
+      "p95": 12.993,
+      "p99": 13.431
+     },
+     "exact_halfvec": {
+      "latency_ms": {
+       "max": 116.474,
+       "mean": 66.287,
+       "n": 100,
+       "p50": 62.149,
+       "p95": 86.709,
+       "p99": 95.483
+      },
+      "mean_rows": 40.0,
+      "recall10": 0.999,
+      "recall40": 1.0
+     },
+     "exact_vector": {
+      "latency_ms": {
+       "max": 942.493,
+       "mean": 96.496,
+       "n": 100,
+       "p50": 79.064,
+       "p95": 137.915,
+       "p99": 215.693
+      },
+      "uses_hnsw": false
+     },
+     "hnsw_forced": {
+      "grid": [
+       {
+        "ef_search": 40,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 39.929,
+         "mean": 26.349,
+         "n": 100,
+         "p50": 25.059,
+         "p95": 34.104,
+         "p99": 39.355
+        },
+        "mean_rows": 30.86,
+        "recall10": 0.998,
+        "recall40": 0.771
+       },
+       {
+        "ef_search": 40,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 32.651,
+         "mean": 24.205,
+         "n": 100,
+         "p50": 23.684,
+         "p95": 27.573,
+         "p99": 29.994
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 0.9992
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 26.917,
+         "mean": 23.389,
+         "n": 100,
+         "p50": 23.287,
+         "p95": 25.407,
+         "p99": 26.125
+        },
+        "mean_rows": 39.97,
+        "recall10": 1.0,
+        "recall40": 0.9992
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 171.411,
+         "mean": 26.836,
+         "n": 100,
+         "p50": 23.111,
+         "p95": 44.86,
+         "p99": 72.478
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 82.989,
+         "mean": 36.834,
+         "n": 100,
+         "p50": 34.683,
+         "p95": 53.507,
+         "p99": 68.892
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 27.358,
+         "mean": 23.782,
+         "n": 100,
+         "p50": 23.503,
+         "p95": 25.769,
+         "p99": 27.266
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 1.0
+       }
+      ],
+      "halfvec_ef100_relaxed": {
+       "latency_ms": {
+        "max": 42.785,
+        "mean": 24.946,
+        "n": 100,
+        "p50": 23.933,
+        "p95": 32.712,
+        "p99": 38.433
+       },
+       "mean_rows": 40.0,
+       "recall10": 0.999,
+       "recall40": 0.9997,
+       "uses_hnsw": true
+      },
+      "uses_hnsw": true
+     },
+     "n_chunks": 7000,
+     "n_queries": 100
+    },
+    "ws1": {
+     "ann_planner": {
+      "latency_ms": {
+       "max": 27.145,
+       "mean": 17.296,
+       "n": 100,
+       "p50": 16.717,
+       "p95": 19.775,
+       "p99": 26.986
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 1.0,
+      "uses_hnsw": false
+     },
+     "eligible_ids_ms": {
+      "max": 5.89,
+      "mean": 5.0,
+      "n": 20,
+      "p50": 4.955,
+      "p95": 5.56,
+      "p99": 5.89
+     },
+     "exact_halfvec": {
+      "latency_ms": {
+       "max": 30.882,
+       "mean": 21.968,
+       "n": 100,
+       "p50": 21.534,
+       "p95": 24.444,
+       "p99": 29.186
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 0.9995
+     },
+     "exact_vector": {
+      "latency_ms": {
+       "max": 42.04,
+       "mean": 27.592,
+       "n": 100,
+       "p50": 26.228,
+       "p95": 33.86,
+       "p99": 40.197
+      },
+      "uses_hnsw": false
+     },
+     "hnsw_forced": {
+      "grid": [
+       {
+        "ef_search": 40,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 14.735,
+         "mean": 7.878,
+         "n": 100,
+         "p50": 7.104,
+         "p95": 12.279,
+         "p99": 14.603
+        },
+        "mean_rows": 17.0,
+        "recall10": 0.891,
+        "recall40": 0.425
+       },
+       {
+        "ef_search": 40,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 16.793,
+         "mean": 7.685,
+         "n": 100,
+         "p50": 6.895,
+         "p95": 12.652,
+         "p99": 16.306
+        },
+        "mean_rows": 40.0,
+        "recall10": 0.999,
+        "recall40": 0.9567
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 10.312,
+         "mean": 5.827,
+         "n": 100,
+         "p50": 5.663,
+         "p95": 6.545,
+         "p99": 9.127
+        },
+        "mean_rows": 29.13,
+        "recall10": 0.992,
+        "recall40": 0.7278
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 11.849,
+         "mean": 7.424,
+         "n": 100,
+         "p50": 6.962,
+         "p95": 9.94,
+         "p99": 11.609
+        },
+        "mean_rows": 40.0,
+        "recall10": 0.999,
+        "recall40": 0.962
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 7.905,
+         "mean": 6.488,
+         "n": 100,
+         "p50": 6.342,
+         "p95": 7.567,
+         "p99": 7.898
+        },
+        "mean_rows": 36.1,
+        "recall10": 0.999,
+        "recall40": 0.894
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 11.51,
+         "mean": 7.365,
+         "n": 100,
+         "p50": 6.763,
+         "p95": 10.174,
+         "p99": 11.318
+        },
+        "mean_rows": 40.0,
+        "recall10": 0.999,
+        "recall40": 0.9645
+       }
+      ],
+      "halfvec_ef100_relaxed": {
+       "latency_ms": {
+        "max": 14.323,
+        "mean": 7.101,
+        "n": 100,
+        "p50": 6.654,
+        "p95": 10.412,
+        "p99": 12.45
+       },
+       "mean_rows": 40.0,
+       "recall10": 0.999,
+       "recall40": 0.9635,
+       "uses_hnsw": true
+      },
+      "uses_hnsw": true
+     },
+     "n_chunks": 2000,
+     "n_queries": 100
+    },
+    "ws2": {
+     "ann_planner": {
+      "latency_ms": {
+       "max": 20.858,
+       "mean": 10.099,
+       "n": 100,
+       "p50": 9.433,
+       "p95": 11.947,
+       "p99": 18.337
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 1.0,
+      "uses_hnsw": false
+     },
+     "eligible_ids_ms": {
+      "max": 3.077,
+      "mean": 2.709,
+      "n": 20,
+      "p50": 2.629,
+      "p95": 3.01,
+      "p99": 3.077
+     },
+     "exact_halfvec": {
+      "latency_ms": {
+       "max": 15.468,
+       "mean": 10.173,
+       "n": 100,
+       "p50": 10.105,
+       "p95": 10.974,
+       "p99": 12.904
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 1.0
+     },
+     "exact_vector": {
+      "latency_ms": {
+       "max": 32.698,
+       "mean": 12.833,
+       "n": 100,
+       "p50": 11.948,
+       "p95": 14.733,
+       "p99": 30.143
+      },
+      "uses_hnsw": false
+     },
+     "hnsw_forced": {
+      "grid": [
+       {
+        "ef_search": 40,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 9.142,
+         "mean": 5.008,
+         "n": 100,
+         "p50": 4.824,
+         "p95": 6.881,
+         "p99": 7.03
+        },
+        "mean_rows": 13.85,
+        "recall10": 0.758,
+        "recall40": 0.3463
+       },
+       {
+        "ef_search": 40,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 18.28,
+         "mean": 10.153,
+         "n": 100,
+         "p50": 10.086,
+         "p95": 15.168,
+         "p99": 18.078
+        },
+        "mean_rows": 40.0,
+        "recall10": 0.997,
+        "recall40": 0.8892
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 6.257,
+         "mean": 5.164,
+         "n": 100,
+         "p50": 5.102,
+         "p95": 5.944,
+         "p99": 6.156
+        },
+        "mean_rows": 19.57,
+        "recall10": 0.901,
+        "recall40": 0.4892
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 31.512,
+         "mean": 9.796,
+         "n": 100,
+         "p50": 9.829,
+         "p95": 13.828,
+         "p99": 15.465
+        },
+        "mean_rows": 40.0,
+        "recall10": 0.997,
+        "recall40": 0.8908
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 7.285,
+         "mean": 6.024,
+         "n": 100,
+         "p50": 5.904,
+         "p95": 6.982,
+         "p99": 7.245
+        },
+        "mean_rows": 26.19,
+        "recall10": 0.994,
+        "recall40": 0.6532
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 21.303,
+         "mean": 10.531,
+         "n": 100,
+         "p50": 10.888,
+         "p95": 16.051,
+         "p99": 20.443
+        },
+        "mean_rows": 40.0,
+        "recall10": 0.997,
+        "recall40": 0.9095
+       }
+      ],
+      "halfvec_ef100_relaxed": {
+       "latency_ms": {
+        "max": 19.552,
+        "mean": 8.886,
+        "n": 100,
+        "p50": 8.746,
+        "p95": 12.052,
+        "p99": 13.981
+       },
+       "mean_rows": 40.0,
+       "recall10": 0.997,
+       "recall40": 0.8885,
+       "uses_hnsw": true
+      },
+      "uses_hnsw": true
+     },
+     "n_chunks": 700,
+     "n_queries": 100
+    },
+    "ws3": {
+     "ann_planner": {
+      "latency_ms": {
+       "max": 24.537,
+       "mean": 5.81,
+       "n": 100,
+       "p50": 5.528,
+       "p95": 6.436,
+       "p99": 8.977
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 1.0,
+      "uses_hnsw": false
+     },
+     "eligible_ids_ms": {
+      "max": 2.236,
+      "mean": 2.02,
+      "n": 20,
+      "p50": 1.984,
+      "p95": 2.143,
+      "p99": 2.236
+     },
+     "exact_halfvec": {
+      "latency_ms": {
+       "max": 8.676,
+       "mean": 5.92,
+       "n": 100,
+       "p50": 5.867,
+       "p95": 6.453,
+       "p99": 7.457
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 0.9968
+     },
+     "exact_vector": {
+      "latency_ms": {
+       "max": 7.298,
+       "mean": 5.775,
+       "n": 100,
+       "p50": 5.596,
+       "p95": 6.553,
+       "p99": 6.733
+      },
+      "uses_hnsw": false
+     },
+     "hnsw_forced": {
+      "grid": [
+       {
+        "ef_search": 40,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 6.756,
+         "mean": 5.147,
+         "n": 100,
+         "p50": 5.061,
+         "p95": 6.084,
+         "p99": 6.586
+        },
+        "mean_rows": 16.48,
+        "recall10": 0.763,
+        "recall40": 0.412
+       },
+       {
+        "ef_search": 40,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 37.004,
+         "mean": 23.119,
+         "n": 100,
+         "p50": 22.581,
+         "p95": 32.166,
+         "p99": 34.011
+        },
+        "mean_rows": 40.0,
+        "recall10": 0.988,
+        "recall40": 0.9213
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 10.186,
+         "mean": 5.622,
+         "n": 100,
+         "p50": 5.467,
+         "p95": 6.644,
+         "p99": 7.737
+        },
+        "mean_rows": 18.87,
+        "recall10": 0.788,
+        "recall40": 0.4717
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 29.781,
+         "mean": 21.356,
+         "n": 100,
+         "p50": 21.178,
+         "p95": 26.53,
+         "p99": 28.887
+        },
+        "mean_rows": 40.0,
+        "recall10": 0.988,
+        "recall40": 0.9243
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 7.29,
+         "mean": 5.867,
+         "n": 100,
+         "p50": 5.761,
+         "p95": 6.915,
+         "p99": 7.172
+        },
+        "mean_rows": 21.42,
+        "recall10": 0.952,
+        "recall40": 0.5355
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 155.613,
+         "mean": 35.048,
+         "n": 100,
+         "p50": 28.437,
+         "p95": 66.181,
+         "p99": 137.752
+        },
+        "mean_rows": 40.0,
+        "recall10": 0.988,
+        "recall40": 0.9275
+       }
+      ],
+      "halfvec_ef100_relaxed": {
+       "latency_ms": {
+        "max": 181.952,
+        "mean": 22.379,
+        "n": 100,
+        "p50": 19.477,
+        "p95": 31.928,
+        "p99": 71.635
+       },
+       "mean_rows": 40.0,
+       "recall10": 1.0,
+       "recall40": 0.9337,
+       "uses_hnsw": true
+      },
+      "uses_hnsw": true
+     },
+     "n_chunks": 200,
+     "n_queries": 100
+    },
+    "ws4": {
+     "ann_planner": {
+      "latency_ms": {
+       "max": 8.822,
+       "mean": 4.87,
+       "n": 100,
+       "p50": 4.662,
+       "p95": 6.605,
+       "p99": 7.842
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 1.0,
+      "uses_hnsw": false
+     },
+     "eligible_ids_ms": {
+      "max": 5.324,
+      "mean": 2.51,
+      "n": 20,
+      "p50": 2.221,
+      "p95": 4.06,
+      "p99": 5.324
+     },
+     "exact_halfvec": {
+      "latency_ms": {
+       "max": 10.552,
+       "mean": 4.692,
+       "n": 100,
+       "p50": 4.545,
+       "p95": 5.32,
+       "p99": 7.507
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 1.0
+     },
+     "exact_vector": {
+      "latency_ms": {
+       "max": 5.591,
+       "mean": 4.737,
+       "n": 100,
+       "p50": 4.705,
+       "p95": 5.199,
+       "p99": 5.414
+      },
+      "uses_hnsw": false
+     },
+     "hnsw_forced": {
+      "grid": [
+       {
+        "ef_search": 40,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 6.033,
+         "mean": 4.875,
+         "n": 100,
+         "p50": 4.784,
+         "p95": 5.816,
+         "p99": 5.932
+        },
+        "mean_rows": 13.8,
+        "recall10": 0.7,
+        "recall40": 0.345
+       },
+       {
+        "ef_search": 40,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 41.286,
+         "mean": 24.748,
+         "n": 100,
+         "p50": 25.535,
+         "p95": 33.847,
+         "p99": 36.017
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 0.965
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 12.248,
+         "mean": 6.261,
+         "n": 100,
+         "p50": 5.575,
+         "p95": 10.126,
+         "p99": 11.366
+        },
+        "mean_rows": 15.0,
+        "recall10": 0.8,
+        "recall40": 0.375
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 86.818,
+         "mean": 25.85,
+         "n": 100,
+         "p50": 25.619,
+         "p95": 36.092,
+         "p99": 58.049
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 0.965
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 20.778,
+         "mean": 7.751,
+         "n": 100,
+         "p50": 6.932,
+         "p95": 13.073,
+         "p99": 18.592
+        },
+        "mean_rows": 17.0,
+        "recall10": 0.84,
+        "recall40": 0.425
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 42.227,
+         "mean": 25.693,
+         "n": 100,
+         "p50": 26.611,
+         "p95": 35.03,
+         "p99": 41.736
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 0.965
+       }
+      ],
+      "halfvec_ef100_relaxed": {
+       "latency_ms": {
+        "max": 59.241,
+        "mean": 21.593,
+        "n": 100,
+        "p50": 21.292,
+        "p95": 32.157,
+        "p99": 38.359
+       },
+       "mean_rows": 40.0,
+       "recall10": 1.0,
+       "recall40": 0.965,
+       "uses_hnsw": true
+      },
+      "uses_hnsw": true
+     },
+     "n_chunks": 100,
+     "n_queries": 100
+    }
+   },
+   "disk_free_gb_after_load": 12.16,
+   "disk_free_gb_after_measure": 12.05,
+   "disk_free_gb_before": 12.29,
+   "environment": {
+    "iterative_scan_supported": true,
+    "pgvector": "0.8.7",
+    "postgres": "17.11 (Debian 17.11-1.pgdg12+2)",
+    "settings": {
+     "effective_cache_size": "4GB",
+     "hnsw.ef_search": null,
+     "hnsw.iterative_scan": null,
+     "hnsw.max_scan_tuples": null,
+     "max_connections": "100",
+     "max_parallel_workers_per_gather": "2",
+     "shared_buffers": "128MB",
+     "work_mem": "4MB"
+    }
+   },
+   "lexical": {
+    "ws0": {
+     "latency_ms": {
+      "max": 23.465,
+      "mean": 4.294,
+      "n": 100,
+      "p50": 2.948,
+      "p95": 12.904,
+      "p99": 16.05
+     },
+     "mean_hits": 12.99,
+     "n_chunks": 7000,
+     "n_queries": 100
+    },
+    "ws4": {
+     "latency_ms": {
+      "max": 3.723,
+      "mean": 2.453,
+      "n": 100,
+      "p50": 2.318,
+      "p95": 3.228,
+      "p99": 3.653
+     },
+     "mean_hits": 0.82,
+     "n_chunks": 100,
+     "n_queries": 100
+    }
+   },
+   "load_and_index_s": 36.1,
+   "scale": 10000,
+   "storage": {
+    "avg_column_bytes_halfvec": 3076.0,
+    "avg_column_bytes_vector": 6148.0,
+    "bytes_per_embedding": {
+     "chunks_gin_fts_en": 556.2,
+     "chunks_gin_fts_simple": 557.9,
+     "chunks_total": 3466.9,
+     "hnsw_halfvec": 4096.8,
+     "hnsw_vector": 8192.8,
+     "table_halfvec": 4247.6,
+     "table_pk_vector": 40.1,
+     "table_vector": 8395.2
+    },
+    "children": 10000,
+    "embeddings": 10000,
+    "relation_bytes": {
+     "chunks_gin_fts_en": 5562368,
+     "chunks_gin_fts_simple": 5578752,
+     "chunks_total": 34668544,
+     "database": 296072883,
+     "hnsw_halfvec": 40968192,
+     "hnsw_vector": 81928192,
+     "table_halfvec": 42475520,
+     "table_pk_vector": 401408,
+     "table_vector": 83951616
+    }
+   },
+   "workspaces": [
+    {
+     "id": "1624edec-3447-4e6f-ac1e-0e23bc25c85d",
+     "index": 0,
+     "n_chunks": 7000
+    },
+    {
+     "id": "af9e588c-d447-47be-b18e-14d46eec62d5",
+     "index": 1,
+     "n_chunks": 2000
+    },
+    {
+     "id": "b23827e4-9e0b-4196-abc6-bb1291a1e825",
+     "index": 2,
+     "n_chunks": 700
+    },
+    {
+     "id": "5763d4c3-2179-4ca5-9c03-afde453f20e6",
+     "index": 3,
+     "n_chunks": 200
+    },
+    {
+     "id": "6ab318f6-4547-4e53-b639-443da29718e4",
+     "index": 4,
+     "n_chunks": 100
+    }
+   ]
+  },
+  {
+   "build_s": {
+    "halfvec_table_s": 1.562,
+    "hnsw_halfvec_s": 18.912,
+    "hnsw_vector_s": 40.058
+   },
+   "concurrency": {
+    "ann": [
+     {
+      "clients": 1,
+      "latency_ms": {
+       "max": 2313.858,
+       "mean": 277.518,
+       "n": 200,
+       "p50": 197.165,
+       "p95": 756.781,
+       "p99": 1440.075
+      },
+      "mode_used": [
+       "ann"
+      ],
+      "qps": 3.6,
+      "queries": 200,
+      "requested_mode": "ann"
+     },
+     {
+      "clients": 10,
+      "latency_ms": {
+       "max": 2967.604,
+       "mean": 993.954,
+       "n": 200,
+       "p50": 860.78,
+       "p95": 1490.685,
+       "p99": 2807.672
+      },
+      "mode_used": [
+       "ann"
+      ],
+      "qps": 10.04,
+      "queries": 200,
+      "requested_mode": "ann"
+     },
+     {
+      "clients": 50,
+      "latency_ms": {
+       "max": 5776.837,
+       "mean": 4556.951,
+       "n": 250,
+       "p50": 4583.367,
+       "p95": 5366.539,
+       "p99": 5616.747
+      },
+      "mode_used": [
+       "ann"
+      ],
+      "qps": 10.66,
+      "queries": 250,
+      "requested_mode": "ann"
+     }
+    ],
+    "auto": [
+     {
+      "clients": 1,
+      "latency_ms": {
+       "max": 1138.881,
+       "mean": 223.041,
+       "n": 200,
+       "p50": 201.123,
+       "p95": 342.843,
+       "p99": 552.535
+      },
+      "mode_used": [
+       "ann"
+      ],
+      "qps": 4.48,
+      "queries": 200,
+      "requested_mode": "auto"
+     },
+     {
+      "clients": 10,
+      "latency_ms": {
+       "max": 1127.799,
+       "mean": 852.911,
+       "n": 200,
+       "p50": 836.406,
+       "p95": 1049.578,
+       "p99": 1102.446
+      },
+      "mode_used": [
+       "ann"
+      ],
+      "qps": 11.7,
+      "queries": 200,
+      "requested_mode": "auto"
+     },
+     {
+      "clients": 50,
+      "latency_ms": {
+       "max": 5691.868,
+       "mean": 4436.281,
+       "n": 250,
+       "p50": 4424.353,
+       "p95": 5276.475,
+       "p99": 5418.634
+      },
+      "mode_used": [
+       "ann"
+      ],
+      "qps": 11.04,
+      "queries": 250,
+      "requested_mode": "auto"
+     }
+    ],
+    "exact": [
+     {
+      "clients": 1,
+      "latency_ms": {
+       "max": 1185.765,
+       "mean": 321.775,
+       "n": 200,
+       "p50": 302.491,
+       "p95": 362.568,
+       "p99": 621.357
+      },
+      "mode_used": [
+       "exact"
+      ],
+      "qps": 3.11,
+      "queries": 200,
+      "requested_mode": "exact"
+     },
+     {
+      "clients": 10,
+      "latency_ms": {
+       "max": 2239.248,
+       "mean": 1790.036,
+       "n": 200,
+       "p50": 1790.959,
+       "p95": 1978.239,
+       "p99": 2041.58
+      },
+      "mode_used": [
+       "exact"
+      ],
+      "qps": 5.51,
+      "queries": 200,
+      "requested_mode": "exact"
+     },
+     {
+      "clients": 50,
+      "latency_ms": {
+       "max": 12590.558,
+       "mean": 9624.761,
+       "n": 250,
+       "p50": 9214.054,
+       "p95": 11958.039,
+       "p99": 12299.718
+      },
+      "mode_used": [
+       "exact"
+      ],
+      "qps": 5.12,
+      "queries": 250,
+      "requested_mode": "exact"
+     }
+    ]
+   },
+   "dense": {
+    "ws0": {
+     "ann_planner": {
+      "latency_ms": {
+       "max": 244.798,
+       "mean": 194.594,
+       "n": 100,
+       "p50": 189.095,
+       "p95": 218.37,
+       "p99": 236.668
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 1.0,
+      "uses_hnsw": false
+     },
+     "eligible_ids_ms": {
+      "max": 39.31,
+      "mean": 32.915,
+      "n": 20,
+      "p50": 30.994,
+      "p95": 38.355,
+      "p99": 39.31
+     },
+     "exact_halfvec": {
+      "latency_ms": {
+       "max": 646.885,
+       "mean": 211.24,
+       "n": 100,
+       "p50": 191.112,
+       "p95": 323.482,
+       "p99": 465.13
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 0.9997
+     },
+     "exact_vector": {
+      "latency_ms": {
+       "max": 515.051,
+       "mean": 311.656,
+       "n": 100,
+       "p50": 300.255,
+       "p95": 369.889,
+       "p99": 429.664
+      },
+      "uses_hnsw": false
+     },
+     "hnsw_forced": {
+      "grid": [
+       {
+        "ef_search": 40,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 484.142,
+         "mean": 130.934,
+         "n": 100,
+         "p50": 113.109,
+         "p95": 212.277,
+         "p99": 407.058
+        },
+        "mean_rows": 31.45,
+        "recall10": 0.969,
+        "recall40": 0.7635
+       },
+       {
+        "ef_search": 40,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 163.06,
+         "mean": 102.322,
+         "n": 100,
+         "p50": 100.007,
+         "p95": 120.175,
+         "p99": 126.554
+        },
+        "mean_rows": 40.0,
+        "recall10": 0.984,
+        "recall40": 0.9765
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 126.063,
+         "mean": 100.747,
+         "n": 100,
+         "p50": 99.017,
+         "p95": 111.968,
+         "p99": 119.822
+        },
+        "mean_rows": 39.57,
+        "recall10": 0.99,
+        "recall40": 0.9785
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 360.058,
+         "mean": 105.119,
+         "n": 100,
+         "p50": 100.415,
+         "p95": 113.393,
+         "p99": 178.501
+        },
+        "mean_rows": 40.0,
+        "recall10": 0.99,
+        "recall40": 0.9892
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 327.837,
+         "mean": 109.911,
+         "n": 100,
+         "p50": 104.235,
+         "p95": 119.46,
+         "p99": 274.253
+        },
+        "mean_rows": 39.98,
+        "recall10": 1.0,
+        "recall40": 0.9988
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 127.432,
+         "mean": 102.496,
+         "n": 100,
+         "p50": 101.285,
+         "p95": 110.285,
+         "p99": 116.775
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 0.9992
+       }
+      ],
+      "halfvec_ef100_relaxed": {
+       "latency_ms": {
+        "max": 451.972,
+        "mean": 107.373,
+        "n": 100,
+        "p50": 90.016,
+        "p95": 202.613,
+        "p99": 264.167
+       },
+       "mean_rows": 40.0,
+       "recall10": 1.0,
+       "recall40": 0.9992,
+       "uses_hnsw": true
+      },
+      "uses_hnsw": true
+     },
+     "n_chunks": 21000,
+     "n_queries": 100
+    },
+    "ws1": {
+     "ann_planner": {
+      "latency_ms": {
+       "max": 58.602,
+       "mean": 41.547,
+       "n": 100,
+       "p50": 40.675,
+       "p95": 46.23,
+       "p99": 53.679
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 1.0,
+      "uses_hnsw": false
+     },
+     "eligible_ids_ms": {
+      "max": 11.487,
+      "mean": 10.636,
+      "n": 20,
+      "p50": 10.596,
+      "p95": 10.847,
+      "p99": 11.487
+     },
+     "exact_halfvec": {
+      "latency_ms": {
+       "max": 79.722,
+       "mean": 55.034,
+       "n": 100,
+       "p50": 53.94,
+       "p95": 60.808,
+       "p99": 68.116
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 1.0
+     },
+     "exact_vector": {
+      "latency_ms": {
+       "max": 105.293,
+       "mean": 70.583,
+       "n": 100,
+       "p50": 68.689,
+       "p95": 82.076,
+       "p99": 87.763
+      },
+      "uses_hnsw": false
+     },
+     "hnsw_forced": {
+      "grid": [
+       {
+        "ef_search": 40,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 153.99,
+         "mean": 52.976,
+         "n": 100,
+         "p50": 48.618,
+         "p95": 71.641,
+         "p99": 83.473
+        },
+        "mean_rows": 17.29,
+        "recall10": 0.832,
+        "recall40": 0.4178
+       },
+       {
+        "ef_search": 40,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 72.258,
+         "mean": 49.59,
+         "n": 100,
+         "p50": 48.562,
+         "p95": 60.267,
+         "p99": 71.688
+        },
+        "mean_rows": 40.0,
+        "recall10": 0.988,
+        "recall40": 0.9283
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 227.609,
+         "mean": 51.041,
+         "n": 100,
+         "p50": 46.462,
+         "p95": 66.904,
+         "p99": 129.579
+        },
+        "mean_rows": 28.74,
+        "recall10": 0.983,
+        "recall40": 0.7163
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 63.607,
+         "mean": 45.678,
+         "n": 100,
+         "p50": 44.048,
+         "p95": 55.404,
+         "p99": 61.713
+        },
+        "mean_rows": 40.0,
+        "recall10": 0.993,
+        "recall40": 0.944
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 174.83,
+         "mean": 44.992,
+         "n": 100,
+         "p50": 42.506,
+         "p95": 47.861,
+         "p99": 96.481
+        },
+        "mean_rows": 35.71,
+        "recall10": 0.993,
+        "recall40": 0.884
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 71.219,
+         "mean": 46.501,
+         "n": 100,
+         "p50": 44.746,
+         "p95": 55.829,
+         "p99": 62.215
+        },
+        "mean_rows": 40.0,
+        "recall10": 0.993,
+        "recall40": 0.947
+       }
+      ],
+      "halfvec_ef100_relaxed": {
+       "latency_ms": {
+        "max": 146.053,
+        "mean": 15.539,
+        "n": 100,
+        "p50": 11.06,
+        "p95": 34.797,
+        "p99": 73.527
+       },
+       "mean_rows": 40.0,
+       "recall10": 0.995,
+       "recall40": 0.946,
+       "uses_hnsw": true
+      },
+      "uses_hnsw": true
+     },
+     "n_chunks": 6000,
+     "n_queries": 100
+    },
+    "ws2": {
+     "ann_planner": {
+      "latency_ms": {
+       "max": 27.788,
+       "mean": 17.947,
+       "n": 100,
+       "p50": 17.374,
+       "p95": 21.062,
+       "p99": 25.957
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 1.0,
+      "uses_hnsw": false
+     },
+     "eligible_ids_ms": {
+      "max": 8.073,
+      "mean": 5.133,
+      "n": 20,
+      "p50": 4.811,
+      "p95": 5.911,
+      "p99": 8.073
+     },
+     "exact_halfvec": {
+      "latency_ms": {
+       "max": 40.17,
+       "mean": 22.663,
+       "n": 100,
+       "p50": 21.781,
+       "p95": 25.78,
+       "p99": 31.563
+      },
+      "mean_rows": 40.0,
+      "recall10": 0.998,
+      "recall40": 0.9992
+     },
+     "exact_vector": {
+      "latency_ms": {
+       "max": 61.012,
+       "mean": 28.245,
+       "n": 100,
+       "p50": 27.114,
+       "p95": 31.64,
+       "p99": 44.952
+      },
+      "uses_hnsw": false
+     },
+     "hnsw_forced": {
+      "grid": [
+       {
+        "ef_search": 40,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 54.586,
+         "mean": 38.059,
+         "n": 100,
+         "p50": 37.558,
+         "p95": 42.642,
+         "p99": 46.112
+        },
+        "mean_rows": 12.34,
+        "recall10": 0.693,
+        "recall40": 0.3005
+       },
+       {
+        "ef_search": 40,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 72.249,
+         "mean": 48.23,
+         "n": 100,
+         "p50": 46.327,
+         "p95": 62.087,
+         "p99": 70.003
+        },
+        "mean_rows": 40.0,
+        "recall10": 0.987,
+        "recall40": 0.8515
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 55.567,
+         "mean": 37.043,
+         "n": 100,
+         "p50": 36.743,
+         "p95": 39.202,
+         "p99": 40.217
+        },
+        "mean_rows": 19.06,
+        "recall10": 0.879,
+        "recall40": 0.4688
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 66.85,
+         "mean": 45.354,
+         "n": 100,
+         "p50": 44.655,
+         "p95": 56.076,
+         "p99": 64.493
+        },
+        "mean_rows": 40.0,
+        "recall10": 0.986,
+        "recall40": 0.8555
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 49.079,
+         "mean": 39.311,
+         "n": 100,
+         "p50": 38.555,
+         "p95": 44.101,
+         "p99": 48.146
+        },
+        "mean_rows": 26.62,
+        "recall10": 0.968,
+        "recall40": 0.6622
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 217.488,
+         "mean": 49.564,
+         "n": 100,
+         "p50": 47.253,
+         "p95": 62.408,
+         "p99": 98.171
+        },
+        "mean_rows": 40.0,
+        "recall10": 0.992,
+        "recall40": 0.8668
+       }
+      ],
+      "halfvec_ef100_relaxed": {
+       "latency_ms": {
+        "max": 22.015,
+        "mean": 10.959,
+        "n": 100,
+        "p50": 9.98,
+        "p95": 18.959,
+        "p99": 21.696
+       },
+       "mean_rows": 40.0,
+       "recall10": 0.996,
+       "recall40": 0.871,
+       "uses_hnsw": true
+      },
+      "uses_hnsw": true
+     },
+     "n_chunks": 2100,
+     "n_queries": 100
+    },
+    "ws3": {
+     "ann_planner": {
+      "latency_ms": {
+       "max": 15.737,
+       "mean": 9.345,
+       "n": 100,
+       "p50": 9.189,
+       "p95": 10.476,
+       "p99": 11.772
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 1.0,
+      "uses_hnsw": false
+     },
+     "eligible_ids_ms": {
+      "max": 4.398,
+      "mean": 3.106,
+      "n": 20,
+      "p50": 2.92,
+      "p95": 4.011,
+      "p99": 4.398
+     },
+     "exact_halfvec": {
+      "latency_ms": {
+       "max": 13.316,
+       "mean": 9.758,
+       "n": 100,
+       "p50": 9.475,
+       "p95": 11.272,
+       "p99": 12.577
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 1.0
+     },
+     "exact_vector": {
+      "latency_ms": {
+       "max": 14.401,
+       "mean": 11.405,
+       "n": 100,
+       "p50": 11.213,
+       "p95": 12.706,
+       "p99": 14.287
+      },
+      "uses_hnsw": false
+     },
+     "hnsw_forced": {
+      "grid": [
+       {
+        "ef_search": 40,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 37.61,
+         "mean": 34.845,
+         "n": 100,
+         "p50": 34.717,
+         "p95": 36.481,
+         "p99": 37.388
+        },
+        "mean_rows": 9.83,
+        "recall10": 0.569,
+        "recall40": 0.2457
+       },
+       {
+        "ef_search": 40,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 114.999,
+         "mean": 63.035,
+         "n": 100,
+         "p50": 63.135,
+         "p95": 93.531,
+         "p99": 99.812
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 0.8772
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 47.217,
+         "mean": 36.136,
+         "n": 100,
+         "p50": 35.569,
+         "p95": 39.468,
+         "p99": 44.689
+        },
+        "mean_rows": 15.95,
+        "recall10": 0.866,
+        "recall40": 0.3987
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 102.534,
+         "mean": 62.935,
+         "n": 100,
+         "p50": 63.108,
+         "p95": 92.994,
+         "p99": 102.255
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 0.8808
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 39.07,
+         "mean": 35.999,
+         "n": 100,
+         "p50": 35.866,
+         "p95": 37.338,
+         "p99": 38.225
+        },
+        "mean_rows": 21.38,
+        "recall10": 1.0,
+        "recall40": 0.5345
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 238.284,
+         "mean": 83.013,
+         "n": 100,
+         "p50": 74.471,
+         "p95": 178.227,
+         "p99": 216.922
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 0.884
+       }
+      ],
+      "halfvec_ef100_relaxed": {
+       "latency_ms": {
+        "max": 44.629,
+        "mean": 18.466,
+        "n": 100,
+        "p50": 17.68,
+        "p95": 31.599,
+        "p99": 38.604
+       },
+       "mean_rows": 40.0,
+       "recall10": 0.997,
+       "recall40": 0.8795,
+       "uses_hnsw": true
+      },
+      "uses_hnsw": true
+     },
+     "n_chunks": 600,
+     "n_queries": 100
+    },
+    "ws4": {
+     "ann_planner": {
+      "latency_ms": {
+       "max": 8.123,
+       "mean": 6.41,
+       "n": 100,
+       "p50": 6.452,
+       "p95": 6.959,
+       "p99": 7.255
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 1.0,
+      "uses_hnsw": false
+     },
+     "eligible_ids_ms": {
+      "max": 2.634,
+      "mean": 2.384,
+      "n": 20,
+      "p50": 2.365,
+      "p95": 2.492,
+      "p99": 2.634
+     },
+     "exact_halfvec": {
+      "latency_ms": {
+       "max": 11.812,
+       "mean": 6.553,
+       "n": 100,
+       "p50": 6.396,
+       "p95": 7.395,
+       "p99": 8.535
+      },
+      "mean_rows": 40.0,
+      "recall10": 1.0,
+      "recall40": 1.0
+     },
+     "exact_vector": {
+      "latency_ms": {
+       "max": 29.076,
+       "mean": 7.949,
+       "n": 100,
+       "p50": 7.133,
+       "p95": 10.907,
+       "p99": 15.804
+      },
+      "uses_hnsw": false
+     },
+     "hnsw_forced": {
+      "grid": [
+       {
+        "ef_search": 40,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 81.397,
+         "mean": 37.43,
+         "n": 100,
+         "p50": 35.159,
+         "p95": 45.52,
+         "p99": 67.312
+        },
+        "mean_rows": 13.99,
+        "recall10": 0.67,
+        "recall40": 0.3498
+       },
+       {
+        "ef_search": 40,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 177.786,
+         "mean": 83.202,
+         "n": 100,
+         "p50": 73.391,
+         "p95": 130.691,
+         "p99": 151.988
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 0.9065
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 63.205,
+         "mean": 36.724,
+         "n": 100,
+         "p50": 34.698,
+         "p95": 53.354,
+         "p99": 62.634
+        },
+        "mean_rows": 16.54,
+        "recall10": 0.84,
+        "recall40": 0.4135
+       },
+       {
+        "ef_search": 100,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 163.059,
+         "mean": 84.767,
+         "n": 100,
+         "p50": 77.671,
+         "p95": 134.191,
+         "p99": 157.057
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 0.9065
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "off",
+        "latency_ms": {
+         "max": 72.796,
+         "mean": 36.418,
+         "n": 100,
+         "p50": 35.465,
+         "p95": 38.6,
+         "p99": 60.623
+        },
+        "mean_rows": 21.18,
+        "recall10": 0.965,
+        "recall40": 0.5295
+       },
+       {
+        "ef_search": 200,
+        "iterative_scan": "relaxed_order",
+        "latency_ms": {
+         "max": 137.17,
+         "mean": 81.718,
+         "n": 100,
+         "p50": 74.405,
+         "p95": 130.539,
+         "p99": 132.696
+        },
+        "mean_rows": 40.0,
+        "recall10": 1.0,
+        "recall40": 0.9065
+       }
+      ],
+      "halfvec_ef100_relaxed": {
+       "latency_ms": {
+        "max": 48.114,
+        "mean": 24.005,
+        "n": 100,
+        "p50": 22.211,
+        "p95": 42.684,
+        "p99": 46.2
+       },
+       "mean_rows": 40.0,
+       "recall10": 1.0,
+       "recall40": 0.8912,
+       "uses_hnsw": true
+      },
+      "uses_hnsw": true
+     },
+     "n_chunks": 300,
+     "n_queries": 100
+    }
+   },
+   "disk_free_gb_after_load": 11.41,
+   "disk_free_gb_after_measure": 11.46,
+   "disk_free_gb_before": 12.05,
+   "environment": {
+    "iterative_scan_supported": true,
+    "pgvector": "0.8.7",
+    "postgres": "17.11 (Debian 17.11-1.pgdg12+2)",
+    "settings": {
+     "effective_cache_size": "4GB",
+     "hnsw.ef_search": null,
+     "hnsw.iterative_scan": null,
+     "hnsw.max_scan_tuples": null,
+     "max_connections": "100",
+     "max_parallel_workers_per_gather": "2",
+     "shared_buffers": "128MB",
+     "work_mem": "4MB"
+    }
+   },
+   "lexical": {
+    "ws0": {
+     "latency_ms": {
+      "max": 41.857,
+      "mean": 7.39,
+      "n": 100,
+      "p50": 3.602,
+      "p95": 32.565,
+      "p99": 40.36
+     },
+     "mean_hits": 14.5,
+     "n_chunks": 21000,
+     "n_queries": 100
+    },
+    "ws4": {
+     "latency_ms": {
+      "max": 3.042,
+      "mean": 2.521,
+      "n": 100,
+      "p50": 2.478,
+      "p95": 2.872,
+      "p99": 2.984
+     },
+     "mean_hits": 1.94,
+     "n_chunks": 300,
+     "n_queries": 100
+    }
+   },
+   "load_and_index_s": 146.0,
+   "scale": 30000,
+   "storage": {
+    "avg_column_bytes_halfvec": 3076.0,
+    "avg_column_bytes_vector": 6148.0,
+    "bytes_per_embedding": {
+     "chunks_gin_fts_en": 314.6,
+     "chunks_gin_fts_simple": 313.5,
+     "chunks_total": 2946.9,
+     "hnsw_halfvec": 4096.3,
+     "hnsw_vector": 8192.3,
+     "table_halfvec": 4228.7,
+     "table_pk_vector": 40.7,
+     "table_vector": 8391.3
+    },
+    "children": 30000,
+    "embeddings": 30000,
+    "relation_bytes": {
+     "chunks_gin_fts_en": 9437184,
+     "chunks_gin_fts_simple": 9404416,
+     "chunks_total": 88408064,
+     "database": 850441907,
+     "hnsw_halfvec": 122888192,
+     "hnsw_vector": 245768192,
+     "table_halfvec": 126861312,
+     "table_pk_vector": 1220608,
+     "table_vector": 251740160
+    }
+   },
+   "workspaces": [
+    {
+     "id": "1624edec-3447-4e6f-ac1e-0e23bc25c85d",
+     "index": 0,
+     "n_chunks": 21000
+    },
+    {
+     "id": "d6367e15-058e-497f-b317-c8411e128150",
+     "index": 1,
+     "n_chunks": 6000
+    },
+    {
+     "id": "5a2a89ab-49e7-49f3-b319-cfa99242b475",
+     "index": 2,
+     "n_chunks": 2100
+    },
+    {
+     "id": "a0a55e1a-a9f1-4050-811c-273cfaacf1bf",
+     "index": 3,
+     "n_chunks": 600
+    },
+    {
+     "id": "39d43a7e-9e49-4987-96aa-739b6d234682",
+     "index": 4,
+     "n_chunks": 300
+    }
+   ]
+  }
+ ],
+ "seed": 32
+}
