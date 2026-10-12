@@ -1,0 +1,24 @@
+{
+ "name": "corpus_glossary_txt",
+ "options": {
+  "fileName": "glossary.txt",
+  "numPages": 5
+ },
+ "chunks": [
+  {
+   "content": "Northwind Glossary\n==================\n\nA to M\n------\n\nCross-dock: a facility where inbound freight is transferred to outbound\nvehicles with less than 24 hours of storage.\n\nDepot code: a short identifier such as D-RTM for Rotterdam or D-HAM for\nHamburg.\n\nHarbour: the internal HR portal used for leave, timesheets and payslips.\n\nHub: a depot that sorts at least 500,000 parcels per quarter.\n\nN to Z\n------\n\nNorthExpense: the tool used to file expense claims.\n\nPOD: proof of delivery, a signature or photo captured at the consignee.\n\nSEV1: the highest incident severity, requiring acknowledgement within 15\nminutes.\n\nSKU prefix NW-PAL means pallet, NW-BOX means carton, and NW-COLD means\ncold-chain packaging.\n\nTier A city: one of Amsterdam, Paris, Milan, London and Zurich, where higher\nhotel caps apply.",
+   "metadata": {
+    "chunkIndex": 0,
+    "totalChunks": 1,
+    "fileName": "glossary.txt",
+    "estimatedPage": 1,
+    "totalPages": 5,
+    "positionPercent": 0,
+    "section": 1,
+    "charOffset": 0,
+    "charLength": 803
+   }
+  }
+ ],
+ "source": "fixtures/corpus/glossary.txt"
+}

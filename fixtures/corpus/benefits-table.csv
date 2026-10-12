@@ -1,0 +1,13 @@
+benefit_code,benefit,eligibility,employer_pays_pct,annual_cap_eur,waiting_period_days
+BEN-HLT-01,Health insurance (basic),All employees,85,,0
+BEN-HLT-02,Health insurance (extended),Employees after probation,60,1800,0
+BEN-DEN-01,Dental,Employees after probation,50,600,90
+BEN-VIS-01,Vision,Employees after probation,50,300,90
+BEN-GYM-01,Gym membership,All employees,40,360,30
+BEN-BIK-01,Bicycle lease,Employees in NL and BE,100,1500,180
+BEN-TRN-01,Public transport pass,Employees without a parking permit,100,1200,0
+BEN-EAP-01,Employee assistance programme,All employees and household members,100,,0
+BEN-LRN-01,Training budget,All employees,100,1000,0
+BEN-LIF-01,Life insurance,Permanent employees,100,,60
+BEN-MEL-01,Meal vouchers,Employees in FR and IT,70,1080,0
+BEN-CHC-01,Childcare contribution,Employees with children under 12,30,2400,180

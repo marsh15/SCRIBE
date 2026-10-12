@@ -1,0 +1,12 @@
+# Used by the Vercel Python runtime for api/py/index.py.
+# Keep in sync with intelligence/pyproject.toml (CI checks this).
+fastapi>=0.115
+pydantic-settings>=2.6
+psycopg[binary,pool]>=3.2
+PyJWT>=2.9
+pydantic>=2.6
+pdfplumber>=0.11
+pypdfium2>=4
+python-docx>=1.1
+httpx>=0.28.1
+tiktoken>=0.14.0

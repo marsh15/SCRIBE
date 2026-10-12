@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { getFiles, deleteFile } from "@/app/files/actions";
+import { getFiles, deleteFile, retrySource, getSourceVersions } from "@/app/files/actions";
+import { ReuploadNote, SourceIngestStatus } from "@/components/source-ingest-status";
+import { SourceVersionHistory, UploadNewVersionButton } from "@/components/source-version-history";
+import type { SourceVersionView } from "@/lib/ingestion/source-version-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +20,7 @@ import {
   AlertCircle,
   X,
   RefreshCw,
+  History,
 } from "lucide-react";
 import { ThreePaneLayout } from "@/components/three-pane-layout";
 import { useSourceUpload } from "@/hooks/useSourceUpload";
@@ -99,10 +103,16 @@ export default function DocumentUpload() {
   const [files, setFiles] = useState<any[]>([]);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [processingNowId, setProcessingNowId] = useState<number | null>(null);
+  const [retryingId, setRetryingId] = useState<number | null>(null);
+  const [versionsOpenId, setVersionsOpenId] = useState<number | null>(null);
+  const [versions, setVersions] = useState<SourceVersionView[]>([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [versionUploadId, setVersionUploadId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const {
     state: sourceUpload,
     uploadSource,
+    uploadNewVersion,
     processSourceNow,
     reset: resetUpload,
   } = useSourceUpload();
@@ -119,6 +129,53 @@ export default function DocumentUpload() {
   useEffect(() => {
     fetchFiles();
   }, [fetchFiles]);
+
+  const fetchVersions = useCallback(async (sourceId: number) => {
+    setVersions(await getSourceVersions(sourceId));
+  }, []);
+
+  // keep the open version history fresh while any version is still on its way to becoming searchable
+  useEffect(() => {
+    if (versionsOpenId === null) return;
+    const inFlight = versions.some((v) => ["uploading", "queued", "building", "retrying"].includes(v.state));
+    if (!inFlight) return;
+    const interval = setInterval(() => {
+      fetchVersions(versionsOpenId).catch(() => {
+        // noop
+      });
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [versionsOpenId, versions, fetchVersions]);
+
+  const toggleVersions = async (sourceId: number) => {
+    if (versionsOpenId === sourceId) {
+      setVersionsOpenId(null);
+      return;
+    }
+    setVersionsOpenId(sourceId);
+    setVersions([]);
+    setVersionsLoading(true);
+    await fetchVersions(sourceId);
+    setVersionsLoading(false);
+  };
+
+  const handleNewVersion = async (sourceId: number, file: File) => {
+    setMessage(null);
+    setVersionUploadId(sourceId);
+    const result = await uploadNewVersion(sourceId, file);
+    setVersionUploadId(null);
+    if (result.success) {
+      setMessage({
+        type: "success",
+        text: `Version ${result.versionNumber} uploaded. The current version stays searchable until it is indexed.`,
+      });
+      setVersionsOpenId(sourceId);
+      await fetchVersions(sourceId);
+    } else {
+      setMessage({ type: "error", text: result.error });
+    }
+    await fetchFiles();
+  };
 
   useEffect(() => {
     const hasPending = files.some((file) =>
@@ -201,6 +258,15 @@ export default function DocumentUpload() {
     } finally {
       setProcessingNowId(null);
     }
+  };
+
+  const handleRetry = async (id: number) => {
+    setRetryingId(id);
+    setMessage(null);
+    const result = await retrySource(id);
+    if (!result.success) setMessage({ type: "error", text: result.error ?? "Could not retry this Source" });
+    await fetchFiles();
+    setRetryingId(null);
   };
 
   const handleClearAll = async () => {
@@ -452,7 +518,39 @@ export default function DocumentUpload() {
                               {file.processingError}
                             </p>
                           )}
+                          <SourceIngestStatus
+                            status={status}
+                            stage={file.jobStage}
+                            attempts={file.jobAttempts}
+                            errorCode={file.jobErrorCode}
+                            lastError={file.jobLastError}
+                            retrying={retryingId === file.id}
+                            onRetry={() => handleRetry(file.id)}
+                          />
+                          {status === "ready" && <ReuploadNote reuploadRequiredAt={file.reuploadRequiredAt} />}
+                          {file.activeVersionId && (
+                            <button
+                              type="button"
+                              className="mt-1 flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
+                              onClick={() => toggleVersions(file.id)}
+                              aria-expanded={versionsOpenId === file.id}
+                            >
+                              <History className="h-3 w-3" />
+                              {versionsOpenId === file.id ? "Hide versions" : "Versions"}
+                            </button>
+                          )}
+                          {versionsOpenId === file.id && (
+                            <SourceVersionHistory versions={versions} loading={versionsLoading} />
+                          )}
                         </div>
+
+                        {file.activeVersionId && status === "ready" && (
+                          <UploadNewVersionButton
+                            onFile={(chosen) => handleNewVersion(file.id, chosen)}
+                            busy={versionUploadId === file.id}
+                            disabled={isDeleting || isUploading || versionUploadId !== null}
+                          />
+                        )}
 
                         {canProcessNow && (
                           <Button

@@ -5,12 +5,13 @@ import { chats, chatMessages } from "@/lib/db-schema";
 import { desc, eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { nanoid } from "nanoid";
-import { getUserId } from "@/lib/auth";
+import { resolveWorkspace } from "@/lib/workspace";
+import { readStoredVerifications, type VerificationData } from "@/lib/evidence/verification";
 
 export async function getChats() {
     try {
-        const userId = await getUserId();
-        return await db.select().from(chats).where(eq(chats.userId, userId)).orderBy(desc(chats.createdAt));
+        const { userId, workspaceId } = await resolveWorkspace();
+        return await db.select().from(chats).where(and(eq(chats.userId, userId), eq(chats.workspaceId, workspaceId))).orderBy(desc(chats.createdAt));
     } catch (err) {
         console.error("Failed to fetch chats:", err);
         return [];
@@ -19,7 +20,7 @@ export async function getChats() {
 
 export async function getChatMessages(chatId: string) {
     try {
-        const userId = await getUserId();
+        const { userId, workspaceId } = await resolveWorkspace();
         return await db
             .select({
                 id: chatMessages.id,
@@ -31,7 +32,7 @@ export async function getChatMessages(chatId: string) {
             })
             .from(chatMessages)
             .innerJoin(chats, eq(chatMessages.chatId, chats.id))
-            .where(and(eq(chatMessages.chatId, chatId), eq(chats.userId, userId)))
+            .where(and(eq(chatMessages.chatId, chatId), eq(chats.userId, userId), eq(chats.workspaceId, workspaceId)))
             .orderBy(chatMessages.createdAt);
     } catch (err) {
         console.error("Failed to fetch chat messages:", err);
@@ -41,7 +42,7 @@ export async function getChatMessages(chatId: string) {
 
 export async function createChat(title: string) {
     try {
-        const userId = await getUserId();
+        const { userId, workspaceId } = await resolveWorkspace();
         const newChatId = nanoid();
         const newChat = await db
             .insert(chats)
@@ -49,6 +50,7 @@ export async function createChat(title: string) {
                 id: newChatId,
                 title,
                 userId,
+                workspaceId,
             })
             .returning();
 
@@ -63,9 +65,9 @@ export async function createChat(title: string) {
 
 export async function deleteChat(id: string) {
     try {
-        const userId = await getUserId();
+        const { userId, workspaceId } = await resolveWorkspace();
         const chat = await db.query.chats.findFirst({
-            where: and(eq(chats.id, id), eq(chats.userId, userId)),
+            where: and(eq(chats.id, id), eq(chats.userId, userId), eq(chats.workspaceId, workspaceId)),
             columns: { id: true },
         });
 
@@ -74,12 +76,25 @@ export async function deleteChat(id: string) {
         }
 
         await db.delete(chatMessages).where(eq(chatMessages.chatId, id));
-        await db.delete(chats).where(and(eq(chats.id, id), eq(chats.userId, userId)));
+        await db.delete(chats).where(and(eq(chats.id, id), eq(chats.userId, userId), eq(chats.workspaceId, workspaceId)));
         revalidatePath("/");
         revalidatePath("/chat");
         return true;
     } catch (err) {
         console.error("Failed to delete chat:", err);
         return false;
+    }
+}
+
+/** Stored claim verifications (T26) for a chat's assistant messages. Empty on any failure: no badges, never a false one. */
+export async function getChatVerifications(chatId: string): Promise<Record<string, VerificationData>> {
+    try {
+        const { userId, workspaceId } = await resolveWorkspace();
+        const rows = await getChatMessages(chatId);
+        const messageIds = rows.filter((m) => m.role === "assistant").map((m) => m.id);
+        return await readStoredVerifications({ userId, workspaceId, messageIds });
+    } catch (err) {
+        console.error("Failed to fetch verifications:", err);
+        return {};
     }
 }

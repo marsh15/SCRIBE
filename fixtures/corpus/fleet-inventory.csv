@@ -1,0 +1,61 @@
+vehicle_id,type,make,model,year,home_depot,plate,status,last_service,odometer_km,payload_kg
+NW-B-0142,Box truck,MAN,TGL 12.250,2019,D-HAM,HH-402-NW,maintenance,2026-05-12,160514,6200
+NW-B-0159,Box truck,Iveco,Eurocargo,2019,D-RTM,NL-811-NW,in_service,2026-05-24,826512,6200
+NW-B-0198,Box truck,Iveco,Eurocargo,2016,D-HAM,HH-800-NW,in_service,2026-06-24,861290,6200
+NW-B-0258,Box truck,MAN,TGL 12.250,2025,D-ANR,BE-697-NW,reserve,2026-08-23,775470,6200
+NW-B-0278,Box truck,Iveco,Eurocargo,2022,D-LYS,FR-898-NW,in_service,2026-05-15,205558,6200
+NW-B-0292,Box truck,MAN,TGL 12.250,2021,D-WAW,PL-257-NW,in_service,2026-01-12,873282,6200
+NW-B-0422,Box truck,MAN,TGL 12.250,2024,D-WAW,PL-191-NW,in_service,2026-09-02,701797,6200
+NW-B-0448,Box truck,Iveco,Eurocargo,2025,D-RTM,NL-960-NW,in_service,2026-04-16,81128,6200
+NW-B-0451,Box truck,MAN,TGL 12.250,2020,D-ANR,BE-570-NW,in_service,2026-09-26,517090,6200
+NW-B-0456,Box truck,Iveco,Eurocargo,2021,D-AUS,TX-863-NW,maintenance,2026-02-24,376929,6200
+NW-B-0472,Box truck,Iveco,Eurocargo,2016,D-LYS,FR-508-NW,reserve,2026-09-16,142104,6200
+NW-B-0560,Box truck,Iveco,Eurocargo,2022,D-RTM,NL-577-NW,reserve,2026-03-05,639982,6200
+NW-B-0563,Box truck,MAN,TGL 12.250,2022,D-LYS,FR-165-NW,in_service,2026-08-12,121358,6200
+NW-B-0631,Box truck,Iveco,Eurocargo,2016,D-LYS,FR-639-NW,maintenance,2026-05-27,119159,6200
+NW-B-0669,Box truck,MAN,TGL 12.250,2019,D-MIL,IT-676-NW,in_service,2026-09-05,126384,6200
+NW-B-0673,Box truck,Iveco,Eurocargo,2019,D-WAW,PL-661-NW,maintenance,2026-08-26,441473,6200
+NW-B-0702,Box truck,MAN,TGL 12.250,2021,D-MIL,MI-702-NW,in_service,2026-07-02,201330,6200
+NW-B-0711,Box truck,Iveco,Eurocargo,2021,D-RTM,NL-692-NW,in_service,2026-06-14,422764,6200
+NW-B-0761,Box truck,Iveco,Eurocargo,2015,D-AUS,TX-126-NW,maintenance,2026-08-11,735961,6200
+NW-R-0119,Reefer truck,Mercedes,Actros 1845,2024,D-RTM,NL-119-NW,in_service,2026-09-12,64210,9500
+NW-R-0127,Reefer truck,Mercedes,Actros 1845,2017,D-AUS,TX-460-NW,maintenance,2026-09-07,135021,9500
+NW-R-0336,Reefer truck,Scania,P280,2022,D-RTM,NL-761-NW,in_service,2026-07-18,841364,9500
+NW-R-0367,Reefer truck,Mercedes,Actros 1845,2015,D-RTM,NL-521-NW,in_service,2026-07-01,80095,9500
+NW-R-0499,Reefer truck,Mercedes,Actros 1845,2023,D-LYS,FR-524-NW,in_service,2026-07-10,216292,9500
+NW-R-0544,Reefer truck,Mercedes,Actros 1845,2024,D-LYS,FR-338-NW,in_service,2026-09-13,55811,9500
+NW-R-0595,Reefer truck,Scania,P280,2025,D-HAM,HH-642-NW,in_service,2026-09-05,188181,9500
+NW-R-0620,Reefer truck,Scania,P280,2017,D-RTM,NL-850-NW,in_service,2026-06-18,294143,9500
+NW-R-0632,Reefer truck,Scania,P280,2015,D-LYS,FR-208-NW,in_service,2026-02-02,894302,9500
+NW-R-0658,Reefer truck,Scania,P280,2024,D-LYS,FR-234-NW,reserve,2026-09-10,108534,9500
+NW-R-0761,Reefer truck,Scania,P280,2020,D-MIL,IT-383-NW,reserve,2026-02-10,349883,9500
+NW-R-0762,Reefer truck,Scania,P280,2025,D-RTM,NL-657-NW,in_service,2026-08-25,691982,9500
+NW-R-0795,Reefer truck,Scania,P280,2021,D-WAW,PL-824-NW,in_service,2026-04-18,889324,9500
+NW-R-0839,Reefer truck,Scania,P280,2020,D-HAM,HH-652-NW,in_service,2026-03-01,142366,9500
+NW-R-0865,Reefer truck,Mercedes,Actros 1845,2022,D-HAM,HH-114-NW,in_service,2026-01-15,628845,9500
+NW-T-0118,Tractor unit,DAF,XF480,2024,D-HAM,HH-414-NW,reserve,2026-01-13,419069,18000
+NW-T-0340,Tractor unit,Scania,R450,2016,D-ANR,BE-196-NW,maintenance,2026-06-11,837634,18000
+NW-T-0394,Tractor unit,Scania,R450,2015,D-LYS,FR-934-NW,in_service,2026-06-07,436512,18000
+NW-T-0404,Tractor unit,Volvo,FH500,2024,D-ANR,BE-120-NW,maintenance,2026-06-07,608107,18000
+NW-T-0417,Reefer truck,Scania,R450,2022,D-HAM,HH-NW 417,in_service,2026-08-19,312408,9500
+NW-T-0427,Tractor unit,DAF,XF480,2025,D-MIL,IT-980-NW,in_service,2026-04-20,671673,18000
+NW-T-0483,Tractor unit,Scania,R450,2019,D-ANR,BE-321-NW,maintenance,2026-03-20,659650,18000
+NW-T-0555,Tractor unit,Volvo,FH500,2016,D-LYS,FR-555-NW,retired,2025-11-04,1204775,18000
+NW-T-0670,Tractor unit,DAF,XF480,2019,D-ANR,BE-568-NW,in_service,2026-05-01,765393,18000
+NW-T-0689,Tractor unit,Scania,R450,2017,D-AUS,TX-937-NW,in_service,2026-09-22,127559,18000
+NW-T-0724,Tractor unit,Scania,R450,2016,D-HAM,HH-735-NW,in_service,2026-09-09,720949,18000
+NW-T-0802,Tractor unit,Volvo,FH500,2023,D-AUS,TX-797-NW,in_service,2026-07-10,876493,18000
+NW-T-0838,Tractor unit,Scania,R450,2024,D-HAM,HH-225-NW,in_service,2026-01-05,567968,18000
+NW-V-0138,Van,Mercedes,Sprinter 317,2019,D-RTM,NL-481-NW,maintenance,2026-05-05,769435,1300
+NW-V-0288,Van,Mercedes,Sprinter 317,2023,D-AUS,TX-4471,maintenance,2026-09-30,88120,1300
+NW-V-0293,Van,Mercedes,Sprinter 317,2024,D-AUS,TX-763-NW,in_service,2026-07-12,871578,1300
+NW-V-0307,Van,Ford,Transit 350,2019,D-AUS,TX-109-NW,in_service,2026-03-21,646286,1300
+NW-V-0345,Van,Ford,Transit 350,2018,D-WAW,PL-893-NW,in_service,2026-03-18,49797,1300
+NW-V-0361,Van,Mercedes,Sprinter 317,2015,D-HAM,HH-116-NW,in_service,2026-09-16,458178,1300
+NW-V-0544,Van,Mercedes,Sprinter 317,2019,D-AUS,TX-424-NW,in_service,2026-02-15,742818,1300
+NW-V-0581,Van,Mercedes,Sprinter 317,2018,D-LYS,FR-970-NW,in_service,2026-08-22,512207,1300
+NW-V-0618,Van,Ford,Transit 350,2023,D-LYS,FR-364-NW,in_service,2026-08-17,563148,1300
+NW-V-0635,Van,Ford,Transit 350,2018,D-ANR,BE-366-NW,in_service,2026-08-17,823946,1300
+NW-V-0686,Van,Ford,Transit 350,2024,D-AUS,TX-551-NW,in_service,2026-01-20,104644,1300
+NW-V-0721,Van,Mercedes,Sprinter 317,2020,D-LYS,FR-722-NW,in_service,2026-08-14,728752,1300
+NW-V-0784,Van,Mercedes,Sprinter 317,2024,D-HAM,HH-413-NW,maintenance,2026-07-13,867244,1300

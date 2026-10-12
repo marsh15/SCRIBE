@@ -15,3 +15,14 @@ build/
 *.tsbuildinfo
 next-env.d.ts
 .env*.local
+.pytest_cache/
+
+# scribe-eval run outputs
+benchmarks/runs/
+
+# T07 baseline harness: local embedding cache (large JSONL)
+benchmarks/cache/
+
+# Scribe 2.0 distractor corpus: generated outputs only (fixtures/build_distractors.py, assemble_large_corpus.py)
+fixtures/distractors/
+fixtures/corpus-large/

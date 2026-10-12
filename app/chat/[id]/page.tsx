@@ -4,9 +4,11 @@ import { useChat, type UIMessage } from "@ai-sdk/react";
 import { ArrowUp, CornerDownLeft, Database, Loader2, PenLine, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useChatState } from "@/components/chat-context";
-import ReactMarkdown from "react-markdown";
-import { getChatMessages } from "@/app/chat/actions";
-import { useParams, useSearchParams, useRouter } from "next/navigation";
+import { CitedMarkdown } from "@/components/cited-markdown";
+import { collectEvidenceByLabel } from "@/lib/evidence/citations";
+import { getChatMessages, getChatVerifications } from "@/app/chat/actions";
+import { verificationFromParts, type VerificationData } from "@/lib/evidence/verification";
+import { useParams, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { DefaultChatTransport } from "ai";
 import { messageUsesKnowledgeBase } from "@/lib/chat-tools";
@@ -27,6 +29,7 @@ export default function DynamicRagChatbot() {
   const params = useParams();
   const chatId = params.id as string;
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
+  const [stored, setStored] = useState<Record<string, VerificationData>>({});
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -36,6 +39,7 @@ export default function DynamicRagChatbot() {
       setLoaded(false);
       try {
         const history = await getChatMessages(chatId);
+        const verifications = await getChatVerifications(chatId);
 
         const transformedMessages: UIMessage[] = history.map((msg) => {
           const storedParts = ((msg.parts as StoredPart[] | null) ?? []);
@@ -57,6 +61,7 @@ export default function DynamicRagChatbot() {
 
         if (isMounted) {
           setInitialMessages(transformedMessages);
+          setStored(verifications);
           setLoaded(true);
         }
       } catch (e) {
@@ -83,6 +88,7 @@ export default function DynamicRagChatbot() {
       <ChatInterface
         key={chatId}
         initialMessages={initialMessages}
+        stored={stored}
         chatId={chatId}
       />
     </Suspense>
@@ -97,9 +103,11 @@ export default function DynamicRagChatbot() {
 
 function ChatInterface({
   initialMessages,
+  stored,
   chatId,
 }: {
   initialMessages: UIMessage[];
+  stored: Record<string, VerificationData>;
   chatId: string;
 }) {
   const transport = useMemo(
@@ -134,7 +142,6 @@ function ChatInterface({
   ];
   const isLoading = status === "submitted" || status === "streaming";
   const searchParams = useSearchParams();
-  const router = useRouter();
   const initialSendDone = useRef(false);
   const initialQuery = searchParams.get("q");
 
@@ -145,15 +152,16 @@ function ChatInterface({
 
     let cancelled = false;
     initialSendDone.current = true;
+    // Consume the URL prompt before streaming so a remount cannot send it again.
+    const url = new URL(window.location.href);
+    url.searchParams.delete("q");
+    window.history.replaceState(window.history.state, "", url);
     setSubmitError(null);
     clearError();
 
     const sendInitialQuery = async () => {
       try {
         await sendMessage({ text: initialQuery });
-        if (!cancelled) {
-          router.replace(`/chat/${chatId}`);
-        }
       } catch (error) {
         console.error("Failed to send initial chat message:", error);
         if (!cancelled) {
@@ -167,7 +175,7 @@ function ChatInterface({
     return () => {
       cancelled = true;
     };
-  }, [initialQuery, initialMessages.length, sendMessage, chatId, router, clearError]);
+  }, [initialQuery, initialMessages.length, sendMessage, clearError]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) =>
     setInput(e.target.value);
@@ -286,31 +294,19 @@ function ChatInterface({
                   )}
 
                   <div className="prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-pre:bg-primary prose-pre:text-primary-foreground max-w-none prose-a:text-rag prose-a:no-underline hover:prose-a:underline">
-                    <ReactMarkdown
-                      components={{
-                        a: ({ href, children, ...props }) => {
-                          const isInternal = href?.startsWith("/");
-                          return (
-                            <a
-                              href={href}
-                              target={isInternal ? undefined : "_blank"}
-                              rel={isInternal ? undefined : "noopener noreferrer"}
-                              className="text-rag hover:underline font-medium inline-flex items-center gap-1"
-                              {...props}
-                            >
-                              {children}
-                            </a>
-                          );
-                        },
-                      }}
-                    >
-                      {m.parts
+                    <CitedMarkdown
+                      evidence={collectEvidenceByLabel(m.parts)}
+                      verification={m.role === "assistant" ? verificationFromParts(m.parts) ?? stored[m.id] : undefined}
+                      streaming={status === "streaming" && m.id === messages[messages.length - 1]?.id}
+                      text={
+                        m.parts
                         ?.filter((p) => p.type === "text")
                         .map((p) => ("text" in p ? p.text : ""))
                         .join("") ||
                         (m as any).content ||
-                        ""}
-                    </ReactMarkdown>
+                        ""
+                      }
+                    />
                   </div>
                 </div>
                 {/* User Avatar */}

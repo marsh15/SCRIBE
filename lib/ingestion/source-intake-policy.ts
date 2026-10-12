@@ -27,6 +27,39 @@ export interface CompletedSourceBlob {
   contentType: string;
 }
 
+export interface SourceUploadCompletionPayload {
+  sourceId: number;
+  userId: string;
+  /** Set when the upload is a NEW VERSION of an existing Source (T19); absent for the first upload. */
+  versionId?: string;
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function parseSourceUploadCompletionPayload(payload: string | null | undefined) {
+  try {
+    const parsed = JSON.parse(payload ?? "") as Partial<SourceUploadCompletionPayload>;
+    if (
+      !Number.isInteger(parsed.sourceId) ||
+      !parsed.sourceId ||
+      parsed.sourceId <= 0 ||
+      typeof parsed.userId !== "string" ||
+      parsed.userId.length === 0 ||
+      (parsed.versionId !== undefined &&
+        (typeof parsed.versionId !== "string" || !UUID_PATTERN.test(parsed.versionId)))
+    ) {
+      throw new Error("Invalid completion payload");
+    }
+    return parsed as SourceUploadCompletionPayload;
+  } catch {
+    throw new SourceIntakeError(
+      "Invalid upload completion payload",
+      400,
+      "invalid_completion"
+    );
+  }
+}
+
 export interface ReservedSource {
   id: number;
   userId: string;
@@ -42,12 +75,6 @@ export interface SourceCompletionAdapters {
   deleteBlob(url: string): Promise<void>;
   transitionToQueued(source: ReservedSource, blob: CompletedSourceBlob): Promise<boolean>;
   recordStorageUsage(source: ReservedSource): Promise<void>;
-}
-
-export interface SourceDeletionAdapters {
-  loadSource(sourceId: number, userId: string): Promise<ReservedSource | null>;
-  deleteBlob(urlOrPathname: string): Promise<void>;
-  deleteRecord(sourceId: number, userId: string): Promise<void>;
 }
 
 export class SourceIntakeError extends Error {
@@ -73,6 +100,20 @@ function safeFileName(name: string) {
 
 export function sourceUploadPath(userId: string, sourceId: number, name: string) {
   return `sources/${encodeURIComponent(userId)}/${sourceId}/${safeFileName(name)}`;
+}
+
+/** Blob path for version `versionNumber` of a Source: its own folder, so a new version never overwrites an old original. */
+export function sourceVersionUploadPath(
+  userId: string,
+  sourceId: number,
+  versionNumber: number,
+  name: string
+) {
+  return `sources/${encodeURIComponent(userId)}/${sourceId}/v${versionNumber}/${safeFileName(name)}`;
+}
+
+export function sourceVersionUploadPrefix(userId: string, sourceId: number, versionNumber: number) {
+  return `sources/${encodeURIComponent(userId)}/${sourceId}/v${versionNumber}/`;
 }
 
 export function parseSourceUploadMetadata(input: unknown): SourceUploadMetadata {
@@ -192,19 +233,4 @@ export async function completeReservedSourceUpload(
 
   await adapters.recordStorageUsage(source);
   return { queued: true, replayed: false, orphanDeleted: false };
-}
-
-export async function deleteOwnedSource(
-  userId: string,
-  sourceId: number,
-  adapters: SourceDeletionAdapters
-) {
-  const source = await adapters.loadSource(sourceId, userId);
-  if (!source) return false;
-
-  if (source.storageUrl) {
-    await adapters.deleteBlob(source.storageUrl);
-  }
-  await adapters.deleteRecord(sourceId, userId);
-  return true;
 }

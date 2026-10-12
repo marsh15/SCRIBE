@@ -4,6 +4,7 @@ import {
   convertToModelMessages,
   tool,
   stepCountIs,
+  createUIMessageStreamResponse,
 } from "ai";
 import { NextResponse } from "next/server";
 import { google } from "@ai-sdk/google";
@@ -11,7 +12,8 @@ import { withSupermemory } from "@supermemory/tools/ai-sdk";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { searchDocuments } from "@/lib/search";
-import { getUserId } from "@/lib/auth";
+import { resolveWorkspace } from "@/lib/workspace";
+import { isNotAuthenticatedError } from "@/lib/auth";
 import { getUsageSummary, recordUsageEvent } from "@/lib/billing/usage";
 import {
   buildRagToolResult,
@@ -20,7 +22,18 @@ import {
   recordRagTrace,
 } from "@/lib/rag-observability";
 import { evaluateRagAnswer } from "@/lib/rag-eval";
+import {
+  createTurnRetriever,
+  getRetrievalEngine,
+  modelOutputForSearch,
+  shouldUseSupermemory,
+  SEARCH_UNAVAILABLE_MESSAGE,
+} from "@/lib/python-retrieval";
+import { ensureStructuredAnswer } from "@/lib/chat-answer";
+import { buildSystemPrompt } from "@/lib/chat-prompt";
 import { extractRagToolResult, type RagToolResult } from "@/lib/rag-types";
+import { streamWithVerification, type TurnFinish } from "@/lib/chat-verify-stream";
+import { requestVerification } from "@/lib/evidence/verification";
 
 export type ChatMessage = UIMessage;
 
@@ -86,31 +99,6 @@ function extractTextFromMessage(message: ChatMessage) {
   return "";
 }
 
-function ensureStructuredAnswer(text: string, hadKnowledgeLookup: boolean) {
-  const base = text?.trim() ?? "";
-  if (!base) return base;
-
-  const hasAnswerHeader = /(^|\n)#{0,3}\s*Answer\b/i.test(base);
-  const hasKeyPointsHeader = /(^|\n)#{0,3}\s*Key Points\b/i.test(base);
-  const hasSourcesHeader = /(^|\n)#{0,3}\s*Sources\b/i.test(base);
-
-  let updated = base;
-
-  if (!hasAnswerHeader) {
-    updated = `## Answer\n${updated}`;
-  }
-
-  if (!hasKeyPointsHeader) {
-    updated = `${updated}\n\n## Key Points\n- Summarized above.`;
-  }
-
-  if (hadKnowledgeLookup && !hasSourcesHeader) {
-    updated = `${updated}\n\n## Sources\n- No source links were generated. Please ask to re-run with citations.`;
-  }
-
-  return updated;
-}
-
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
@@ -143,7 +131,7 @@ function formatChatError(error: unknown) {
 export async function POST(req: Request) {
   const requestStart = Date.now();
   try {
-    const userId = await getUserId();
+    const { userId, workspaceId } = await resolveWorkspace();
     const usageSummary = await getUsageSummary(userId);
     if (!usageSummary.allowOverage && usageSummary.projectedOverageInr > 0) {
       return NextResponse.json(
@@ -169,12 +157,29 @@ export async function POST(req: Request) {
 
     const url = new URL(req.url);
     const chatId = url.searchParams.get("chatId") || undefined;
+    if (chatId) {
+      const { db: ownershipDb } = await import("@/lib/db-config");
+      const { chats: chatsTable } = await import("@/lib/db-schema");
+      const { and, eq } = await import("drizzle-orm");
+      const ownedChat = await ownershipDb.query.chats.findFirst({
+        where: and(
+          eq(chatsTable.id, chatId),
+          eq(chatsTable.userId, userId),
+          eq(chatsTable.workspaceId, workspaceId)
+        ),
+        columns: { id: true },
+      });
+      if (!ownedChat) {
+        return new Response("Chat not found.", { status: 404 });
+      }
+    }
     const lastUserMessage = messages[messages.length - 1];
     const userMessageId = lastUserMessage.id || nanoid();
 
     const sanitizedMessages = sanitizeMessages(messages);
     const baseModel = google(CHAT_MODEL_ID);
-    const model = SUPERMEMORY_ENABLED
+    const retrievalEngine = getRetrievalEngine();
+    const model = shouldUseSupermemory(retrievalEngine, SUPERMEMORY_ENABLED)
       ? withSupermemory(baseModel, userId, { conversationId: chatId ?? userId })
       : baseModel;
 
@@ -198,6 +203,8 @@ export async function POST(req: Request) {
     }
 
     const ragToolResults: RagToolResult[] = [];
+    // One retriever per turn: E-labels are unique across every search of this turn (D14).
+    const retrieveForTurn = createTurnRetriever();
 
     const userTools = {
       searchKnowledgeBase: tool({
@@ -205,9 +212,18 @@ export async function POST(req: Request) {
         inputSchema: z.object({
           query: z.string().describe("The search query to find relevant documents"),
         }),
+        // INV-13: the model receives only the labelled, delimited context of a Python search, never raw chunks.
+        toModelOutput: ({ output }) =>
+          modelOutputForSearch(output) ?? { type: "json", value: output as never },
         execute: async ({ query }) => {
+          if (retrievalEngine === "python") {
+            // workspace comes from resolveWorkspace(), never from the request body (INV-15)
+            const pyResult = await retrieveForTurn({ query, userId, workspaceId });
+            ragToolResults.push(pyResult);
+            return pyResult;
+          }
           try {
-            const search = await searchDocuments(query, userId, 10, 0.3);
+            const search = await searchDocuments(query, userId, workspaceId, 10, 0.3);
             let toolResult = buildRagToolResult(search);
 
             if (chatId) {
@@ -215,6 +231,7 @@ export async function POST(req: Request) {
                 toolResult = await recordRagTrace({
                   chatId,
                   userId,
+                  workspaceId,
                   userMessageId,
                   search,
                 });
@@ -243,37 +260,21 @@ export async function POST(req: Request) {
       }),
     };
 
+    // T26: the turn's outcome for post-stream verification (Python engine only; legacy path is unchanged).
+    const turn: { text: string; messageId?: string; skip?: boolean } = { text: "" };
+    let turnDone!: (t: TurnFinish) => void;
+    const turnFinished = new Promise<TurnFinish>((resolve) => (turnDone = resolve));
+
     const result = streamText({
       model,
       messages: await convertToModelMessages(sanitizedMessages),
       tools: userTools,
-      system: `You are Scribe AI, an assistant that answers questions using the user's uploaded documents.
-
-CRITICAL RULE: You MUST call the searchKnowledgeBase tool on EVERY user message before responding. No exceptions.
-- Even if the question seems vague (e.g. "what is this about?", "summarize", "tell me about the book"), you MUST search.
-- For vague queries, use a broad search query like "summary overview introduction main topic".
-- NEVER respond with "I need more information" or "please specify". ALWAYS search first, then answer based on what you find.
-- If the search returns no results, tell the user their knowledge base appears empty and suggest uploading documents.
-- The searchKnowledgeBase tool returns a structured object. Use its "context" field as the retrieved evidence text and its "chunks" array only as supporting metadata.
-
-HALLUCINATION PREVENTION (CRITICAL):
-- ONLY answer based on the retrieved context from the knowledge base.
-- If the retrieved context does not contain enough information to confidently answer, say so explicitly: "I couldn't find sufficient information about this in your documents."
-- Do NOT guess, extrapolate, or use your general training knowledge to fill in gaps — if it's not in the documents, say you don't know.
-- Never fabricate file names, page numbers, chunk details, or quotes.
-
-Response formatting:
-1) Start with: "## Answer"
-2) Follow with: "## Key Points" as a bullet list
-3) End with: "## Sources" when knowledge base context is used (use the exact citation links from retrieved context)
-4) Keep tone concise, direct, and helpful
-
-Citation rules:
-- Use exact citation links from the retrieved context in markdown format.
-- If multiple docs are used, cite all relevant docs in Sources.
-- Never fabricate file names or page/chunk details.`,
+      system: buildSystemPrompt(retrievalEngine),
       stopWhen: stepCountIs(3),
       onFinish: async ({ response, text, usage }: { response?: ResponseLike; text?: string; usage?: UsageLike }) => {
+        turn.text = text ?? "";
+        try {
+        await (async () => {
         if (!chatId) return;
 
         const { db } = await import("@/lib/db-config");
@@ -321,10 +322,14 @@ Citation rules:
             .filter((result): result is RagToolResult => result !== null);
           const completedRagResults =
             ragResultsFromResponse.length > 0 ? ragResultsFromResponse : ragToolResults;
-          const hadKnowledgeLookup =
-            toolCalls.some((call) => call.toolName === "searchKnowledgeBase") ||
-            completedRagResults.length > 0;
-          const finalText = ensureStructuredAnswer(text ?? "", hadKnowledgeLookup);
+          const searchUnavailable = completedRagResults.some(
+            (result) => result.status === "unavailable",
+          );
+          // INV-16 / B4: never persist an answer that has no evidence behind it.
+          turn.skip = searchUnavailable;
+          const finalText = searchUnavailable
+            ? SEARCH_UNAVAILABLE_MESSAGE
+            : ensureStructuredAnswer(text ?? "");
 
           if (finalText) {
             assistantParts.push({ type: "text", text: finalText });
@@ -348,10 +353,12 @@ Citation rules:
             content: finalText,
             parts: assistantParts as never,
           });
+          turn.messageId = assistantMessageId;
 
           const totalRequestMs = Math.max(0, Date.now() - requestStart);
           for (const ragResult of completedRagResults) {
-            if (!ragResult.traceId) continue;
+            // Python traces live in retrieval_traces, written by the Python service.
+            if (!ragResult.traceId || ragResult.engine === "python") continue;
 
             try {
               const generationMs = Math.max(
@@ -403,9 +410,26 @@ Citation rules:
         } catch (error) {
           console.error("Failed to save assistant message or usage in onFinish", error);
         }
-
+        })();
+        } finally {
+          turnDone({ ...turn });
+        }
       },
     });
+
+    if (retrievalEngine === "python") {
+      const stream = streamWithVerification({
+        modelStream: result.toUIMessageStream({ sendFinish: false }),
+        finished: turnFinished,
+        verify: (t) =>
+          requestVerification({ userId, workspaceId, messageId: t.messageId, text: t.text, results: ragToolResults }),
+        onError: (error) => {
+          console.error("[Chat] Stream failed:", error);
+          return formatChatError(error);
+        },
+      });
+      return createUIMessageStreamResponse({ stream });
+    }
 
     return result.toUIMessageStreamResponse({
       onError: (error) => {
@@ -415,6 +439,7 @@ Citation rules:
       },
     });
   } catch (error) {
+    if (isNotAuthenticatedError(error)) return new Response("Not authenticated", { status: 401 });
     console.error("Error streaming chat completion:", error);
     return new Response(formatChatError(error), { status: 500 });
   }

@@ -2,14 +2,19 @@
 
 import type { UIMessage } from "@ai-sdk/react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, CheckCircle2, Circle, Zap, Brain, ExternalLink, Clock, Gauge } from "lucide-react";
+import { Loader2, CheckCircle2, Circle, Zap, Brain, ExternalLink, Clock, Gauge, AlertTriangle } from "lucide-react";
 import { useState, useEffect } from "react";
 import {
   countKnowledgeBaseInvocations,
   getLastKnowledgeBaseInvocation,
 } from "@/lib/chat-tools";
 import { EMBEDDING_MODEL_LABEL } from "@/lib/embedding-config";
-import { extractRagToolResult } from "@/lib/rag-types";
+import {
+  extractRagToolResult,
+  type RagAnswerability,
+  type RagRetrievalMeta,
+  type RagToolChunk,
+} from "@/lib/rag-types";
 
 interface RAGInspectorProps {
   messages: UIMessage[];
@@ -152,7 +157,7 @@ export function RAGInspector({ messages, status, chatId }: RAGInspectorProps) {
         }
       : null;
   const displayChunks =
-    persistedTrace?.chunks && persistedTrace.chunks.length > 0
+    !liveToolResult?.retrieval && persistedTrace?.chunks && persistedTrace.chunks.length > 0
       ? persistedTrace.chunks
       : liveToolResult?.chunks ?? [];
   const evaluation = persistedTrace?.evaluation ?? null;
@@ -229,6 +234,25 @@ export function RAGInspector({ messages, status, chatId }: RAGInspectorProps) {
               </div>
             </div>
           </section>
+
+          {liveToolResult?.status === "unavailable" && (
+            <div
+              role="alert"
+              className="flex items-start gap-2 rounded-sm border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive"
+            >
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span>{liveToolResult.message ?? "Search unavailable"}</span>
+            </div>
+          )}
+
+          {liveToolResult?.retrieval && (
+            <RetrievalDetails
+              retrieval={liveToolResult.retrieval}
+              chunks={liveToolResult.chunks}
+              answerability={liveToolResult.answerability}
+              evidenceLabels={liveToolResult.evidence?.items.map((i) => i.label)}
+            />
+          )}
 
           {!!timings && (
             <section className="animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -312,7 +336,7 @@ export function RAGInspector({ messages, status, chatId }: RAGInspectorProps) {
                         <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
                       </a>
                       <span className="font-mono text-[9px] bg-rag/15 text-rag px-1.5 py-0.5 rounded-sm shrink-0">
-                        #{chunk.rank} / {formatSimilarity(chunk.similarity)}
+                        #{chunk.rank}{"stageRanks" in chunk && chunk.stageRanks ? "" : ` / ${formatSimilarity(chunk.similarity)}`}
                       </span>
                     </div>
                     <div className="font-mono text-[9px] uppercase text-muted-foreground">
@@ -352,6 +376,150 @@ export function RAGInspector({ messages, status, chatId }: RAGInspectorProps) {
         </div>
       </ScrollArea>
     </div>
+  );
+}
+
+// stage_ms keys as emitted by the Python pipeline (search.py, pipeline.py, retrieve_routes.py).
+// Lexical has no standalone timer: it is timed together with the query embedding wait.
+const STAGES: Array<{ key: string; label: string; msKeys: string[]; countKey?: string }> = [
+  { key: "dense", label: "Dense", msKeys: ["dense"], countKey: "dense" },
+  { key: "lexical", label: "Lexical", msKeys: ["lexical_plus_embed_wait"], countKey: "lexical" },
+  { key: "fused", label: "Fused", msKeys: ["fusion"], countKey: "fused" },
+  { key: "reranked", label: "Reranked", msKeys: ["rerank"], countKey: "reranked" },
+  { key: "selected", label: "Selected", msKeys: ["pack"], countKey: "returned" },
+];
+
+function stageMs(stageMsMap: Record<string, number>, keys: string[]) {
+  for (const k of keys) if (typeof stageMsMap[k] === "number") return stageMsMap[k];
+  return null;
+}
+
+function rankCell(value: number | null | undefined) {
+  return value === null || value === undefined ? "-" : String(value);
+}
+
+/** Stage timeline + per-stage candidate ranks for the Python engine (T16, INV-16). */
+export function RetrievalDetails({
+  retrieval,
+  chunks,
+  answerability,
+  evidenceLabels,
+}: {
+  retrieval: RagRetrievalMeta;
+  chunks: RagToolChunk[];
+  answerability?: RagAnswerability;
+  evidenceLabels?: string[];
+}) {
+  const degraded = retrieval.degraded.length > 0;
+  return (
+    <section data-testid="retrieval-details" className="space-y-3">
+      <h3 className="font-mono text-[10px] text-muted-foreground uppercase flex items-center gap-1.5">
+        <Zap className="w-3 h-3" />
+        Retrieval
+      </h3>
+      <div className="flex flex-wrap items-center gap-2 font-mono text-[9px] uppercase">
+        <span className="rounded-sm bg-rag/15 px-1.5 py-0.5 text-rag">{retrieval.profile}</span>
+        {retrieval.configHash ? (
+          <span className="rounded-sm bg-muted px-1.5 py-0.5 text-muted-foreground" title={retrieval.configHash}>
+            cfg {retrieval.configHash.slice(0, 8)}
+          </span>
+        ) : null}
+        {degraded ? (
+          <span
+            data-testid="degraded-badge"
+            className="rounded-sm bg-destructive/15 px-1.5 py-0.5 text-destructive"
+          >
+            Degraded: {retrieval.degraded.join(", ")}
+          </span>
+        ) : null}
+      </div>
+      {answerability ? (
+        <div
+          data-testid="answerability"
+          className="space-y-1 border border-border/50 bg-card px-2 py-1.5 font-mono text-[10px]"
+        >
+          <div className="flex flex-wrap items-center gap-2 uppercase">
+            <span>Gate</span>
+            <span
+              data-testid="gate-state"
+              className={
+                answerability.state === "ANSWERABLE"
+                  ? "rounded-sm bg-rag/15 px-1.5 py-0.5 text-rag"
+                  : "rounded-sm bg-destructive/15 px-1.5 py-0.5 text-destructive"
+              }
+            >
+              {answerability.state}
+            </span>
+            {!answerability.tauCalibrated ? (
+              <span data-testid="gate-uncalibrated" className="rounded-sm bg-muted px-1.5 py-0.5 text-muted-foreground">
+                gate uncalibrated
+              </span>
+            ) : null}
+            {answerability.gateDegraded ? (
+              <span data-testid="gate-degraded" className="rounded-sm bg-destructive/15 px-1.5 py-0.5 text-destructive">
+                no rerank score
+              </span>
+            ) : null}
+          </div>
+          <div className="text-muted-foreground">
+            {answerability.reason} · top score{" "}
+            {answerability.topRerankScore === null ? "-" : answerability.topRerankScore.toFixed(3)} · τ{" "}
+            {answerability.tau}
+            {evidenceLabels && evidenceLabels.length > 0 ? ` · ${evidenceLabels.join(" ")}` : ""}
+          </div>
+        </div>
+      ) : null}
+      <ol aria-label="Stage timeline" className="space-y-1">
+        {STAGES.map((stage) => {
+          const ms = stageMs(retrieval.stageMs, stage.msKeys);
+          const count = stage.countKey ? retrieval.counts[stage.countKey] : undefined;
+          return (
+            <li
+              key={stage.key}
+              data-testid={`stage-${stage.key}`}
+              className="flex items-center justify-between border border-border/50 bg-card px-2 py-1 font-mono text-[10px]"
+            >
+              <span>{stage.label}</span>
+              <span className="text-muted-foreground tabular-nums">
+                {count !== undefined ? `${count} / ` : ""}
+                {ms === null ? "-" : formatMs(ms)}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      {chunks.length > 0 && (
+        <table className="w-full border-collapse font-mono text-[9px]" aria-label="Candidates">
+          <thead>
+            <tr className="text-left uppercase text-muted-foreground">
+              <th className="py-1 pr-1">#</th>
+              <th className="py-1 pr-1">Source / section</th>
+              <th className="py-1 px-1">Dense</th>
+              <th className="py-1 px-1">Lex</th>
+              <th className="py-1 px-1">Fused</th>
+              <th className="py-1 px-1">Rerank</th>
+              <th className="py-1 pl-1">Sel</th>
+            </tr>
+          </thead>
+          <tbody>
+            {chunks.map((chunk) => (
+              <tr key={`${chunk.fileId}-${chunk.rank}`} className="border-t border-border/40 align-top">
+                <td className="py-1 pr-1 tabular-nums">{chunk.rank}</td>
+                <td className="py-1 pr-1">
+                  <div className="truncate max-w-[120px]">{chunk.fileName}</div>
+                  <div className="truncate max-w-[120px] text-muted-foreground">{chunk.section ?? "-"}</div>
+                </td>
+                <td className="py-1 px-1 tabular-nums">{rankCell(chunk.stageRanks?.dense)}</td>
+                <td className="py-1 px-1 tabular-nums">{rankCell(chunk.stageRanks?.lexical)}</td>
+                <td className="py-1 px-1 tabular-nums">{rankCell(chunk.stageRanks?.fused)}</td>
+                <td className="py-1 px-1 tabular-nums">{rankCell(chunk.stageRanks?.reranked)}</td>
+                <td className="py-1 pl-1">{chunk.selected ? "yes" : "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
   );
 }
 

@@ -1,69 +1,15 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
-import { getUserId } from "@/lib/auth";
-import { createUploadToken } from "@/lib/uploads/signature";
-import { getUserMaxUploadBytes } from "@/lib/uploads/limits";
-import { getUsageSummary } from "@/lib/billing/usage";
 
-const schema = z.object({
-  fileName: z.string().min(1),
-  fileSize: z.number().int().positive(),
-  fileType: z.string().min(1),
-});
-
-export async function POST(req: Request) {
-  try {
-    const userId = await getUserId();
-    const usageSummary = await getUsageSummary(userId);
-    if (!usageSummary.allowOverage && usageSummary.projectedOverageInr > 0) {
-      return NextResponse.json(
-        { error: "Free plan storage/usage limit reached. Upgrade to upload more files." },
-        { status: 402 }
-      );
-    }
-    const body = schema.safeParse(await req.json());
-
-    if (!body.success) {
-      return NextResponse.json({ error: body.error.flatten() }, { status: 400 });
-    }
-
-    const { maxBytes, maxMb, planCode } = await getUserMaxUploadBytes(userId);
-
-    if (body.data.fileSize > maxBytes) {
-      return NextResponse.json(
-        {
-          error: `File exceeds plan limit (${maxMb} MB for ${planCode.toUpperCase()} plan).`,
-          maxBytes,
-          maxMb,
-          planCode,
-        },
-        { status: 413 }
-      );
-    }
-
-    const expiresAt = Date.now() + 10 * 60 * 1000;
-    const token = createUploadToken({
-      userId,
-      fileName: body.data.fileName,
-      fileSize: body.data.fileSize,
-      fileType: body.data.fileType,
-      expiresAt,
-    });
-
-    return NextResponse.json({
-      ok: true,
-      uploadToken: token,
-      expiresAt,
-      maxBytes,
-      maxMb,
-      planCode,
-      uploadUrl: "/api/uploads/complete",
-      method: "POST",
-    });
-  } catch (error) {
-    console.error("Upload sign error:", error);
-    const message =
-      error instanceof Error ? error.message : "Failed to prepare upload";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+// Removed in Scribe 2.0 (T04): Sources are ingested only through the private
+// Blob intake in lib/ingestion/source-intake.ts (see ADR-0001).
+function gone() {
+  return NextResponse.json(
+    { error: "This endpoint was removed. Upload Sources through the Sources page." },
+    { status: 410 }
+  );
 }
+
+export const GET = gone;
+export const POST = gone;
+export const PUT = gone;
+export const DELETE = gone;

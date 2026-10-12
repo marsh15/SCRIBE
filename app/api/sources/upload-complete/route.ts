@@ -1,11 +1,14 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import {
   completeSourceUpload,
   parseSourceUploadCompletionPayload,
   SourceIntakeError,
 } from "@/lib/ingestion/source-intake";
 import { getBlobMetadata } from "@/lib/storage/blob";
+import { env } from "@/lib/env";
+import { fireTick } from "@/lib/ingestion/tick";
+import { completeSourceVersionUpload } from "@/lib/ingestion/source-versions";
 
 export async function POST(req: Request) {
   try {
@@ -18,15 +21,22 @@ export async function POST(req: Request) {
       },
       onUploadCompleted: async ({ blob, tokenPayload }) => {
         const metadata = await getBlobMetadata(blob.url);
-        await completeSourceUpload({
-          payload: parseSourceUploadCompletionPayload(tokenPayload),
-          blob: {
-            url: blob.url,
-            pathname: blob.pathname,
-            size: metadata.size,
-            contentType: metadata.contentType,
-          },
-        });
+        const payload = parseSourceUploadCompletionPayload(tokenPayload);
+        const blobInfo = {
+          url: blob.url,
+          pathname: blob.pathname,
+          size: metadata.size,
+          contentType: metadata.contentType,
+        };
+        const completion = payload.versionId
+          ? await completeSourceVersionUpload({
+              payload: { ...payload, versionId: payload.versionId },
+              blob: blobInfo,
+            })
+          : await completeSourceUpload({ payload, blob: blobInfo });
+        if (env.INGEST_ENGINE === "python" && completion.queued) {
+          after(async () => void (await fireTick()));
+        }
       },
     });
     return NextResponse.json(result);

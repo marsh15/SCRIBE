@@ -50,13 +50,14 @@ export function useSourceUpload() {
         ready?: number;
         retrying?: number;
         failed?: number;
+        ticked?: boolean;
       };
 
       if (!response.ok) {
         throw new Error(result.error || "Could not start Source intake");
       }
 
-      if ((result.claimed ?? 0) > 0) {
+      if ((result.claimed ?? 0) > 0 || result.ticked) {
         return result;
       }
 
@@ -140,7 +141,7 @@ export function useSourceUpload() {
       const nextStatus =
         (intake.ready ?? 0) > 0
           ? "ready"
-          : (intake.claimed ?? 0) > 0
+          : (intake.claimed ?? 0) > 0 || intake.ticked
             ? "processing"
             : "queued";
 
@@ -164,7 +165,58 @@ export function useSourceUpload() {
     }
   }, [processSourceNow]);
 
+  /**
+   * "Upload new version": reserve version N+1 of an existing Source, upload it privately, then nudge the queue.
+   * The current version stays searchable the whole time; the server decides duplicates once the bytes are stored.
+   */
+  const uploadNewVersion = useCallback(async (sourceId: number, file: File) => {
+    setState({ status: "reserving", progress: 0, sourceId, error: null, intakeSummary: null });
+    try {
+      const type = sourceMimeType(file);
+      const response = await fetch(`/api/sources/${sourceId}/versions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, size: file.size, type }),
+      });
+      const reservation = (await response.json()) as {
+        error?: string;
+        version?: { id: string; versionNumber: number };
+        uploadPath?: string;
+        clientToken?: string;
+      };
+      if (!response.ok || !reservation.version || !reservation.uploadPath || !reservation.clientToken) {
+        throw new Error(reservation.error || "Could not reserve the new version");
+      }
+      setState({ status: "uploading", progress: 0, sourceId, error: null, intakeSummary: null });
+      await put(reservation.uploadPath, file, {
+        access: "private",
+        token: reservation.clientToken,
+        contentType: type,
+        multipart: file.size > 5 * 1024 * 1024,
+        onUploadProgress: ({ percentage }) =>
+          setState((current) => ({ ...current, status: "uploading", progress: Math.round(percentage) })),
+      });
+      try {
+        await processSourceNow(sourceId);
+      } catch {
+        // the tick chain and the daily sweep still pick the job up
+      }
+      setState({
+        status: "processing",
+        progress: 100,
+        sourceId,
+        error: null,
+        intakeSummary: "New version uploaded. The current version stays searchable until it is indexed.",
+      });
+      return { success: true as const, sourceId, versionNumber: reservation.version.versionNumber };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Version upload failed";
+      setState((current) => ({ ...current, status: "error", error: message }));
+      return { success: false as const, error: message };
+    }
+  }, [processSourceNow]);
+
   const reset = useCallback(() => setState(INITIAL_STATE), []);
 
-  return { state, uploadSource, processSourceNow, reset };
+  return { state, uploadSource, uploadNewVersion, processSourceNow, reset };
 }

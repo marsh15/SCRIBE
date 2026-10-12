@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-Scribe previously selected among server upload, browser extraction, and queued ingestion based on file size. Source state, quota checks, retries, persistence, and metering consequently leaked across the upload page and several request modules. Large browser-ingested files also lost their original document.
+Scribe previously chose between server upload, browser extraction, and queued ingestion based on file size. As a result, Source state, quota checks, retries, persistence, and metering leaked across the upload page and several request modules. Large browser-ingested files also lost their original document.
 
 ## Decision
 

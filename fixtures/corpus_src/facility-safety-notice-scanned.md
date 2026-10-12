@@ -1,0 +1,13 @@
+NORTHWIND LOGISTICS - SAFETY NOTICE FSN-2026-014
+
+⟦Notice reference FSN-2026-014 takes effect on 2 March 2026 at depot D-RTM, Rotterdam.⟧
+
+⟦High-visibility vests are mandatory in all loading areas.⟧ ⟦Forklifts must not exceed 8 km/h inside the warehouse and 15 km/h in the yard.⟧
+
+⟦The maximum rack load is 1,250 kg per pallet level.⟧ ⟦The assembly point for evacuation is Point B at the north fence.⟧
+
+⟦A fire drill is held on the first Tuesday of every month at 10:15.⟧
+
+⟦In case of a life-threatening situation on any Northwind site, call the site emergency line 0800-555-0112 first and the Rotterdam control room on +31 10 555 0198 second.⟧
+
+Questions about this notice go to the depot manager, Dirk van Leeuwen, on extension 4417.

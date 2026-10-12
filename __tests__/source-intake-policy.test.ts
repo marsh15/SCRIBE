@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   completeReservedSourceUpload,
-  deleteOwnedSource,
   isRetryableSourceError,
   parseSourceUploadMetadata,
   retryDelayMinutes,
@@ -162,29 +161,5 @@ describe("Source intake production policy", () => {
 
     expect(result.orphanDeleted).toBe(true);
     expect(deletedUrl).toBe("https://blob.example/orphan");
-  });
-
-  it("deletes private Blob storage before the Source record", async () => {
-    const operations: string[] = [];
-    const deleted = await deleteOwnedSource("user_123", 42, {
-      loadSource: async () => ({
-        id: 42,
-        userId: "user_123",
-        name: "policy.pdf",
-        size: 100,
-        type: "application/pdf",
-        status: "ready",
-        storageUrl: "https://blob.example/policy",
-      }),
-      deleteBlob: async () => {
-        operations.push("blob");
-      },
-      deleteRecord: async () => {
-        operations.push("record");
-      },
-    });
-
-    expect(deleted).toBe(true);
-    expect(operations).toEqual(["blob", "record"]);
   });
 });

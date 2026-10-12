@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+        env:
+          # Placeholders only: next build prerenders pages that mount ClerkProvider.
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2xlcmsuZXhhbXBsZS5jb20k
+          CLERK_SECRET_KEY: sk_test_placeholder_not_a_real_key
+
+  python:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: scribe
+          POSTGRES_PASSWORD: scribe
+          # Name must contain 'test': the fake-embedder safety guard refuses any other database.
+          POSTGRES_DB: scribe_test
+        ports:
+          - 54329:5432
+        options: >-
+          --health-cmd "pg_isready -U scribe -d scribe_test"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL_TEST: postgresql://scribe:scribe@localhost:54329/scribe_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      # P0-1: migrations 0008+ must apply (twice) as a NOSUPERUSER CREATEROLE database owner, like on Neon. Runs BEFORE
+      # the superuser replay below so scribe_app / scribe_definer are created by the unprivileged role, as on a fresh
+      # managed database. Uses a throwaway database (scribe_nosuper_test) and drops it. Postgres 17 only.
+      - name: Migrations apply as a non-superuser (throwaway database)
+        run: scripts/test-migrations-nosuperuser.sh "$DATABASE_URL_TEST"
+      # Drizzle owns the schema; replay its SQL so the schema-contract test can run.
+      - name: Apply Drizzle migrations to test database
+        run: scripts/apply-migrations.sh
+      - run: uv sync
+        working-directory: intelligence
+      - run: uv run pytest -v
+        working-directory: intelligence
+
+  # T31: blocks PRs that make retrieval worse. Replays CACHED embedding + rerank responses only: no provider keys are
+  # set (and none must be), a cache miss fails the job. Until a REAL baseline is committed (benchmarks/gate/baseline.json)
+  # the final step prints a loud "GATE NOT ARMED" warning annotation and exits 0. Rules: docs/scribe2/release-rules.md.
+  retrieval-gate:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: scribe
+          POSTGRES_PASSWORD: scribe
+          # Name must contain 'test': the gate refuses to create throwaway workspaces in any other database.
+          POSTGRES_DB: scribe_test
+        ports:
+          - 54329:5432
+        options: >-
+          --health-cmd "pg_isready -U scribe -d scribe_test"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL_TEST: postgresql://scribe:scribe@localhost:54329/scribe_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync
+        working-directory: intelligence
+      - name: Is the gate armed (real baseline committed)?
+        id: armed
+        run: uv run --project intelligence scribe-eval gate --status
+      # The heavy setup is skipped while the gate is not armed.
+      - if: steps.armed.outputs.armed == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - if: steps.armed.outputs.armed == 'true'
+        run: npm ci
+      - if: steps.armed.outputs.armed == 'true'
+        name: Apply Drizzle migrations to test database
+        run: scripts/apply-migrations.sh
+      - name: Retrieval regression gate (replay mode, no provider keys)
+        run: uv run --project intelligence scribe-eval gate --database-url "$DATABASE_URL_TEST"

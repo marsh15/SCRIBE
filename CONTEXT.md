@@ -2,7 +2,7 @@
 
 ## Source
 
-An original document a user adds to Scribe together with its extracted text, indexed chunks, and evidence metadata. A Source remains user-owned and private throughout its lifecycle.
+An original document a user adds to Scribe together with its extracted text, indexed chunks, and evidence metadata. A Source stays user-owned and private throughout its lifecycle.
 
 ## Source intake
 

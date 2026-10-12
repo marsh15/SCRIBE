@@ -1,5 +1,5 @@
 import { generateClientTokenFromReadWriteToken } from "@vercel/blob/client";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db, sql } from "@/lib/db-config";
 import { documents, files, ingestionJobs, type SourceStatus } from "@/lib/db-schema";
 import { getUsageSummary, recordUsageEvent } from "@/lib/billing/usage";
@@ -8,25 +8,27 @@ import { extractTextFromBuffer } from "@/lib/ingestion/extract";
 import { chunkContent } from "@/lib/chunking";
 import { generateEmbeddings } from "@/lib/embeddings";
 import { deleteBlob, downloadBlobToBuffer } from "@/lib/storage/blob";
-import { requireEnv } from "@/lib/env";
+import { env, requireEnv } from "@/lib/env";
+import { ingestSourceViaPython, PermanentIngestError } from "@/lib/ingestion/python-engine";
+import { ensurePersonalWorkspace } from "@/lib/workspace";
+import { hardDeleteSource, pythonEngineConfigured } from "@/lib/ingestion/source-delete";
 import { ensureDocumentsChunkIndexSchema } from "@/lib/db-compat";
 import {
   completeReservedSourceUpload,
-  deleteOwnedSource,
   parseSourceUploadMetadata,
   isRetryableSourceError,
   retryDelayMinutes,
   shouldRetrySource,
   sourceUploadPath,
-  SourceIntakeError,
   validateSourceUploadAllowance,
   type CompletedSourceBlob,
+  type SourceUploadCompletionPayload,
   type SourceUploadMetadata,
 } from "@/lib/ingestion/source-intake-policy";
 
 export {
+  parseSourceUploadCompletionPayload,
   completeReservedSourceUpload,
-  deleteOwnedSource,
   parseSourceUploadMetadata,
   isRetryableSourceError,
   retryDelayMinutes,
@@ -37,6 +39,7 @@ export {
 } from "@/lib/ingestion/source-intake-policy";
 export type {
   CompletedSourceBlob,
+  SourceUploadCompletionPayload,
   SourceUploadMetadata,
 } from "@/lib/ingestion/source-intake-policy";
 
@@ -58,11 +61,6 @@ export interface SourceUploadReservation {
   clientToken: string;
 }
 
-export interface SourceUploadCompletionPayload {
-  sourceId: number;
-  userId: string;
-}
-
 export async function reserveSourceUpload(input: {
   userId: string;
   metadata: SourceUploadMetadata;
@@ -78,9 +76,12 @@ export async function reserveSourceUpload(input: {
 
   validateSourceUploadAllowance(metadata, usage, uploadLimit);
 
+  const workspaceId = await ensurePersonalWorkspace(input.userId);
+
   const [source] = await db
     .insert(files)
     .values({
+      workspaceId,
       name: metadata.name,
       size: metadata.size,
       type: metadata.type,
@@ -134,32 +135,11 @@ export async function reserveSourceUpload(input: {
   }
 }
 
-export function parseSourceUploadCompletionPayload(payload: string | null | undefined) {
-  try {
-    const parsed = JSON.parse(payload ?? "") as Partial<SourceUploadCompletionPayload>;
-    if (
-      !Number.isInteger(parsed.sourceId) ||
-      !parsed.sourceId ||
-      parsed.sourceId <= 0 ||
-      typeof parsed.userId !== "string" ||
-      parsed.userId.length === 0
-    ) {
-      throw new Error("Invalid completion payload");
-    }
-    return parsed as SourceUploadCompletionPayload;
-  } catch {
-    throw new SourceIntakeError(
-      "Invalid upload completion payload",
-      400,
-      "invalid_completion"
-    );
-  }
-}
-
 export async function completeSourceUpload(input: {
   payload: SourceUploadCompletionPayload;
   blob: CompletedSourceBlob;
 }) {
+  const workspaceId = await ensurePersonalWorkspace(input.payload.userId);
   const result = await completeReservedSourceUpload(
     {
       sourceId: input.payload.sourceId,
@@ -169,7 +149,12 @@ export async function completeSourceUpload(input: {
     {
       loadSource: async (sourceId, userId) =>
         (await db.query.files.findFirst({
-          where: and(eq(files.id, sourceId), eq(files.userId, userId)),
+          where: and(
+            eq(files.id, sourceId),
+            eq(files.userId, userId),
+            eq(files.workspaceId, workspaceId),
+            isNull(files.deletedAt)
+          ),
         })) ?? null,
       deleteBlob,
       transitionToQueued: async (source, blob) => {
@@ -184,12 +169,13 @@ export async function completeSourceUpload(input: {
               "updated_at" = now()
             WHERE "id" = ${source.id}
               AND "user_id" = ${source.userId}
+              AND "workspace_id" = ${workspaceId}
               AND "status" = 'uploading'
             RETURNING "id"
           )
           INSERT INTO "ingestion_jobs" ("file_id", "status", "attempts", "created_at", "updated_at")
           SELECT "id", 'queued', 0, now(), now() FROM source
-          ON CONFLICT ("file_id") DO NOTHING
+          ON CONFLICT DO NOTHING
           RETURNING "file_id"
         `;
         return transitioned.length > 0;
@@ -236,6 +222,25 @@ async function processClaimedSource(job: {
   }
 
   try {
+    if (env.INGEST_ENGINE === "python") {
+      // Python owns parse/chunk/embed/activate and has already set the Source to ready.
+      const indexed = await ingestSourceViaPython(source);
+      await db.batch([
+        db.update(files).set({ updatedAt: new Date() }).where(eq(files.id, source.id)),
+        db
+          .update(ingestionJobs)
+          .set({
+            status: "completed",
+            lastError: null,
+            nextRetryAt: null,
+            finishedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(ingestionJobs.id, job.id)),
+      ]);
+      console.info("[SourceIntake] ready (python)", { sourceId: source.id, chunks: indexed.chunks });
+      return { sourceId: source.id, status: "ready" as const, chunks: indexed.chunks };
+    }
     const bytes = source.storageUrl
       ? await downloadBlobToBuffer(source.storageUrl)
       : source.fileData
@@ -313,7 +318,10 @@ async function processClaimedSource(job: {
     return { sourceId: source.id, status: "ready" as const, chunks: chunks.length };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown Source intake error";
-    const retrying = isRetryableSourceError(message) && shouldRetrySource(job.attempts);
+    const retrying =
+      !(error instanceof PermanentIngestError) &&
+      isRetryableSourceError(message) &&
+      shouldRetrySource(job.attempts);
     const nextRetryAt = retrying
       ? new Date(Date.now() + retryDelayMinutes(job.attempts) * 60 * 1000)
       : null;
@@ -356,10 +364,11 @@ async function processClaimedSource(job: {
 
 export async function runQueuedSourceIntake(
   limit = 1,
-  scope: { userId?: string; sourceId?: number } = {}
+  scope: { userId?: string; workspaceId?: string; sourceId?: number } = {}
 ) {
   const safeLimit = Math.max(1, Math.min(limit, 5));
   const scopedUserId = scope.userId ?? null;
+  const scopedWorkspaceId = scope.workspaceId ?? null;
   const scopedSourceId = scope.sourceId ?? null;
 
   const staleUploads = await sql`
@@ -370,6 +379,7 @@ export async function runQueuedSourceIntake(
       "updated_at" = now()
     WHERE "status" = 'uploading'
       AND (${scopedUserId}::text IS NULL OR "user_id" = ${scopedUserId})
+      AND (${scopedWorkspaceId}::uuid IS NULL OR "workspace_id" = ${scopedWorkspaceId})
       AND (${scopedSourceId}::int IS NULL OR "id" = ${scopedSourceId})
       AND "updated_at" <= now() - (${UPLOAD_STALE_HOURS} * interval '1 hour')
     RETURNING "id"
@@ -385,6 +395,7 @@ export async function runQueuedSourceIntake(
       AND source."storage_url" IS NULL
       AND source."file_data" IS NULL
       AND (${scopedUserId}::text IS NULL OR source."user_id" = ${scopedUserId})
+      AND (${scopedWorkspaceId}::uuid IS NULL OR source."workspace_id" = ${scopedWorkspaceId})
       AND (${scopedSourceId}::int IS NULL OR source."id" = ${scopedSourceId})
       AND source."updated_at" <= now() - (${UPLOAD_STALE_HOURS} * interval '1 hour')
       AND NOT EXISTS (
@@ -406,6 +417,7 @@ export async function runQueuedSourceIntake(
         AND jobs."status" = 'processing'
         AND jobs."started_at" <= now() - (${PROCESSING_STALE_MINUTES} * interval '1 minute')
         AND (${scopedUserId}::text IS NULL OR source."user_id" = ${scopedUserId})
+        AND (${scopedWorkspaceId}::uuid IS NULL OR source."workspace_id" = ${scopedWorkspaceId})
         AND (${scopedSourceId}::int IS NULL OR source."id" = ${scopedSourceId})
       RETURNING jobs."file_id"
     )
@@ -426,6 +438,7 @@ export async function runQueuedSourceIntake(
       WHERE jobs."status" = 'queued'
         AND (jobs."next_retry_at" IS NULL OR jobs."next_retry_at" <= now())
         AND (${scopedUserId}::text IS NULL OR source."user_id" = ${scopedUserId})
+        AND (${scopedWorkspaceId}::uuid IS NULL OR source."workspace_id" = ${scopedWorkspaceId})
         AND (${scopedSourceId}::int IS NULL OR source."id" = ${scopedSourceId})
       ORDER BY jobs."created_at" ASC
       FOR UPDATE SKIP LOCKED
@@ -471,25 +484,35 @@ export async function runQueuedSourceIntake(
   };
 }
 
+/**
+ * Delete a Source. Two modes (P0-3), chosen by `pythonEngineConfigured()`:
+ *
+ * - Python engine configured (T20, INV-14): SOFT delete. One database function sets `deleted_at` and cancels the
+ *   Source's queued/processing/retrying jobs in a single transaction, so the Source is gone from search and evidence
+ *   reads the moment it commits (every retrieval path filters `files.deleted_at IS NULL`). Blobs, chunks, embeddings
+ *   and rows are removed later by the purge that runs from the daily sweep (`/api/py/ingest/purge`).
+ * - Otherwise (legacy engine, the default): nothing would run that purge, so user data is removed NOW: every blob
+ *   (original and versions), then the file row with its cascade. If a blob cannot be deleted the Source is soft-deleted
+ *   instead (invisible immediately) and the sweep's legacy cleanup retries with backoff.
+ *
+ * Returns false when the Source does not exist for this owner (or, in Python mode, was already deleted).
+ */
 export async function deleteSource(userId: string, sourceId: number) {
-  const deleted = await deleteOwnedSource(userId, sourceId, {
-    loadSource: async (id, ownerId) => {
-      const source = await db.query.files.findFirst({
-        where: and(eq(files.id, id), eq(files.userId, ownerId)),
-      });
-      if (!source) return null;
-      return {
-        ...source,
-        storageUrl: source.storageUrl ?? source.storageKey,
-      };
-    },
-    deleteBlob,
-    deleteRecord: async (id, ownerId) => {
-      await db
-        .delete(files)
-        .where(and(eq(files.id, id), eq(files.userId, ownerId)));
-    },
-  });
-  if (deleted) console.info("[SourceIntake] deleted", { sourceId });
+  if (!Number.isInteger(sourceId) || sourceId <= 0) return false;
+  const workspaceId = await ensurePersonalWorkspace(userId);
+  if (!pythonEngineConfigured()) {
+    const outcome = await hardDeleteSource({ workspaceId, userId, sourceId });
+    if (outcome === "deleted") {
+      console.info("[SourceIntake] deleted", { sourceId });
+      return true;
+    }
+    if (outcome === "missing") return false;
+    // blob_failed: hide it now, let the sweep finish the job
+  }
+  const rows = (await sql`
+    SELECT scribe_soft_delete_source(${workspaceId}::uuid, ${userId}, ${sourceId}::int) AS deleted
+  `) as Array<{ deleted: boolean }>;
+  const deleted = rows[0]?.deleted === true;
+  if (deleted) console.info("[SourceIntake] soft-deleted", { sourceId });
   return deleted;
 }

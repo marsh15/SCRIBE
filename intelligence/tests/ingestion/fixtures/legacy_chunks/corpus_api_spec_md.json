@@ -1,0 +1,24 @@
+{
+ "name": "corpus_api_spec_md",
+ "options": {
+  "fileName": "api-spec.md",
+  "numPages": 5
+ },
+ "chunks": [
+  {
+   "content": "# Northwind Dispatch API v2 Specification\n\n## 1. Overview\n\nThe base URL is https://api.northwind-logistics.example/v2. All requests use HTTPS and JSON.\n\n### 1.1 Authentication\n\nSend an API key as a bearer token in the `Authorization` header. Revoked API keys return the error code ERR_AUTH_403. Missing or malformed keys return `ERR_AUTH_401`.\n\n### 1.2 Rate limits\n\nThe rate limit is 600 requests per minute per API key. Exceeding the limit returns `ERR_RATE_429` with a `Retry-After` header.\n\n## 2. Endpoints\n\n| Method | Path | Description |\n|---|---|---|\n| GET | /shipments/{id} | Fetch a shipment by id |\n| POST | /shipments | Create a shipment |\n| POST | /shipments/{id}/labels | Print a label (up to 250 labels per request) |\n| DELETE | /shipments/{id} | Cancel a shipment that is not yet picked up |\n\n### 2.1 Pagination\n\nList endpoints return 50 items by default and at most 200 items per page.\n\n### 2.2 Idempotency\n\nAn Idempotency-Key header is honoured for 24 hours. Repeating a request with the same key returns the original response.\n\n## 3. Webhooks\n\nFailed webhook deliveries are retried 5 times with exponential backoff starting at 30 seconds. Duplicate webhook deliveries were fixed in platform release v4.2.1 (ticket INV-2047).\n\nExample payload:\n\n```json\n{\n  \"event\": \"shipment.delivered\",\n  \"shipment_id\": \"NW0123456789\",\n  \"delivered_at\": \"2026-09-14T10:32:00Z\"\n}\n```\n\n## 4. Error codes\n\n| Code | HTTP status | Meaning |\n|---|---|---|\n| ERR_AUTH_401 | 401 | Missing or malformed API key |\n| ERR_AUTH_403 | 403 | API key revoked or lacks scope |\n| ERR_SHIP_404 | 404 | Shipment not found |\n| ERR_VAL_422 | 422 | Request body failed validation |\n| ERR_RATE_429 | 429 | Rate limit exceeded |\n\n## 5. Known issues\n\n- INV-2051: label PDFs for Austin shipments render the address in a wrong font.\n- INV-2047 is closed.\n\n## 6. Tracking numbers\n\nTracking numbers have the format NW followed by 10 digits.",
+   "metadata": {
+    "chunkIndex": 0,
+    "totalChunks": 1,
+    "fileName": "api-spec.md",
+    "estimatedPage": 1,
+    "totalPages": 5,
+    "positionPercent": 0,
+    "section": 1,
+    "charOffset": 0,
+    "charLength": 1911
+   }
+  }
+ ],
+ "source": "fixtures/corpus/api-spec.md"
+}
