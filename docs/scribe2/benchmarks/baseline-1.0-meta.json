@@ -1,0 +1,309 @@
+{
+  "baseline": "scribe-1.0-frozen-retrieval",
+  "created_at": "2026-10-12T10:43:49.153Z",
+  "fake_embeddings": false,
+  "dataset_version": "golden-v1",
+  "dataset_path": "benchmarks/datasets/golden-v1",
+  "cases": 200,
+  "limited": null,
+  "git_commit": "722275a5e61e2b5ee8607d00698fa2547c4bb1e7",
+  "git_dirty_paths_in_ts_pipeline": [],
+  "embedding": {
+    "model_id": "models/gemini-embedding-2-preview",
+    "label": "gemini-embedding-2-preview",
+    "dimensions": 3072
+  },
+  "chunker": {
+    "splitter": "RecursiveCharacterTextSplitter",
+    "chunk_size": 4000,
+    "chunk_overlap": 400,
+    "separators": [
+      "\n\n",
+      "\n",
+      " ",
+      ""
+    ]
+  },
+  "retrieval": {
+    "function": "lib/search.ts searchDocuments",
+    "top_k": 10,
+    "scope": {
+      "user_id": "eval-golden-v1",
+      "workspace_id": "b36d973b-1322-46b3-852b-c43319ca9d17"
+    },
+    "variants": [
+      {
+        "name": "threshold-0.3",
+        "threshold": 0.3,
+        "file": "rankings.threshold-0.3.jsonl"
+      },
+      {
+        "name": "threshold-none",
+        "threshold": -1,
+        "file": "rankings.threshold-none.jsonl"
+      }
+    ]
+  },
+  "driver": "psql",
+  "ingestion": {
+    "docs_total": 24,
+    "docs_extracted": 21,
+    "docs_failed": 3,
+    "chunks_total": 23,
+    "embedding_batch_requests_estimate": 21,
+    "per_doc": [
+      {
+        "name": "api-spec.md",
+        "mime": "text/markdown",
+        "status": "ok",
+        "chars": 1912,
+        "pages": null,
+        "chunks": 1,
+        "error": null
+      },
+      {
+        "name": "benefits-table.csv",
+        "mime": "text/csv",
+        "status": "ok",
+        "chars": 841,
+        "pages": null,
+        "chunks": 1,
+        "error": null
+      },
+      {
+        "name": "changelog.txt",
+        "mime": "text/plain",
+        "status": "ok",
+        "chars": 787,
+        "pages": null,
+        "chunks": 1,
+        "error": null
+      },
+      {
+        "name": "data-processing-addendum.docx",
+        "mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "status": "ok",
+        "chars": 1572,
+        "pages": null,
+        "chunks": 1,
+        "error": null
+      },
+      {
+        "name": "employee-contract-template.docx",
+        "mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "status": "ok",
+        "chars": 1887,
+        "pages": null,
+        "chunks": 1,
+        "error": null
+      },
+      {
+        "name": "expense-policy.pdf",
+        "mime": "application/pdf",
+        "status": "ok",
+        "chars": 2366,
+        "pages": 3,
+        "chunks": 1,
+        "error": null
+      },
+      {
+        "name": "facility-safety-notice-scanned.pdf",
+        "mime": "application/pdf",
+        "status": "failed",
+        "chars": null,
+        "pages": null,
+        "chunks": 0,
+        "error": "No text extracted from facility-safety-notice-scanned.pdf. Scanned PDFs and image-only documents are not supported yet."
+      },
+      {
+        "name": "faq-customers.md",
+        "mime": "text/markdown",
+        "status": "ok",
+        "chars": 1202,
+        "pages": null,
+        "chunks": 1,
+        "error": null
+      },
+      {
+        "name": "fleet-inventory.csv",
+        "mime": "text/csv",
+        "status": "ok",
+        "chars": 5534,
+        "pages": null,
+        "chunks": 2,
+        "error": null
+      },
+      {
+        "name": "glossary.txt",
+        "mime": "text/plain",
+        "status": "ok",
+        "chars": 804,
+        "pages": null,
+        "chunks": 1,
+        "error": null
+      },
+      {
+        "name": "hr-leave-policy-2024.pdf",
+        "mime": "application/pdf",
+        "status": "ok",
+        "chars": 3541,
+        "pages": 4,
+        "chunks": 1,
+        "error": null
+      },
+      {
+        "name": "hr-leave-policy-2026.pdf",
+        "mime": "application/pdf",
+        "status": "ok",
+        "chars": 3696,
+        "pages": 4,
+        "chunks": 1,
+        "error": null
+      },
+      {
+        "name": "incident-2025-11-postmortem.txt",
+        "mime": "text/plain",
+        "status": "ok",
+        "chars": 1209,
+        "pages": null,
+        "chunks": 1,
+        "error": null
+      },
+      {
+        "name": "master-services-agreement.docx",
+        "mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "status": "ok",
+        "chars": 2890,
+        "pages": null,
+        "chunks": 1,
+        "error": null
+      },
+      {
+        "name": "meeting-minutes-2026-03.docx",
+        "mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "status": "ok",
+        "chars": 1179,
+        "pages": null,
+        "chunks": 1,
+        "error": null
+      },
+      {
+        "name": "office-locations.csv",
+        "mime": "text/csv",
+        "status": "failed",
+        "chars": null,
+        "pages": null,
+        "chunks": 0,
+        "error": "Invalid Record Length: expect 7, got 6 on line 2"
+      },
+      {
+        "name": "onboarding-handbook.pdf",
+        "mime": "application/pdf",
+        "status": "ok",
+        "chars": 6701,
+        "pages": 11,
+        "chunks": 2,
+        "error": null
+      },
+      {
+        "name": "ops-manual.md",
+        "mime": "text/markdown",
+        "status": "ok",
+        "chars": 2137,
+        "pages": null,
+        "chunks": 1,
+        "error": null
+      },
+      {
+        "name": "price-list-2026.csv",
+        "mime": "text/csv",
+        "status": "failed",
+        "chars": null,
+        "pages": null,
+        "chunks": 0,
+        "error": "Invalid Record Length: expect 1, got 2 on line 2"
+      },
+      {
+        "name": "q3-operations-report.pdf",
+        "mime": "application/pdf",
+        "status": "ok",
+        "chars": 3099,
+        "pages": 4,
+        "chunks": 1,
+        "error": null
+      },
+      {
+        "name": "runbook-deploy.md",
+        "mime": "text/markdown",
+        "status": "ok",
+        "chars": 1376,
+        "pages": null,
+        "chunks": 1,
+        "error": null
+      },
+      {
+        "name": "security-incident-response.pdf",
+        "mime": "application/pdf",
+        "status": "ok",
+        "chars": 2702,
+        "pages": 3,
+        "chunks": 1,
+        "error": null
+      },
+      {
+        "name": "travel-guidelines.docx",
+        "mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "status": "ok",
+        "chars": 1070,
+        "pages": null,
+        "chunks": 1,
+        "error": null
+      },
+      {
+        "name": "vendor-sla.pdf",
+        "mime": "application/pdf",
+        "status": "ok",
+        "chars": 2386,
+        "pages": 3,
+        "chunks": 1,
+        "error": null
+      }
+    ],
+    "failures": [
+      {
+        "name": "facility-safety-notice-scanned.pdf",
+        "error": "No text extracted from facility-safety-notice-scanned.pdf. Scanned PDFs and image-only documents are not supported yet."
+      },
+      {
+        "name": "office-locations.csv",
+        "error": "Invalid Record Length: expect 7, got 6 on line 2"
+      },
+      {
+        "name": "price-list-2026.csv",
+        "error": "Invalid Record Length: expect 1, got 2 on line 2"
+      }
+    ],
+    "pdf_parser_state_failures": [],
+    "scanned_pdf_failure": [
+      {
+        "name": "facility-safety-notice-scanned.pdf",
+        "error": "No text extracted from facility-safety-notice-scanned.pdf. Scanned PDFs and image-only documents are not supported yet."
+      }
+    ],
+    "embedding_requests": {
+      "apiCalls": 21,
+      "cacheHits": 0,
+      "cacheMisses": 23,
+      "fakeServed": 0
+    }
+  },
+  "query_embedding_requests": {
+    "api_calls": 200,
+    "cache_hits": 200
+  },
+  "ranking_files": [
+    "rankings.threshold-0.3.jsonl",
+    "rankings.threshold-none.jsonl"
+  ],
+  "node_version": "v18.16.0"
+}

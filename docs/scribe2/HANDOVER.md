@@ -2,7 +2,7 @@
 
 This file has what a new engineer (or a new Claude session) needs to continue the work. Read it first, then `docs/scribe2/DESIGN.md` (the source of truth for decisions, data model and invariants) and the ADRs in `docs/adr/0002-0012`.
 
-Repo: `github.com/marsh15/SCRIBE` · live app: https://scribe-marsh.vercel.app/ · working branch: `scribe2/m0-foundation` (branched from `codex/production-readiness` @ `62ccb1a`; upstream `main` = `0edddb1`). Nothing in Scribe 2.0 has been deployed, or run against Neon or the real Gemini and Voyage APIs.
+Repo: `github.com/marsh15/SCRIBE` · live app: https://scribe-marsh.vercel.app/ · working branch: `scribe2/m0-foundation` (branched from `codex/production-readiness` @ `62ccb1a`; upstream `main` = `0edddb1`). Scribe 2.0 has not been run against Neon or the real Voyage API; Gemini has been used locally for the baseline and M1 preliminary runs. Main was deployed once by mistake and rolled back (section 11).
 
 ## 1. What Scribe 2.0 is
 
@@ -61,8 +61,10 @@ The user's own pre-existing work (not Scribe 2.0) is committed separately: `app/
 2. **Vercel preview deploy** following `docs/scribe2/T02-verification.md`: confirms Python co-deploys with Next.js (root `requirements.txt`, rewrite keeps `/api/py` prefix, `functions` config accepted on Hobby, bypass header). If it fails, move Python to a second Vercel project rooted at `intelligence/` and record that in ADR-0002.
 3. **Neon branch copy of production**: run migrations `0008` to `0011` and `scripts/backfill-legacy-generations.ts --dry-run` first; check `select extversion from pg_extension where extname='vector'` (iterative scans need ≥ 0.8, else `dense_mode=exact`). The `--driver neon` path of the baseline script and the Neon HTTP executor of the backfill have never run.
 4. **Keys** (put them in your shell or `.env.local`; never commit them): `GOOGLE_GENERATIVE_AI_API_KEY` (embeddings, OCR, verifier), `VOYAGE_API_KEY` (rerank; add a payment method to lift the default RPM), `INTERNAL_SERVICE_SECRET`, `BLOB_READ_WRITE_TOKEN` (Python blob download), `VERCEL_AUTOMATION_BYPASS_SECRET` on previews.
-5. **Run the live T07 baseline** (`docs/scribe2/benchmarks/baseline-1.0-howto.md`), then write `docs/scribe2/benchmarks/baseline-1.0.md`. It needs a throwaway DB (never production) and **Node 18** (`PATH=/usr/local/bin:$PATH`). On Node 26, `pdf-parse` intermittently fails valid PDFs, yet vitest needs Node 26.
-6. Measure whether `gemini-embedding-2` (1536) and `gemini-embedding-2-preview` vectors are compatible (a ~20-line script is described in `T12-notes.md`; not written). Until measured they are separate spaces.
+5. **DONE 2026-10-12: live T07 baseline** (local Docker DB, real Gemini, Node 18): `docs/scribe2/benchmarks/baseline-1.0.md` (+ `-meta.json`). dev recall@5 0.833, validation 0.903, PRELIMINARY. The `--driver neon` path is still never run. On Node 26, `pdf-parse` intermittently fails valid PDFs, yet vitest needs Node 26.
+6. **DONE: embedding-space check** (`scribe_eval/embedding_space_check.py`, results in `T12-notes.md`). Read that file before mixing `gemini-embedding-2` and `-preview` vectors.
+7. **Measured so far (PRELIMINARY, `docs/scribe2/benchmarks/m1-prelim.md`)**: profiles A, B, C on dev and validation with real Gemini embeddings on local `eval_live_test`, paired vs 1.0. A and C: dev recall@5 0.993, validation 0.931 / 0.958 (1.0: 0.833 / 0.903). Dev gain over 1.0 is significant, validation mostly not; it confounds chunker and ingestion changes. B (lexical-only) recall@5 0.11: `websearch_to_tsquery` ANDs all terms, so natural questions return nothing, hence hybrid equals dense. Not tuned.
+8. **Still needs a human / key**: review the golden set (INV-12); `VOYAGE_API_KEY` for profiles D and E, tau calibration, default-profile choice, flipping `RETRIEVAL_ENGINE`, arming the CI gate (see m1-prelim.md section 9).
 
 ## 4. Remaining tasks (T13-T33)
 
@@ -73,7 +75,7 @@ Each task fits one agent run and one PR. The full text is in the plan; the key p
 - **T14 (DONE except the live Voyage run)** RRF (k=60, ranks only, INV-10) + Voyage rerank adapter (cache, fake for tests, degraded `rerank_unavailable` on failure) + dedup by content_hash/parent + parent expansion + 6,000-token packer; seed retrieval profiles A-E with stored config hashes.
 - **T15 (DONE at DB level, see follow-ups below)** RLS: app/Python connect as `scribe_app` (NOBYPASSRLS), policies per INV-1, `scoped(workspaceId)` helper in TS, SECURITY DEFINER queue-claim functions, cross-tenant tests (SQL and every API route). Roll out table by table.
 - **T16** `RETRIEVAL_ENGINE=python|legacy` for chat (default legacy), stage-timeline inspector (`rag-inspector.tsx`), "search unavailable" state, Supermemory off in python mode (D16).
-- **T17** Run profiles A-E on dev/validation, tune, choose default by a written rule, one `--milestone-report` test run → `docs/scribe2/benchmarks/m1.md` with paired CIs, latency, cost, ≥5 worked failures; flip `RETRIEVAL_ENGINE` if the rule is met.
+- **T17 (PARTIAL, 2026-10-12)** `scribe-eval run-profile` is built and tested (refuses test split, non-`test` DB names and rerank profiles without a Voyage key). Profiles A-C are run and scored on dev/validation (`benchmarks/m1-prelim.md`). D and E, tuning (the lexical AND-query problem), tau, the default choice and the test-split milestone report remain. Original scope: Run profiles A-E on dev/validation, tune, choose default by a written rule, one `--milestone-report` test run → `docs/scribe2/benchmarks/m1.md` with paired CIs, latency, cost, ≥5 worked failures; flip `RETRIEVAL_ENGINE` if the rule is met.
 
 **M2: versioned, recoverable ingestion**
 - **T18** Leased resumable steps (claim fn with `lease_token`, fenced writes, `/api/internal/ingest/tick` re-firing itself via `after()`, ≤3 concurrent leases, retry taxonomy, UI stage/attempts/Retry, idempotent embedding usage events). Replace the unique index `ingestion_jobs_file_id_unique` (one job per file) with one per version.
@@ -196,3 +198,5 @@ This section records the status of that review.
 - **P1-1** the "foreign claimable jobs" guard is one helper (`tests/integration/_db.py`): FAILS when the `CI` env var is set, skips locally with a message naming `purge_workspaces`.
 - **P1-3** docs say the shipped ANN query path was measured not to use HNSW; README says RLS is not enforced for the owner connection used today.
 - **P2** activation locks the files row before the job row (matches `scribe_soft_delete_source`; test holds the files lock and checks the job row is still free); blob downloads are allowlisted and do not follow redirects; the FastAPI schema/docs routes are off; `Content-Disposition` is encoded in all three branches of `/api/files/[id]/view`; `fail_generation` deliberately has no lease predicate (documented in the code: it only runs after the fenced terminal write).
+
+**Production incident.** 2026-10-12: PR #10 was merged to main and auto-deployed to production; prod broke (relation workspaces does not exist) because migrations 0008+ never ran on Neon. Production was rolled back to the pre-merge deployment scribe-9wz4vw60w; Vercel production auto-assign is paused. Do not promote a main deploy until the Neon-branch migration rehearsal in this section is done.
