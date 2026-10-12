@@ -111,7 +111,9 @@ _INSERT_RESULT = (
 
 
 def persist_to_db(conn: Any, run: RunRecord, results: list[CaseResult] | None = None) -> None:
-    """Insert the run and its per-case results using a psycopg connection (caller commits/owns it)."""
+    """Insert the run and its per-case results using a psycopg connection (caller commits/owns it).
+    Plain insert (a repeat fails on the primary key); use ``scribe_eval.publish.publish_run`` for the idempotent
+    dashboard path that also writes ``meta``."""
     rows = run.case_results if results is None else [result_row(r) for r in results]
     with conn.cursor() as cur:
         cur.execute(

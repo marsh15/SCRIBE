@@ -61,6 +61,9 @@ export const ACTION_TABLE: Record<string, Record<string, ActionKind>> = {
     deleteChat: "idor",
     getChatVerifications: "idor",
   },
+  "app/eval/actions.ts": {
+    getEvalAccess: "session",
+  },
   "app/files/actions.ts": {
     getFiles: "session",
     deleteFile: "idor",

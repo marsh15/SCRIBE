@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getFiles, deleteFile } from "@/app/files/actions";
 import { getChats, deleteChat } from "@/app/chat/actions";
+import { getEvalAccess } from "@/app/eval/actions";
 import {
   Trash2,
   FileText,
@@ -127,6 +128,7 @@ export function Sidebar() {
   const [deletingChatId, setDeletingChatId] = useState<string | null>(null);
   const [deletingFileId, setDeletingFileId] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [canViewEval, setCanViewEval] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
 
@@ -150,6 +152,19 @@ export function Sidebar() {
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
+
+  // The Eval link exists only for users who may open /eval (owner or member of the eval workspace).
+  useEffect(() => {
+    let cancelled = false;
+    getEvalAccess()
+      .then((ok) => {
+        if (!cancelled) setCanViewEval(ok);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const handleRefresh = () => {
@@ -246,7 +261,7 @@ export function Sidebar() {
             New Chat
           </Button>
         </Link>
-        <div className="mb-3 grid grid-cols-3 gap-2">
+        <div className={`mb-3 grid gap-2 ${canViewEval ? "grid-cols-2" : "grid-cols-3"}`}>
           <Link
             href="/compare"
             className="rounded-sm border border-border px-2 py-1.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -265,6 +280,14 @@ export function Sidebar() {
           >
             Changelog
           </Link>
+          {canViewEval ? (
+            <Link
+              href="/eval"
+              className="rounded-sm border border-border px-2 py-1.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-muted"
+            >
+              Eval
+            </Link>
+          ) : null}
         </div>
       </div>
 

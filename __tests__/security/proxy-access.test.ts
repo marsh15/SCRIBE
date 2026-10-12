@@ -33,7 +33,7 @@ describe("proxy.ts public paths", () => {
   });
 
   it.each([
-    "/api/chat", "/api/compare", "/compare", "/api/evidence/22222222-2222-4222-8222-222222222222", "/api/files/1/view", "/api/rag/latest",
+    "/api/chat", "/api/compare", "/compare", "/eval", "/eval/compare", "/eval/22222222-2222-4222-8222-222222222222", "/api/evidence/22222222-2222-4222-8222-222222222222", "/api/files/1/view", "/api/rag/latest",
     "/api/sources/reserve", "/api/sources/process-now", "/api/sources/7/versions", "/api/billing/usage",
     "/api/billing/checkout", "/api/ingest/batch", "/api/uploads/sign", "/chat/abc", "/files/1", "/upload",
     "/api/pyx", "/api/internal/ingest/other", "/api/internal", "/api/internal/anything-else",

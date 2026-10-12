@@ -150,6 +150,7 @@ import * as uploadsComplete from "@/app/api/uploads/complete/route";
 import * as uploadsSign from "@/app/api/uploads/sign/route";
 
 import * as chatActions from "@/app/chat/actions";
+import * as evalActions from "@/app/eval/actions";
 import * as filesActions from "@/app/files/actions";
 import * as detailActions from "@/app/files/[id]/actions";
 
@@ -443,6 +444,21 @@ const ACTION_CASES: Record<string, Record<string, () => Promise<void>>> = {
       expect(S.callIntelligence).not.toHaveBeenCalled(); // no message ids of a foreign chat are ever sent on
     },
   },
+  "app/eval/actions.ts": {
+    getEvalAccess: async () => {
+      // a user with no eval-workspace ownership or membership: false, and the lookup is keyed by the SESSION user
+      expect(await evalActions.getEvalAccess()).toBe(false);
+      expect(sqlCalls()[0].values).toEqual([USER_A, USER_A]);
+      expect(sqlCalls()[0].text).toContain("'eval'");
+      S.sql.mockClear();
+      S.sql.mockResolvedValue([{ ok: 1 }]);
+      expect(await evalActions.getEvalAccess()).toBe(true);
+      S.sql.mockClear();
+      signedOut();
+      expect(await evalActions.getEvalAccess()).toBe(false);
+      expect(S.sql).not.toHaveBeenCalled();
+    },
+  },
   "app/files/actions.ts": {
     getFiles: async () => {
       signedOut();
@@ -501,7 +517,7 @@ describe("server action sweep", () => {
     const cases = Object.fromEntries(Object.entries(ACTION_CASES).map(([f, a]) => [f, Object.keys(a).sort()]));
     expect(cases).toEqual(listed);
     const modules: Record<string, Record<string, unknown>> = {
-      "app/chat/actions.ts": chatActions, "app/files/actions.ts": filesActions, "app/files/[id]/actions.ts": detailActions,
+      "app/chat/actions.ts": chatActions, "app/eval/actions.ts": evalActions, "app/files/actions.ts": filesActions, "app/files/[id]/actions.ts": detailActions,
     };
     for (const [file, names] of Object.entries(listed)) {
       expect(Object.keys(modules[file]).sort(), file).toEqual(names);
