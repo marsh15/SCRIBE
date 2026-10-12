@@ -64,4 +64,6 @@ psql "$migr" -v ON_ERROR_STOP=1 -Atc "select has_function_privilege('scribe_app'
   || { echo "scribe_app cannot execute app_claim_ingestion_job" >&2; exit 1; }
 psql "$migr" -v ON_ERROR_STOP=1 -Atc "select has_schema_privilege('scribe_definer', 'public', 'create')" | grep -q '^f$' \
   || { echo "scribe_definer still has CREATE on schema public" >&2; exit 1; }
+[ "$(psql "$migr" -v ON_ERROR_STOP=1 -Atc "select count(*) from pg_constraint where contype = 'f' and conname like '%\_ws\_fk'")" -ge 20 ] \
+  || { echo "0019 composite workspace FKs missing" >&2; exit 1; }
 echo "OK: migrations apply and re-apply as a NOSUPERUSER CREATEROLE role"

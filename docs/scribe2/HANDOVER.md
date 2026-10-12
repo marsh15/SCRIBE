@@ -145,9 +145,9 @@ Local test databases created in the `scribe-db-1` container: `t08`, `t12_test`, 
 0013 enables RLS (no FORCE) and adds `scribe_app`, `scribe_definer` and the `app_*` SECURITY DEFINER functions. Rollout order: apply 0013, move callers to `scoped()` or a `scribe_app` DSN (enable LOGIN out of band), and only then run `drizzle/deferred/force_rls.sql` (it has a guard and is not journaled). Open items:
 
 - **Never run `drizzle-kit push`** against a DB with these policies/roles/functions: Drizzle does not model them and push may drop or reset them. Use `generate` + hand-written SQL only.
-- Cross-workspace integrity: add composite FKs (e.g. `(source_version_id, workspace_id)` -> `source_versions(id, workspace_id)`) so a row cannot reference a parent from another workspace (RI checks bypass RLS).
-- Add a DB integration test for `lib/scoped.ts` (the unit test only checks the batch shape with a mocked db).
-- Child tables inheriting via EXISTS (`chat_messages`, `ingestion_jobs`, `documents`, `rag_trace_chunks`, `rag_evaluations`): add a guard test that fails when a new table with a parent FK but no `workspace_id` appears without a policy.
+- DONE: cross-workspace integrity. `drizzle/0019_workspace_composite_fks.sql` adds `UNIQUE (id, workspace_id)` on the eight parents and 23 composite FKs `(col, workspace_id) -> parent(id, workspace_id)` (rollback in `drizzle/rollback/`). It pre-checks existing data and aborts with per-relationship counts and a finder query, so run it on a Neon branch copy first. Nullable SET NULL columns use `ON DELETE SET NULL (col)` (PG15+; skipped with a NOTICE on older servers). Tests: `intelligence/tests/schema/test_t19_composite_fks.py`; the nosuperuser script covers it.
+- DONE: DB integration test for `lib/scoped.ts`: `__tests__/scoped.db.test.ts` (skips without `DATABASE_URL_TEST` + psql; runs the batch as `scribe_app` via a psql shim because the app's `db` is neon-http).
+- DONE: guard `intelligence/tests/schema/test_workspace_scope_guard.py` fails when a table has an FK into a workspace-scoped parent but neither `workspace_id` nor an RLS policy.
 - No TS callers use `scoped()` yet; `ensurePersonalWorkspace` should call `app_ensure_personal_workspace` once on `scribe_app`. `scribe_eval.ingest_corpus.ensure_eval_workspace` needs a privileged connection.
 
 ## 9. T26 claim verification (notes)
