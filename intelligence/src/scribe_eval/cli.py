@@ -7,6 +7,7 @@
     uv run --project intelligence scribe-eval answer --rankings R.jsonl --split dev|validation [--generator real|fake]
     uv run --project intelligence scribe-eval judge-sheet --run <answer run dir> --out-dir <dir>
     uv run --project intelligence scribe-eval publish-run <run_dir> --database-url URL [--seeded|--mark-fake]
+    uv run --project intelligence scribe-eval gate --database-url <test db> [--refresh-cache|--write-baseline]
     uv run --project intelligence scribe-eval judge-agreement --key <dir>/judge_key.json [--labels human_labels.csv]
 """
 
@@ -18,6 +19,7 @@ import sys
 from pathlib import Path
 
 from .bootstrap import paired_bootstrap
+from .gate import DEFAULT_BASELINE, DEFAULT_CACHE, DEFAULT_CORPUS, DEFAULT_DATASET, DEFAULT_PROFILE, DEFAULT_SPLIT
 from .metrics import METRIC_NAMES
 from .runs import DEFAULT_RUNS_DIR, RunRecord, config_hash, load_run, now_iso
 from .scoring import ScoreError, dataset_version, format_table, score_split, summary_to_json
@@ -255,6 +257,12 @@ def _judge_agreement(args: argparse.Namespace) -> int:
     return 0 if rep["status"] in ("ok", "pending") else 1
 
 
+def _gate(args: argparse.Namespace) -> int:
+    from .gate import run_gate
+
+    return run_gate(args)
+
+
 def _ingest_corpus(args: argparse.Namespace) -> int:
     from .ingest_corpus import run
 
@@ -325,6 +333,22 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--mark-fake", action="store_true", help="force the FAKE - NOT A MEASUREMENT stamp")
     pr.add_argument("--parse-lost", action="append", default=[], help="gold document known to be lost by the parser (repeatable)")
     pr.set_defaults(func=_publish_run)
+    gt = sub.add_parser("gate", help="retrieval regression gate from cached provider responses (T31)")
+    gt.add_argument("--database-url", default=None, help="throwaway database whose name contains 'test'; env never consulted")
+    gt.add_argument("--dataset", default=DEFAULT_DATASET)
+    gt.add_argument("--corpus", default=DEFAULT_CORPUS)
+    gt.add_argument("--split", default=DEFAULT_SPLIT, choices=["dev", "validation", "test"])
+    gt.add_argument("--profile", default=DEFAULT_PROFILE)
+    gt.add_argument("--baseline", default=DEFAULT_BASELINE)
+    gt.add_argument("--cache", default=DEFAULT_CACHE, help="committed jsonl.gz of cached embedding + rerank responses")
+    gt.add_argument("--tau", type=float, default=None, help="abstention threshold (default: the profile's gate tau)")
+    gt.add_argument("--out", default=None, help="also write gate-result.json here")
+    gt.add_argument("--refresh-cache", action="store_true", help="LOCAL ONLY: call the providers and rewrite the cache")
+    gt.add_argument("--write-baseline", action="store_true", help="replay the cache and write the baseline file")
+    gt.add_argument("--status", action="store_true", help="print whether a real baseline exists (and set the GitHub 'armed' output); exit 0")
+    gt.add_argument("--seeded", action="store_true", help="label the result as a seeded fixture (never armed)")
+    gt.add_argument("--accept-seeded-baseline", action="store_true", help="tests only: treat a seeded baseline as armed")
+    gt.set_defaults(func=_gate)
     ic = sub.add_parser("ingest-corpus", help="index the corpus into the eval workspace (T12)")
     ic.add_argument("--corpus", default="fixtures/corpus")
     ic.add_argument("--profile", default="structural-v1", choices=["structural-v1"])
