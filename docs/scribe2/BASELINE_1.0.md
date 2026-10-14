@@ -1,6 +1,6 @@
 # Scribe 1.0 baseline behavior
 
-This table was documented from the code on branch `codex/production-readiness` (commit `62ccb1a`), before any Scribe 2.0 change. Measured retrieval numbers for this baseline are in T07 (`benchmarks/baseline-1.0.md`).
+This table was documented from the code on branch `codex/production-readiness` (commit `62ccb1a`), before any Scribe 2.0 change. File and line references point at that commit, not at the current tree. Measured retrieval numbers for this baseline (preliminary) are in [`benchmarks/baseline-1.0.md`](benchmarks/baseline-1.0.md).
 
 | Area | Current behavior | Where |
 |---|---|---|
@@ -12,7 +12,7 @@ This table was documented from the code on branch `codex/production-readiness` (
 | Page numbers | Estimated as `ceil(charOffset / totalLength * numPages)`; never exact, no bounding box | [lib/chunking.ts:31-35](../../lib/chunking.ts) |
 | PDF extraction | `pdf-parse` flat text; page count only | [lib/ingestion/extract.ts:18-23](../../lib/ingestion/extract.ts) |
 | Scanned PDFs | Rejected as unsupported | commit `6f99b06` |
-| Duplicate ingestion paths | Two writers: `lib/ingestion/source-intake.ts` and legacy `lib/ingestion/worker.ts` (plus `/api/uploads/complete`) | [lib/ingestion/worker.ts:64](../../lib/ingestion/worker.ts) |
+| Duplicate ingestion paths | Two writers: `lib/ingestion/source-intake.ts` and legacy `lib/ingestion/worker.ts` (plus `/api/uploads/complete`) | `lib/ingestion/worker.ts:64` (deleted in T04; view at commit `62ccb1a`) |
 | Re-ingestion | Deletes old chunks before inserting new ones (lossy on failure) | `lib/ingestion/source-intake.ts` |
 | Citations | Prompt asks the model to cite; nothing verifies citations | [app/api/chat/route.ts:263-274](../../app/api/chat/route.ts) |
 | Fake Sources fallback | `ensureStructuredAnswer` appends "No source links were generated. Please ask to re-run with citations." | [app/api/chat/route.ts:89-108](../../app/api/chat/route.ts) |
