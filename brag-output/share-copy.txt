@@ -1,0 +1,1 @@
+Ask your documents. Check every answer. Scribe cites its source, opens it at the exact page, and marks each claim as verified, partly supported, unsupported or uncited. Open source (MIT): github.com/marsh15/SCRIBE
