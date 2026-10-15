@@ -5,7 +5,6 @@ const schema = z.object({
   NEON_DATABASE_URL: optionalSecret,
   GOOGLE_GENERATIVE_AI_API_KEY: optionalSecret,
   BLOB_READ_WRITE_TOKEN: optionalSecret,
-  UPLOAD_SIGNING_SECRET: optionalSecret,
   CRON_SECRET: optionalSecret,
   INTERNAL_SERVICE_SECRET: optionalSecret,
   VERCEL_AUTOMATION_BYPASS_SECRET: optionalSecret,

@@ -31,7 +31,7 @@ The Python service takes the workspace only from the verified internal token or 
 
 ## Python dependencies
 
-Runtime dependencies are listed twice: in `intelligence/pyproject.toml` and in the root `requirements.txt`, which the Vercel Python runtime uses. Keep them in sync by hand. Nothing enforces this today, despite the comment at the top of `requirements.txt`.
+Runtime dependencies are listed twice: in `intelligence/pyproject.toml` and in the root `requirements.txt`, which the Vercel Python runtime uses. Keep them in sync by hand; `intelligence/tests/test_requirements_sync.py` fails when they differ.
 
 ## Evaluation rules
 
