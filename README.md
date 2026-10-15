@@ -8,11 +8,11 @@ The code on this branch is **Scribe 2.0**, a rebuild of the retrieval and ingest
 
 ## Demo
 
-<video src="docs/demo/demo.mp4" poster="docs/demo/demo-poster.jpg" controls muted playsinline width="100%"></video>
+![Scribe demo: a question about annual leave, the answer citing the 2026 policy, the citation opened at its page, and the claim verdicts](docs/demo/demo.gif)
 
-[![Scribe demo: two leave policies, one cited answer](docs/demo/demo-poster.jpg)](docs/demo/demo.mp4)
+[Watch the full-quality video with sound](docs/demo/demo.mp4) (22 seconds, 1080p H.264; GitHub opens its own player). The clip above is the same video as a looping GIF, because GitHub does not render `<video>` tags that point at repository files.
 
-If the player above does not load, click the poster to open the video (22 seconds, 1080p H.264). It is an animated walkthrough built from the app's UI strings and styles and the fictional Northwind fixture PDFs: a question about annual leave, the answer citing the 2026 policy, the citation opened at its page, and the claim verdicts. It is not a recording of a running deployment.
+It is an animated walkthrough built from the app's UI strings and styles and the fictional Northwind fixture PDFs: a question about annual leave, the answer citing the 2026 policy, the citation opened at its page, and the claim verdicts. It is not a recording of a running deployment.
 
 ## Contents
 

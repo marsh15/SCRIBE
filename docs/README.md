@@ -49,4 +49,4 @@ Start with the [project README](../README.md). The files below are grouped by wh
 | File | Contents |
 |---|---|
 | [`PROJECT_WORKING_EXPLAINED.md`](PROJECT_WORKING_EXPLAINED.md) | Conceptual walkthrough of source intake, chunking, embeddings, chat and the inspector, as the legacy engine works |
-| [`demo/demo.mp4`](demo/demo.mp4) | 22-second animated walkthrough of the version-conflict example (poster `demo/demo-poster.jpg`). Built from the app's UI strings and styles and the fixture PDFs; not a recording of a running deployment. [`demo/launch-video-plan.md`](demo/launch-video-plan.md) is its storyboard and [`demo/share-copy.txt`](demo/share-copy.txt) the share caption |
+| [`demo/demo.mp4`](demo/demo.mp4), [`demo.gif`](demo/demo.gif) | 22-second animated walkthrough (GIF is the silent version embedded in the README) of the version-conflict example (poster `demo/demo-poster.jpg`). Built from the app's UI strings and styles and the fixture PDFs; not a recording of a running deployment. [`demo/launch-video-plan.md`](demo/launch-video-plan.md) is its storyboard and [`demo/share-copy.txt`](demo/share-copy.txt) the share caption |
