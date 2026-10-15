@@ -44,9 +44,9 @@ Start with the [project README](../README.md). The files below are grouped by wh
 | [`scribe2/fresh-clone-check.md`](scribe2/fresh-clone-check.md) | Record of a fresh-clone check at commit `63fa5bf` |
 | [`scribe2/BASELINE_1.0.md`](scribe2/BASELINE_1.0.md) | Scribe 1.0 behaviour as read from the code before 2.0 work, with file and line references |
 
-## Background on the original (1.0 / legacy-engine) pipeline
+## Background on the original (1.0 / legacy-engine) pipeline and demo
 
 | File | Contents |
 |---|---|
 | [`PROJECT_WORKING_EXPLAINED.md`](PROJECT_WORKING_EXPLAINED.md) | Conceptual walkthrough of source intake, chunking, embeddings, chat and the inspector, as the legacy engine works |
-| [`SCRIBE_WBD_SDE_FRESHER_INTERVIEW_GUIDE.md`](SCRIBE_WBD_SDE_FRESHER_INTERVIEW_GUIDE.md) | Personal interview-preparation notes written against the 1.0 pipeline. Not engineering documentation |
+| [`demo/demo.mp4`](demo/demo.mp4) | 22-second animated walkthrough of the version-conflict example (poster `demo/demo-poster.jpg`). Built from the app's UI strings and styles and the fixture PDFs; not a recording of a running deployment. [`demo/launch-video-plan.md`](demo/launch-video-plan.md) is its storyboard and [`demo/share-copy.txt`](demo/share-copy.txt) the share caption |

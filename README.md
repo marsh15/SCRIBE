@@ -6,6 +6,14 @@ A retrieval-augmented question-answering workspace for private documents. Users 
 
 The code on this branch is **Scribe 2.0**, a rebuild of the retrieval and ingestion layers of the original Scribe app. Read [Status](#status) before relying on it: parts of 2.0 have never run against the production providers, and production still serves the pre-2.0 build.
 
+## Demo
+
+<video src="docs/demo/demo.mp4" poster="docs/demo/demo-poster.jpg" controls muted playsinline width="100%"></video>
+
+[![Scribe demo: two leave policies, one cited answer](docs/demo/demo-poster.jpg)](docs/demo/demo.mp4)
+
+If the player above does not load, click the poster to open the video (22 seconds, 1080p H.264). It is an animated walkthrough built from the app's UI strings and styles and the fictional Northwind fixture PDFs: a question about annual leave, the answer citing the 2026 policy, the citation opened at its page, and the claim verdicts. It is not a recording of a running deployment.
+
 ## Contents
 
 [Problem](#problem-and-approach) · [Status](#status) · [Architecture](#architecture) · [Features](#implemented-features) · [Tech stack](#tech-stack) · [Getting started](#getting-started) · [Configuration](#configuration) · [Database](#database-and-migrations) · [Commands](#commands) · [Testing](#testing) · [Evaluation](#evaluation) · [Deployment](#deployment) · [Design decisions](#design-decisions-and-trade-offs) · [Limitations](#known-limitations) · [Security](#security) · [Documentation](#documentation) · [Repository layout](#repository-layout)
