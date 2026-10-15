@@ -1,4 +1,6 @@
+import { notFound } from "next/navigation";
 import { sql } from "drizzle-orm";
+import { isAdmin } from "@/lib/auth";
 import { db } from "@/lib/db-config";
 import { chats, files, ingestionJobs, subscriptions } from "@/lib/db-schema";
 
@@ -37,6 +39,8 @@ async function getMetrics() {
 }
 
 export default async function AdminAnalyticsPage() {
+  // These are instance-wide counts, so a plain sign-in is not enough: non-admins get the same 404 as an unknown path.
+  if (!(await isAdmin())) notFound();
   const metrics = await getMetrics();
 
   return (

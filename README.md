@@ -163,7 +163,6 @@ Values are never committed. `.env.example` lists the web app's names; Python-onl
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `RAZORPAY_PLAN_PRO_INR`, `RAZORPAY_PLAN_TEAM_INR`, `RAZORPAY_MANAGE_BILLING_URL` | only with billing | Razorpay integration |
 | `ENABLE_SUPERMEMORY`, `SUPERMEMORY_API_KEY` | no | Supermemory wrapper; ignored when `RETRIEVAL_ENGINE=python` |
 | `ENABLE_RAG_EVALS`, `GOOGLE_RAG_JUDGE_MODEL` | no | LLM-judge scoring of legacy-engine answers |
-| `FEATURE_ASYNC_INGESTION_ENABLED`, `UPLOAD_SIGNING_SECRET` | no | Declared in `.env.example` and `lib/env.ts`, but no current route reads them (`lib/uploads/signature.ts` is only imported by tests) |
 
 **Python service and CLIs**
 
@@ -228,7 +227,7 @@ python3 scripts/gen_architecture_diagram.py
 ## Testing
 
 - **TypeScript:** `npm test` runs vitest (Node environment, jsdom for `.tsx` files that opt in). A run on this branch passed 416 tests and skipped 7 that need a database. `__tests__/security/` holds the route-table guard, the IDOR sweep, proxy access rules, log-capture canaries and adversarial prompt-injection documents.
-- **Python:** `uv run pytest` collects 1,780 tests across `tests/ingestion`, `retrieval`, `integration`, `security`, `evaluation`, `perf` and `schema`. Database-backed tests are skipped unless `DATABASE_URL_TEST` points at a database whose name contains `test`. They were not re-run for this documentation pass; CI runs them against a pgvector service container.
+- **Python:** `uv run pytest` collects 1,781 tests across `tests/ingestion`, `retrieval`, `integration`, `security`, `evaluation`, `perf` and `schema`. Database-backed tests are skipped unless `DATABASE_URL_TEST` points at a database whose name contains `test`. They were not re-run for this documentation pass; CI runs them against a pgvector service container.
 - **CI** (`.github/workflows/ci.yml`): `node` (`npm run check`), `python` (non-superuser migration check, schema replay, `pytest`) and `retrieval-gate` (replay of cached provider responses, no keys). The gate passes with a "GATE NOT ARMED" warning until a baseline is committed ([`release-rules.md`](docs/scribe2/release-rules.md)).
 
 Passing tests show that code behaves as specified against fakes or recorded responses. They are not retrieval-quality measurements.
@@ -285,7 +284,7 @@ The full list (D1-D22, invariants INV-1 to INV-16) is in [`docs/scribe2/DESIGN.m
 - In the preliminary run, lexical-only retrieval returned almost nothing for natural-language questions because `websearch_to_tsquery` ANDs every term; hybrid results therefore equal dense results. Not yet fixed.
 - The CI retrieval gate is not armed.
 - FORCE RLS is deferred, no TypeScript caller uses `scoped()`, and Neon's default owner role probably has `BYPASSRLS`. Real database-enforced isolation needs the app to connect as `scribe_app`.
-- `/admin/analytics` has no admin check beyond sign-in: any signed-in user can open it and sees aggregate counts only.
+- `/admin/analytics` (instance-wide counts) is restricted to users whose Clerk session token carries `metadata.role = "admin"`; everyone else gets a 404. Until that claim is configured in the Clerk dashboard (user public metadata `{"role": "admin"}` plus `{"metadata": "{{user.public_metadata}}"}` in the session token claims) nobody can open the page.
 - Source versions and claim verification require the Python engine; the legacy engine does neither.
 - The 100,000-chunk performance step was not measured. No rate limiting on `/api/py/*`; a single static internal secret ([`threat-model.md`](docs/scribe2/threat-model.md) section 6).
 - Only the active version of a source is searched. No shared workspaces, roles or OpenTelemetry (ADR-0012).
