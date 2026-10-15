@@ -10,7 +10,7 @@ Nothing in this script has been run against a deployed app or real providers. Wo
 |---|---|---|---|
 | P1 | Vercel preview deploy works (Python co-deploys, `/api/py/health` answers 200 with a minted token) | `docs/scribe2/T02-verification.md` | all |
 | P2 | Real keys set: `GOOGLE_GENERATIVE_AI_API_KEY`, `VOYAGE_API_KEY`, `INTERNAL_SERVICE_SECRET`, `BLOB_READ_WRITE_TOKEN` | host settings; never in git | 2-12 |
-| P3 | Demo database is a Neon branch or a local DB (never production); migrations applied incl. `0013`-`0018` | README Quick start; Neon check in README status | all |
+| P3 | Demo database is a Neon branch or a local DB (never production); migrations applied incl. `0013`-`0019` | README Quick start; Neon check in README status | all |
 | P4 | `RETRIEVAL_ENGINE=python` and `INGEST_ENGINE=python` set for the demo environment (both default to `legacy`) | env | 3-9 |
 | P5 | Demo account created by signing in once, then seeded: `scripts/demo-seed/demo_seed.py --apply` | `README.md` Demo data | 2-12 |
 | P6 | Rehearse every question once and write down what the app actually answers; compare with `fixtures/corpus/FACTS.md` (itself still unreviewed) | by hand | 3-9 |

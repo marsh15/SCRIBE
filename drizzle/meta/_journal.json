@@ -134,6 +134,13 @@
       "when": 1784764800000,
       "tag": "0018_legacy_upgrade_state",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1784851200000,
+      "tag": "0019_workspace_composite_fks",
+      "breakpoints": true
     }
   ]
 }

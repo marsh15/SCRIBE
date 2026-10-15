@@ -5,7 +5,7 @@ Every bullet below is one of three things: (a) a count taken from a command run 
 ## Safe to use now
 
 Counts (re-run to confirm before quoting; the commands are in the README):
-- 1,740 Python tests pass with 0 skipped against a local pgvector Postgres (`uv run pytest -q`, 60 test files).
+- (Counts below were taken at T33 and are older than the code; re-run before quoting.) 1,740 Python tests pass with 0 skipped against a local pgvector Postgres (`uv run pytest -q`, 60 test files).
 - 403 TypeScript tests pass (vitest, 47 files; 3 skipped because they need a database); `tsc --noEmit` and `eslint` report no errors.
 - 39 commits on `scribe2/m0-foundation` since upstream `main` (`git rev-list --count 0edddb1..HEAD`; includes merge commits).
 
@@ -18,7 +18,7 @@ Built (literal repo facts):
 - Postgres row-level-security policies, a NOBYPASSRLS application role and SECURITY DEFINER queue functions. The policies are not yet forced.
 - Evaluation toolkit: 24-document synthetic corpus, 200-case golden set across 10 categories (80 cases machine-drafted and unreviewed), metrics with paired bootstrap confidence intervals, answer-level scoring, run dashboard, 2-5 profile compare lab, CI regression gate (not armed), scaling harness.
 - Security work: an adversarial-document suite, an IDOR sweep over every route and server action, a token-rejection matrix of about 550 parametrised cases, log-canary tests, and a written threat model with 15 documented residual risks. This was an engineering review with tests, not a penetration test.
-- 12 architecture decision records, 19 SQL migrations (`0000`-`0018`), a documented 14-week milestone plan.
+- 12 architecture decision records, 20 SQL migrations (`0000`-`0019`), a documented 14-week milestone plan.
 
 Measured, with limits (from `docs/scribe2/benchmarks/performance.md`, synthetic data, one Mac laptop, OrbStack Postgres 17 with pgvector 0.8.7, scales 1k/10k/30k chunks, 100k not measured, not Neon, not Vercel, not real embeddings):
 - Exact dense search about 14 microseconds per eligible chunk, linear: p50 9.9 ms at 700 chunks, 79 ms at 7,000, 300 ms at 21,000.

@@ -6,6 +6,8 @@ It is a complete document-to-answer system, not only a chatbot. It stores source
 
 This document explains the project conceptually, without code.
 
+> This describes the original pipeline, which is what `INGEST_ENGINE=legacy` and `RETRIEVAL_ENGINE=legacy` (the defaults) still run: whole-file extraction, overlapping character chunks, dense-only search, no claim verification. The Python engine in Scribe 2.0 differs in each of those steps; see [`scribe2/ARCHITECTURE.md`](scribe2/ARCHITECTURE.md).
+
 ## The big picture
 
 Scribe has three major responsibilities:

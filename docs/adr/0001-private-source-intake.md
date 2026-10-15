@@ -12,7 +12,7 @@ Scribe previously chose between server upload, browser extraction, and queued in
 
 All new Sources upload directly to private Vercel Blob with a constrained client token. A signed Blob completion callback queues one ingestion job. A bearer-authenticated Vercel cron invokes the Source intake module on the deployment's supported cadence. On Vercel Hobby this is daily; on Pro it can be changed to once per minute. The module owns Source state, retry, indexing, metering, and deletion behavior.
 
-Legacy batch endpoints remain temporarily available for already-processing Sources without a Blob URL, but the product no longer creates such Sources.
+The legacy batch and signed-upload endpoints were removed in Scribe 2.0 (T04) and now answer 410 on every method.
 
 ## Consequences
 

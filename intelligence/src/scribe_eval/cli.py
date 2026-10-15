@@ -3,6 +3,7 @@
     uv run --project intelligence scribe-eval validate benchmarks/datasets/golden-v1
     uv run --project intelligence scribe-eval assign-splits <dataset_dir> --seed N
     uv run --project intelligence scribe-eval score --rankings R.jsonl --dataset benchmarks/datasets/golden-v1 --split dev
+    uv run --project intelligence scribe-eval run-profile --profile hybrid-rrf --split dev --database-url URL --out R.jsonl
     uv run --project intelligence scribe-eval compare <run_a_dir> <run_b_dir>
     uv run --project intelligence scribe-eval answer --rankings R.jsonl --split dev|validation [--generator real|fake]
     uv run --project intelligence scribe-eval judge-sheet --run <answer run dir> --out-dir <dir>
@@ -269,6 +270,12 @@ def _ingest_corpus(args: argparse.Namespace) -> int:
     return run(args)
 
 
+def _run_profile(args: argparse.Namespace) -> int:
+    from .run_profile import run
+
+    return run(args)
+
+
 def _publish_run(args: argparse.Namespace) -> int:
     from .publish import run
 
@@ -357,6 +364,15 @@ def main(argv: list[str] | None = None) -> int:
     ic.add_argument("--reset", action="store_true", help="wipe the eval workspace's rows first")
     ic.add_argument("--cache-path", default="benchmarks/cache/py-embeddings.sqlite")
     ic.set_defaults(func=_ingest_corpus)
+    rp = sub.add_parser("run-profile", help="run a retrieval profile on the ingested eval workspace, write rankings")
+    rp.add_argument("--profile", required=True)
+    rp.add_argument("--split", required=True, choices=["dev", "validation", "test"])
+    rp.add_argument("--database-url", default=None, help="required; the environment is never consulted")
+    rp.add_argument("--dataset", default="benchmarks/datasets/golden-v1")
+    rp.add_argument("--out", required=True, help="rankings JSONL to write")
+    rp.add_argument("--cache-path", default="benchmarks/cache/py-embeddings.sqlite")
+    rp.add_argument("--limit", type=int, default=0, help="first N cases only (smoke test)")
+    rp.set_defaults(func=_run_profile)
     args = parser.parse_args(argv)
     return args.func(args)
 

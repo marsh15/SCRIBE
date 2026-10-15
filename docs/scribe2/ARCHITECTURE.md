@@ -1,6 +1,6 @@
 # Scribe 2.0 architecture
 
-This file describes how the system is built **as of branch `scribe2/m0-foundation` (HEAD `63fa5bf` plus the T33 files)**. It covers the code that exists. Decisions and invariants live in `DESIGN.md` (cited here as "Design §"). Anything not run against a real deployment or real provider is marked **not verified**.
+This file describes how the system is built **as of branch `scribe2/m0-foundation` (last reviewed against commit `17097d3`)**. It covers the code that exists. Decisions and invariants live in `DESIGN.md` (cited here as "Design §"). Anything not run against a real deployment or real provider is marked **not verified**.
 
 ## 1. Components
 
@@ -45,7 +45,7 @@ Eval, perf and the regression gate run from the CLI (locally or in GitHub Action
 - **Evaluation:** `eval_runs`, `eval_results` (global, read by the `/eval` dashboard for users with an eval workspace).
 - Billing tables stay keyed by user.
 
-Migrations are `drizzle/0000`-`0018`. Only `0010` onward are replayable on an empty database. `scripts/apply-migrations.sh` builds a schema from `lib/db-schema.ts` via `drizzle-kit export` and replays `0010+` (ADR-0003). The deferred, guarded, manual SQL is `drizzle/deferred/force_rls.sql`, `drizzle/deferred/retire_legacy.sql`.
+Migrations are `drizzle/0000`-`0019`. Only `0010` onward are replayable on an empty database. `scripts/apply-migrations.sh` builds a schema from `lib/db-schema.ts` via `drizzle-kit export` and replays `0010+` (ADR-0003). The deferred, guarded, manual SQL is `drizzle/deferred/force_rls.sql`, `drizzle/deferred/retire_legacy.sql`.
 
 ## 4. Ingestion step machine (Design §B3, ADR-0010, ADR-0011)
 
@@ -95,7 +95,7 @@ Chat uses `RETRIEVAL_ENGINE=python|legacy` (default `legacy`, with no silent fal
 
 The system runs as one Vercel Hobby project (300 s functions, 500 MB Python bundle, once-daily cron, non-commercial so `FEATURE_BILLING_ENABLED` stays off), with Neon Postgres and Vercel Blob. `vercel.json` has the two crons, the `/api/py/*` rewrite and the Python function config (`maxDuration` 300). Python dependencies for Vercel come from the root `requirements.txt`, which is kept in sync by hand with `intelligence/pyproject.toml`. If co-deployment fails, ADR-0002 prescribes a second Vercel project rooted at `intelligence/`. **Not verified on Vercel or Neon.**
 
-For local and CI use there are `docker-compose.yml` (pgvector pg17 on port 54329) and `.github/workflows/ci.yml` (jobs `node`, `python`, `retrieval-gate`; the CI jobs themselves have not run on GitHub).
+For local and CI use there are `docker-compose.yml` (pgvector pg17 on port 54329) and `.github/workflows/ci.yml` (jobs `node`, `python`, `retrieval-gate`; the three jobs pass on GitHub; the gate is not armed).
 
 ## 9. ADR index (`docs/adr/`)
 
@@ -118,8 +118,8 @@ For local and CI use there are `docker-compose.yml` (pgvector pg17 on port 54329
 
 - Hobby limits drive the design (Design §A2): resumable steps of at most 300 s, evaluation outside Vercel.
 - Only active versions are searched (D22); no shared workspaces or roles; no OpenTelemetry; lexical search is Postgres FTS, not BM25 (ADR-0012).
-- Retrieval profile choice and `tau` are not tuned (T17 not done), and which profile is best is **not measured**. See `benchmarks/final.md` (a placeholder).
+- Retrieval profile choice and `tau` are not tuned (T17 is partial: profiles A-C ran on dev and validation, see `benchmarks/m1-prelim.md`; D and E need a Voyage key), and which profile is best is **not measured**. `benchmarks/final.md` is a placeholder.
 - The golden set (200 cases, 80 of them machine-drafted and unreviewed) has not been human-reviewed. The retrieval gate has no real cache or baseline and is **not armed** (`release-rules.md`).
-- Scanned-PDF OCR, claim verification and reranking have only run against fakes or mock transports. No test has made a live Gemini or Voyage call.
+- Claim verification and reranking have only run against fakes or mock transports; Voyage has never been called. Live Gemini was used for the Scribe 1.0 baseline and the preliminary profile A-C run (embeddings and OCR of the scanned PDF), on a local database, not Neon.
 - Performance numbers are synthetic and come from one Mac. 100,000 chunks was not measured (`benchmarks/performance.md`).
 - Security work was an engineering review with tests, not a penetration test. `threat-model.md` §6 lists 15 open or accepted residual risks.

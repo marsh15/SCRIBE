@@ -11,8 +11,8 @@ It is empty because the preconditions in section 1 are not met today: the golden
 | 1 | Golden set human-reviewed (`benchmarks/datasets/golden-v1/REVIEW_FIRST.md`); 80 of the 200 cases are machine-drafted and unreviewed (`UNREVIEWED_T28.md`) | NOT MET |
 | 2 | Real `GOOGLE_GENERATIVE_AI_API_KEY` and `VOYAGE_API_KEY` in the shell (never committed) | not checked by this task; no live call has ever been made |
 | 3 | Throwaway Postgres whose name contains `test` with the schema applied (`scripts/apply-migrations.sh`) | local container only |
-| 4 | Profiles A-E scored on dev/validation, a default chosen by a written rule, `tau` calibrated (task T17) | NOT DONE (T17 skipped) |
-| 5 | Scribe 1.0 baseline measured live (`docs/scribe2/benchmarks/baseline-1.0-howto.md`, Node 18) and written to `docs/scribe2/benchmarks/baseline-1.0.md` | NOT DONE (file does not exist) |
+| 4 | Profiles A-E scored on dev/validation, a default chosen by a written rule, `tau` calibrated (task T17) | PARTIAL: profiles A-C scored on dev/validation (`m1-prelim.md`); D, E, the default choice and `tau` need a Voyage key |
+| 5 | Scribe 1.0 baseline measured live (`docs/scribe2/benchmarks/baseline-1.0-howto.md`, Node 18) and written to `docs/scribe2/benchmarks/baseline-1.0.md` | DONE 2026-10-12, preliminary (`baseline-1.0.md`); repeat after the golden-set review |
 | 6 | A runner that writes a rankings JSONL (`rankings-format.md`) from the Python retriever for a chosen profile on the test split | NOT COMMITTED. `scribe-eval score` consumes rankings but nothing in the repo emits them for arbitrary profiles from `/retrieve` (the gate does this internally for `hybrid-rrf-rerank` on validation only). Writing this runner is part of T17 |
 
 ## 2. Commands to produce the numbers (run by the owner, in this order)

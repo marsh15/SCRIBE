@@ -1,53 +1,98 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 680" width="1200" height="680" role="img" aria-label="Scribe 2.0 architecture">
-<defs><filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="3"/></filter><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10" fill="none" stroke="#1e1e1e" stroke-width="1.6"/></marker></defs>
-<rect width="1200" height="680" fill="#ffffff"/>
-<g font-family='"Virgil","Segoe Print","Bradley Hand","Comic Sans MS",cursive' fill="#1e1e1e" text-anchor="middle">
-<text x="600.0" y="28" font-size="22" font-weight="bold">Scribe 2.0 architecture</text>
-<g filter="url(#rough)">
-<rect x="30" y="240" width="150" height="80" rx="10" fill="#e7f5ff" stroke="#1e1e1e" stroke-width="2"/>
-<rect x="250" y="200" width="240" height="160" rx="10" fill="#d3f9d8" stroke="#1e1e1e" stroke-width="2"/>
-<rect x="620" y="200" width="250" height="160" rx="10" fill="#fff3bf" stroke="#1e1e1e" stroke-width="2"/>
-<rect x="960" y="50" width="210" height="110" rx="10" fill="#ffe3e3" stroke="#1e1e1e" stroke-width="2"/>
-<rect x="960" y="230" width="210" height="90" rx="10" fill="#f3d9fa" stroke="#1e1e1e" stroke-width="2"/>
-<rect x="620" y="460" width="190" height="90" rx="10" fill="#e5dbff" stroke="#1e1e1e" stroke-width="2"/>
-<rect x="860" y="460" width="190" height="90" rx="10" fill="#e5dbff" stroke="#1e1e1e" stroke-width="2"/>
-<rect x="250" y="40" width="240" height="80" rx="10" fill="#f1f3f5" stroke="#1e1e1e" stroke-width="2"/>
-<path d="M180 280 L250 280" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
-<path d="M490 280 L620 280" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
-<path d="M490 215 L960 105" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
-<path d="M870 215 L960 140" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
-<path d="M870 300 L960 280" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
-<path d="M105 320 L105 405 L1065 405 L1065 320" fill="none" stroke="#1e1e1e" stroke-width="2" stroke-dasharray="8 6" marker-end="url(#ah)"/>
-<path d="M700 360 L700 460" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
-<path d="M400 360 L640 465" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
-<path d="M820 360 L900 460" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
-<path d="M490 80 L960 90" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
-</g>
-<text x="105.0" y="268" font-size="19" font-weight="bold">Browser</text>
-<text x="370.0" y="228" font-size="19" font-weight="bold">Next.js on Vercel</text>
-<text x="370.0" y="252" font-size="14">Clerk auth, chat stream,</text>
-<text x="370.0" y="272" font-size="14">uploads, mints 60 s</text>
-<text x="370.0" y="292" font-size="14">internal token</text>
-<text x="745.0" y="228" font-size="19" font-weight="bold">Python FastAPI</text>
-<text x="745.0" y="252" font-size="14">/retrieve /compare /verify</text>
-<text x="745.0" y="272" font-size="14">/evidence/open</text>
-<text x="745.0" y="292" font-size="14">/ingest/*</text>
-<text x="1065.0" y="78" font-size="19" font-weight="bold">Postgres + pgvector</text>
-<text x="1065.0" y="102" font-size="14">RLS policies, FTS,</text>
-<text x="1065.0" y="122" font-size="14">queue functions</text>
-<text x="1065.0" y="258" font-size="19" font-weight="bold">Vercel Blob</text>
-<text x="1065.0" y="282" font-size="14">private originals</text>
-<text x="715.0" y="488" font-size="19" font-weight="bold">Gemini</text>
-<text x="715.0" y="512" font-size="14">embeddings, OCR,</text>
-<text x="715.0" y="532" font-size="14">verifier</text>
-<text x="955.0" y="488" font-size="19" font-weight="bold">Voyage rerank</text>
-<text x="955.0" y="512" font-size="14">behind an adapter</text>
-<text x="370.0" y="68" font-size="19" font-weight="bold">scribe-eval / scribe-perf</text>
-<text x="370.0" y="92" font-size="14">local or GitHub Actions</text>
-<text x="500" y="268" font-size="13" text-anchor="start">/api/py/* + token</text>
-<text x="878" y="318" font-size="13" text-anchor="start">download</text>
-<text x="560" y="396" font-size="13" text-anchor="start">direct upload</text>
-<text x="30" y="630" font-size="14" text-anchor="start">Query path: authenticate, resolve workspace, POST /api/py/retrieve, one REPEATABLE READ transaction,</text>
-<text x="30" y="650" font-size="14" text-anchor="start">dense + lexical search, RRF (k=60), rerank, dedup, packing, answerability gate, [E#] evidence bundle.</text>
-<text x="30" y="670" font-size="14" text-anchor="start">Ingest path: upload to Blob, then leased resumable steps PARSE, OCR, CHUNK, EMBED, ACTIVATE.</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 840" width="1300" height="840" role="img" aria-label="Scribe 2.0 architecture">
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#1e1e1e"/></marker></defs>
+<rect width="1300" height="840" fill="#ffffff"/>
+<g font-family="Helvetica, Arial, sans-serif" fill="#1e1e1e">
+<text x="20" y="34" font-size="22" font-weight="bold">Scribe 2.0 architecture</text>
+<rect x="210" y="100" width="630" height="355" rx="14" fill="none" stroke="#868e96" stroke-width="1.5" stroke-dasharray="7 5"/>
+<text x="224" y="122" font-size="14" fill="#495057">Vercel project (Hobby), one deployment</text>
+<path d="M150 330 L235 330" fill="none" stroke="#1e1e1e" stroke-width="1.8" marker-end="url(#ah)"/>
+<path d="M150 190 L235 190" fill="none" stroke="#1e1e1e" stroke-width="1.8" marker-end="url(#ah)"/>
+<path d="M500 290 L590 290" fill="none" stroke="#1e1e1e" stroke-width="1.8" marker-end="url(#ah)"/>
+<path d="M820 172 L890 172" fill="none" stroke="#1e1e1e" stroke-width="1.8" marker-end="url(#ah)"/>
+<path d="M820 270 L890 270" fill="none" stroke="#1e1e1e" stroke-width="1.8" marker-end="url(#ah)"/>
+<path d="M820 390 L890 390" fill="none" stroke="#1e1e1e" stroke-width="1.8" marker-end="url(#ah)"/>
+<path d="M705 430 L705 520 L890 520" fill="none" stroke="#1e1e1e" stroke-width="1.8" marker-end="url(#ah)"/>
+<path d="M330 150 L330 70 L1130 70 L1130 360 L1090 360" fill="none" stroke="#1e1e1e" stroke-width="1.8" marker-end="url(#ah)"/>
+<path d="M430 150 L430 92 L990 92 L990 130" fill="none" stroke="#1e1e1e" stroke-width="1.8" marker-end="url(#ah)"/>
+<path d="M290 430 L290 540" fill="none" stroke="#1e1e1e" stroke-width="1.8" marker-end="url(#ah)"/>
+<path d="M400 430 L400 540" fill="none" stroke="#1e1e1e" stroke-width="1.8" stroke-dasharray="7 5" marker-end="url(#ah)"/>
+<path d="M480 430 L480 485 L650 485 L650 540" fill="none" stroke="#1e1e1e" stroke-width="1.8" stroke-dasharray="7 5" marker-end="url(#ah)"/>
+<path d="M85 390 L85 650 L990 650 L990 560" fill="none" stroke="#1e1e1e" stroke-width="1.8" stroke-dasharray="7 5" marker-end="url(#ah)"/>
+<path d="M1215 480 L1215 420 L1090 420" fill="none" stroke="#1e1e1e" stroke-width="1.8" stroke-dasharray="7 5" marker-end="url(#ah)"/>
+<rect x="20" y="270" width="130" height="120" rx="10" fill="#e7f5ff" stroke="#1e1e1e" stroke-width="1.8"/>
+<text x="85.0" y="305.0" text-anchor="middle" font-size="15" font-weight="bold">Browser</text>
+<text x="85.0" y="325.0" text-anchor="middle" font-size="13">React UI, useChat</text>
+<text x="85.0" y="345.0" text-anchor="middle" font-size="13">pdf.js citation</text>
+<text x="85.0" y="365.0" text-anchor="middle" font-size="13">viewer</text>
+<rect x="20" y="150" width="130" height="80" rx="10" fill="#ffe8cc" stroke="#1e1e1e" stroke-width="1.8"/>
+<text x="85.0" y="185.0" text-anchor="middle" font-size="15" font-weight="bold">Vercel Cron</text>
+<text x="85.0" y="205.0" text-anchor="middle" font-size="13">daily 00:00, 01:00</text>
+<rect x="235" y="150" width="265" height="280" rx="10" fill="#d3f9d8" stroke="#1e1e1e" stroke-width="1.8"/>
+<text x="367.5" y="225.0" text-anchor="middle" font-size="15" font-weight="bold">Next.js 16 (Node functions)</text>
+<text x="367.5" y="245.0" text-anchor="middle" font-size="13">proxy.ts: Clerk middleware</text>
+<text x="367.5" y="265.0" text-anchor="middle" font-size="13">/api/chat: AI SDK stream</text>
+<text x="367.5" y="285.0" text-anchor="middle" font-size="13">/api/sources/*: Blob intake</text>
+<text x="367.5" y="305.0" text-anchor="middle" font-size="13">/api/evidence, /api/compare</text>
+<text x="367.5" y="325.0" text-anchor="middle" font-size="13">/api/internal/ingest/{run,sweep,tick}</text>
+<text x="367.5" y="345.0" text-anchor="middle" font-size="13">/api/billing/*, Razorpay webhook</text>
+<text x="367.5" y="365.0" text-anchor="middle" font-size="13">Mints the 60 s internal token</text>
+<rect x="590" y="150" width="230" height="280" rx="10" fill="#fff3bf" stroke="#1e1e1e" stroke-width="1.8"/>
+<text x="705.0" y="225.0" text-anchor="middle" font-size="15" font-weight="bold">Python FastAPI</text>
+<text x="705.0" y="245.0" text-anchor="middle" font-size="13">Vercel Python function</text>
+<text x="705.0" y="265.0" text-anchor="middle" font-size="13">/retrieve  /compare</text>
+<text x="705.0" y="285.0" text-anchor="middle" font-size="13">/evidence/open  /verify</text>
+<text x="705.0" y="305.0" text-anchor="middle" font-size="13">/ingest/{source,step,</text>
+<text x="705.0" y="325.0" text-anchor="middle" font-size="13">sweep,purge}</text>
+<text x="705.0" y="345.0" text-anchor="middle" font-size="13">Dense + FTS, RRF, rerank</text>
+<text x="705.0" y="365.0" text-anchor="middle" font-size="13">Parsers, chunker, indexer</text>
+<rect x="235" y="540" width="110" height="60" rx="10" fill="#e5dbff" stroke="#1e1e1e" stroke-width="1.8"/>
+<text x="290.0" y="565.0" text-anchor="middle" font-size="15" font-weight="bold">Clerk</text>
+<text x="290.0" y="585.0" text-anchor="middle" font-size="13">sessions</text>
+<rect x="360" y="540" width="170" height="60" rx="10" fill="#f8f9fa" stroke="#1e1e1e" stroke-width="1.8" stroke-dasharray="6 4"/>
+<text x="445.0" y="565.0" text-anchor="middle" font-size="15" font-weight="bold">Razorpay</text>
+<text x="445.0" y="585.0" text-anchor="middle" font-size="13">billing, off by default</text>
+<rect x="545" y="540" width="215" height="60" rx="10" fill="#f8f9fa" stroke="#1e1e1e" stroke-width="1.8" stroke-dasharray="6 4"/>
+<text x="652.5" y="565.0" text-anchor="middle" font-size="15" font-weight="bold">Supermemory</text>
+<text x="652.5" y="585.0" text-anchor="middle" font-size="13">optional, legacy engine</text>
+<rect x="890" y="130" width="200" height="85" rx="10" fill="#e5dbff" stroke="#1e1e1e" stroke-width="1.8"/>
+<text x="990.0" y="157.5" text-anchor="middle" font-size="15" font-weight="bold">Google Gemini</text>
+<text x="990.0" y="177.5" text-anchor="middle" font-size="13">embeddings, OCR, verifier</text>
+<text x="990.0" y="197.5" text-anchor="middle" font-size="13">chat (AI SDK)</text>
+<rect x="890" y="240" width="200" height="60" rx="10" fill="#e5dbff" stroke="#1e1e1e" stroke-width="1.8"/>
+<text x="990.0" y="265.0" text-anchor="middle" font-size="15" font-weight="bold">Voyage rerank</text>
+<text x="990.0" y="285.0" text-anchor="middle" font-size="13">behind an adapter</text>
+<rect x="890" y="330" width="200" height="120" rx="10" fill="#ffe3e3" stroke="#1e1e1e" stroke-width="1.8"/>
+<text x="990.0" y="365.0" text-anchor="middle" font-size="15" font-weight="bold">Neon Postgres</text>
+<text x="990.0" y="385.0" text-anchor="middle" font-size="13">pgvector, Postgres FTS</text>
+<text x="990.0" y="405.0" text-anchor="middle" font-size="13">RLS policies,</text>
+<text x="990.0" y="425.0" text-anchor="middle" font-size="13">queue functions</text>
+<rect x="890" y="480" width="200" height="80" rx="10" fill="#f3d9fa" stroke="#1e1e1e" stroke-width="1.8"/>
+<text x="990.0" y="515.0" text-anchor="middle" font-size="15" font-weight="bold">Vercel Blob</text>
+<text x="990.0" y="535.0" text-anchor="middle" font-size="13">private originals</text>
+<rect x="1140" y="480" width="150" height="100" rx="10" fill="#f1f3f5" stroke="#1e1e1e" stroke-width="1.8"/>
+<text x="1215.0" y="515.0" text-anchor="middle" font-size="15" font-weight="bold">scribe-eval</text>
+<text x="1215.0" y="535.0" text-anchor="middle" font-size="13">scribe-perf</text>
+<text x="1215.0" y="555.0" text-anchor="middle" font-size="13">CI retrieval gate</text>
+<rect x="161" y="305" width="41.0" height="18" fill="#ffffff" opacity="0.92"/>
+<text x="165" y="318" font-size="12.5" fill="#343a40">HTTPS</text>
+<rect x="156" y="165" width="47.599999999999994" height="18" fill="#ffffff" opacity="0.92"/>
+<text x="160" y="178" font-size="12.5" fill="#343a40">Bearer</text>
+<rect x="506" y="254" width="67.4" height="18" fill="#ffffff" opacity="0.92"/>
+<text x="510" y="267" font-size="12.5" fill="#343a40">/api/py/*</text>
+<rect x="726" y="495" width="126.8" height="18" fill="#ffffff" opacity="0.92"/>
+<text x="730" y="508" font-size="12.5" fill="#343a40">download originals</text>
+<rect x="696" y="45" width="126.8" height="18" fill="#ffffff" opacity="0.92"/>
+<text x="700" y="58" font-size="12.5" fill="#343a40">drizzle, neon-http</text>
+<rect x="516" y="75" width="206.0" height="18" fill="#ffffff" opacity="0.92"/>
+<text x="520" y="88" font-size="12.5" fill="#343a40">chat stream, legacy embeddings</text>
+<rect x="156" y="625" width="529.4" height="18" fill="#ffffff" opacity="0.92"/>
+<text x="160" y="638" font-size="12.5" fill="#343a40">direct upload with a client token; Blob then calls /api/sources/upload-complete</text>
+<rect x="1156" y="395" width="27.799999999999997" height="18" fill="#ffffff" opacity="0.92"/>
+<text x="1160" y="408" font-size="12.5" fill="#343a40">SQL</text>
+<line x1="20" y1="700" x2="1280" y2="700" stroke="#ced4da"/>
+<text x="20" y="726" font-size="13.5" fill="#343a40">Query: Next.js authenticates (Clerk), resolves the workspace, mints a 60 s token and calls POST /api/py/retrieve. Python runs one REPEATABLE READ</text>
+<text x="20" y="748" font-size="13.5" fill="#343a40">transaction: dense + lexical search, RRF (k=60), Voyage rerank, dedup, parent expansion, 6,000-token packing, answerability gate, [E#] evidence bundle.</text>
+<text x="20" y="770" font-size="13.5" fill="#343a40">Ingest: upload to Blob, then leased resumable steps PARSE, OCR, CHUNK, EMBED, ACTIVATE, driven by a self-firing tick route (Cron is the daily safety net).</text>
+<text x="20" y="792" font-size="13.5" fill="#343a40">Dashed arrows: optional or outside the request path. Razorpay is off unless FEATURE_BILLING_ENABLED; Supermemory applies to the legacy engine only.</text>
+<text x="20" y="814" font-size="13.5" fill="#343a40">scribe-eval / scribe-perf and the CI retrieval gate run locally or in GitHub Actions, never on Vercel, against a separate database and the same providers.</text>
 </g></svg>
