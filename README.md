@@ -4,7 +4,7 @@ A retrieval-augmented question-answering workspace for private documents. Users 
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
-The code on this branch is **Scribe 2.0**, a rebuild of the retrieval and ingestion layers of the original Scribe app. Read [Status](#status) before relying on it: parts of 2.0 have never run against the production providers, and production still serves the pre-2.0 build.
+The code in this repository is **Scribe 2.0**, a rebuild of the retrieval and ingestion layers of the original Scribe app. Read [Status](#status) before relying on it: parts of 2.0 have never run against the production providers, and production still serves the pre-2.0 build.
 
 ## Demo
 
@@ -31,7 +31,7 @@ Answers from a language model are only useful on private documents if the reader
 
 | Area | State |
 |---|---|
-| Code | Scribe 2.0 is merged to `main` (PR #10) and continues on `scribe2/m0-foundation`. |
+| Code | Scribe 2.0 is merged to `main` (PRs #10 and #11). |
 | Production | Not promoted. Merging PR #10 auto-deployed to Vercel on 2026-10-12 and broke production, because migrations `0008` and later had never run on Neon. Production was rolled back to the pre-merge build and Vercel production auto-assign was paused. The live site at [scribe-marsh.vercel.app](https://scribe-marsh.vercel.app) is that older build. Do not promote a `main` deployment before the migration rehearsal in [`HANDOVER.md`](docs/scribe2/HANDOVER.md) section 11. |
 | Engine flags | `INGEST_ENGINE` and `RETRIEVAL_ENGINE` both default to `legacy` (the original TypeScript pipeline). The Python pipeline described below is opt-in. |
 | Providers | Gemini has been used for the Scribe 1.0 baseline and a preliminary run of three retrieval profiles on a local database. Voyage rerank has never been called (no key). Neon has never been used with the 2.0 schema. |
