@@ -55,6 +55,13 @@ SELECT indexname, indexname <> 'ingestion_jobs_file_id_unique' AS ok FROM pg_ind
   AND indexname IN ('chunk_embeddings_1536_hnsw', 'ingestion_jobs_file_version_unique', 'ingestion_jobs_file_id_unique')
 ORDER BY 1;
 
+\echo '== 6b. 0020 legacy-build shim (EXPECT 3 rows, all tgenabled = O; the function SECURITY DEFINER owned by scribe_definer)'
+SELECT t.tgrelid::regclass AS tbl, t.tgname, t.tgenabled FROM pg_trigger t
+WHERE NOT t.tgisinternal AND t.tgname IN ('files_legacy_default_workspace', 'chats_legacy_default_workspace',
+  'rag_traces_legacy_default_workspace') ORDER BY 1;
+SELECT p.proname, p.prosecdef, pg_get_userbyid(p.proowner) AS owner FROM pg_proc p
+WHERE p.pronamespace = 'public'::regnamespace AND p.proname = 'app_legacy_default_workspace';
+
 \echo '== 7. legacy backfill (run after scripts/backfill-legacy-generations.ts; EXPECT 0 in both "without" columns for ready files)'
 SELECT f.status AS file_status, count(*) AS files,
        count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM source_versions s WHERE s.source_id = f.id)) AS without_version,

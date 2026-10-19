@@ -3,7 +3,7 @@
 # timed, the way scripts/apply-migrations.sh replays them in tests. Unlike that script it never drops anything.
 # Runbook: docs/scribe2/neon-rehearsal.md. Do not point this at production until a rehearsal has passed.
 #
-#   CONFIRM_HOST=<host of the URL> scripts/neon-rehearsal/apply.sh <direct postgres url>
+#   PROD_HOST=<production endpoint host> CONFIRM_HOST=<host of the URL> scripts/neon-rehearsal/apply.sh <direct postgres url>
 #   CONFIRM_HOST=<host of the URL> scripts/neon-rehearsal/apply.sh <direct postgres url> --register-journal
 #
 # --register-journal applies nothing. It records the same files in drizzle.__drizzle_migrations (hash = sha256 of the
@@ -15,6 +15,10 @@ mode="${2:-}"
 host="$(printf '%s' "$url" | sed -E 's#^[a-z]+://([^@]*@)?([^/:?]+).*#\2#')"
 [ "${CONFIRM_HOST:-}" = "$host" ] || { echo "refusing: set CONFIRM_HOST=$host to confirm this target" >&2; exit 2; }
 case "$host" in *-pooler.*) echo "refusing: use the direct (non -pooler) endpoint for migrations" >&2; exit 2 ;; esac
+# PROD_HOST (the production endpoint host, pooler or direct) makes production an explicit opt-in: ALLOW_PROD=1.
+if [ -n "${PROD_HOST:-}" ] && [ "$host" = "${PROD_HOST/-pooler./.}" ] && [ "${ALLOW_PROD:-}" != 1 ]; then
+  echo "refusing: $host is PROD_HOST; set ALLOW_PROD=1 only for the approved cutover" >&2; exit 2
+fi
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 files=()

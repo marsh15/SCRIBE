@@ -66,4 +66,10 @@ psql "$migr" -v ON_ERROR_STOP=1 -Atc "select has_schema_privilege('scribe_define
   || { echo "scribe_definer still has CREATE on schema public" >&2; exit 1; }
 [ "$(psql "$migr" -v ON_ERROR_STOP=1 -Atc "select count(*) from pg_constraint where contype = 'f' and conname like '%\_ws\_fk'")" -ge 20 ] \
   || { echo "0019 composite workspace FKs missing" >&2; exit 1; }
+# 0020 legacy-build shim: SECURITY DEFINER function owned by scribe_definer (already covered by the owner check above, but
+# assert it exists) and the three BEFORE INSERT triggers, enabled.
+[ "$(psql "$migr" -v ON_ERROR_STOP=1 -Atc "select count(*) from pg_proc where pronamespace = 'public'::regnamespace and proname = 'app_legacy_default_workspace' and prosecdef and pg_get_userbyid(proowner) = 'scribe_definer'")" = "1" ] \
+  || { echo "0020 app_legacy_default_workspace is missing, not SECURITY DEFINER, or not owned by scribe_definer" >&2; exit 1; }
+[ "$(psql "$migr" -v ON_ERROR_STOP=1 -Atc "select count(*) from pg_trigger where not tgisinternal and tgenabled = 'O' and tgname in ('files_legacy_default_workspace', 'chats_legacy_default_workspace', 'rag_traces_legacy_default_workspace')")" = "3" ] \
+  || { echo "0020 legacy default-workspace triggers missing or disabled" >&2; exit 1; }
 echo "OK: migrations apply and re-apply as a NOSUPERUSER CREATEROLE role"
