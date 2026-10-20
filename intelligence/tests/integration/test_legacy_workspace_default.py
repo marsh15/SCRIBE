@@ -199,24 +199,34 @@ SOURCE_INTAKE_QUEUE = (
     'INSERT INTO "ingestion_jobs" ("file_id", "status", "attempts", "created_at", "updated_at") '
     "SELECT \"id\", 'queued', 0, now(), now() FROM source ON CONFLICT (\"file_id\") DO NOTHING RETURNING \"file_id\"")
 
+# The 1.0.1 rollback build (branch rollback/1.0-compat) changes only that clause to a bare ON CONFLICT DO NOTHING.
+SOURCE_INTAKE_QUEUE_101 = SOURCE_INTAKE_QUEUE.replace(' ON CONFLICT ("file_id") DO NOTHING', " ON CONFLICT DO NOTHING")
+assert SOURCE_INTAKE_QUEUE_101 != SOURCE_INTAKE_QUEUE and "ON CONFLICT DO NOTHING" in SOURCE_INTAKE_QUEUE_101
+
 
 @pytest.mark.xfail(strict=True, raises=psycopg.errors.InvalidColumnReference,
-                   reason="KNOWN GAP, not fixed by 0020: 0014 dropped the unique index on ingestion_jobs(file_id) (jobs are per source "
-                          "version now), so 1.0's ON CONFLICT (file_id) has no arbiter index. Needs a decision, see docs/scribe2/neon-rehearsal.md.")
+                   reason="Expected failure of the exact 0edddb1 statement: 0014 dropped the unique index on ingestion_jobs(file_id) "
+                          "(jobs are per source version now), so ON CONFLICT (file_id) has no arbiter index. Closed by the 1.0.1 "
+                          "rollback build (branch rollback/1.0-compat), which uses a bare ON CONFLICT DO NOTHING; see the companion "
+                          "test below and docs/scribe2/neon-rehearsal.md. Never promote the unpatched 0edddb1 build after 0008.")
 def test_legacy_source_intake_queue_transition_with_on_conflict(conn):
     user = new_user()
     fid, _ = legacy_file(conn, user, "source_intake_reserve")
     assert conn.execute(SOURCE_INTAKE_QUEUE, {"id": fid, "u": user}).fetchall() == [(fid,)]
 
 
-def test_legacy_source_intake_queue_transition_without_on_conflict_clause(conn):
-    """The same statement minus the ON CONFLICT clause: everything the shim is responsible for (the files UPDATE and the
-    job INSERT on a 1.0-created file) works."""
+def test_legacy_source_intake_queue_transition_1_0_1_bare_on_conflict(conn):
+    """The exact 1.0.1 statement (bare ON CONFLICT DO NOTHING): the files UPDATE and the job INSERT on a 1.0-created file work,
+    and a second job insert for the same file (NULL source_version_id, so the same arbiter key) does nothing."""
     user = new_user()
     fid, _ = legacy_file(conn, user, "source_intake_reserve")
-    sql = SOURCE_INTAKE_QUEUE.replace(' ON CONFLICT ("file_id") DO NOTHING', "")
-    assert conn.execute(sql, {"id": fid, "u": user}).fetchall() == [(fid,)]
+    assert conn.execute(SOURCE_INTAKE_QUEUE_101, {"id": fid, "u": user}).fetchall() == [(fid,)]
     assert conn.execute("select status from files where id=%s", (fid,)).fetchone()[0] == "queued"
+    second = conn.execute(
+        'INSERT INTO "ingestion_jobs" ("file_id", "status", "attempts", "created_at", "updated_at") '
+        "VALUES (%s, 'queued', 0, now(), now()) ON CONFLICT DO NOTHING RETURNING \"file_id\"", (fid,)).fetchall()
+    assert second == []
+    assert conn.execute("select count(*) from ingestion_jobs where file_id=%s", (fid,)).fetchone()[0] == 1
 
 
 # --- b. existing personal workspace is reused ---------------------------------------------------------------------

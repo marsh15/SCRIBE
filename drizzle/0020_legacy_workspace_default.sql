@@ -31,8 +31,10 @@
 --
 -- Retirement: this shim exists only while 1.0 is a rollback target. Drop it with a later migration (and delete this
 --   file's rollback twin) once 1.0 is no longer a rollback target.
--- Known gap (not fixed here): 1.0's source-intake does `INSERT INTO ingestion_jobs ... ON CONFLICT ("file_id")`, which
---   needs a unique index on ingestion_jobs(file_id) that 0014 dropped for per-version jobs. See docs/scribe2/neon-rehearsal.md.
+-- Known gap (closed by the 1.0.1 rollback build, not by this migration): 1.0's source-intake does
+--   `INSERT INTO ingestion_jobs ... ON CONFLICT ("file_id")`, which needs a unique index on ingestion_jobs(file_id) that
+--   0014 dropped for per-version jobs. Branch rollback/1.0-compat (1.0.1 = 0edddb1 + a bare `ON CONFLICT DO NOTHING`) fixes it
+--   in the app; the unpatched 0edddb1 build must not be promoted once 0008 is applied. See docs/scribe2/neon-rehearsal.md.
 
 -- P0-1 (see 0013): membership of scribe_definer for a non-superuser migrator, and CREATE on schema public lent for this file.
 DO $$
