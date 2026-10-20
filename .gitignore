@@ -26,3 +26,6 @@ benchmarks/cache/
 # Scribe 2.0 distractor corpus: generated outputs only (fixtures/build_distractors.py, assemble_large_corpus.py)
 fixtures/distractors/
 fixtures/corpus-large/
+
+# local launch-video output (brag skill)
+brag-output/
