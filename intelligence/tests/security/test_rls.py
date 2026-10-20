@@ -312,9 +312,11 @@ def test_definer_functions_are_hardened():
                          "and p.proname like 'app\\_%'").fetchall()
     assert {r[0] for r in rows} == {"app_workspace_ids_for_user", "app_ensure_personal_workspace",
                                     "app_claim_ingestion_job", "app_sweep_expired_leases", "app_list_purgeable_sources",
-                                    "app_count_live_leases", "app_count_claimable_jobs"}  # last two: 0014 (T18)
+                                    "app_count_live_leases", "app_count_claimable_jobs",  # these two: 0014 (T18)
+                                    "app_legacy_default_workspace"}  # 0020: trigger function, never called directly
     for name, secdef, cfg, owner, pub, app in rows:
-        assert secdef and owner == "scribe_definer" and not pub and app, name
+        # the 0020 trigger function is not granted to scribe_app: a trigger needs no EXECUTE at fire time, and it must not be callable
+        assert secdef and owner == "scribe_definer" and not pub and (app != (name == "app_legacy_default_workspace")), name
         assert cfg == ["search_path=pg_catalog, public"], (name, cfg)
 
 
