@@ -189,7 +189,10 @@ export async function completeSourceUpload(input: {
           )
           INSERT INTO "ingestion_jobs" ("file_id", "status", "attempts", "created_at", "updated_at")
           SELECT "id", 'queued', 0, now(), now() FROM source
-          ON CONFLICT ("file_id") DO NOTHING
+          -- Bare DO NOTHING: migration 0014 dropped the unique index on file_id
+          -- (replaced by one on file_id + source_version_id), so naming the column
+          -- fails there. A bare clause works on the 1.0 and the migrated schema.
+          ON CONFLICT DO NOTHING
           RETURNING "file_id"
         `;
         return transitioned.length > 0;
