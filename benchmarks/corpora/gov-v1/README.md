@@ -23,11 +23,30 @@ Only the URLs in the manifest are requested. Every file must start with `%PDF`. 
 | --- | --- | --- |
 | NIST / NBS (nvlpubs.nist.gov, csrc.nist.gov) | FIPS, SP, CSWP | US federal government work, 17 USC 105: no US copyright |
 | IRS (irs.gov) | Publications 15-A, 15-B, 15-T | US federal government work, 17 USC 105 |
-| OSHA (osha.gov) | OSHA 3151 | US federal government work, 17 USC 105 |
 | NARA (archives.gov) | General Records Schedules | US federal government work, 17 USC 105 |
 | FAA advisory circulars, via ROSA P (rosap.ntl.bts.gov, DOT National Transportation Library) | AC 20-42 / 20-100 / 20-101 series | US federal government work (17 USC 105); the ROSA P records state "Public Domain" |
 
 Each manifest entry repeats its `licence_basis`. The protection under 17 USC 105 covers US federal works; the corpus makes no claim about use outside the United States.
+
+## Removed documents
+
+- `osha-3151-2023` (OSHA 3151, Personal Protective Equipment): removed, HTTP 403. The osha.gov URL refused both download attempts. No substitute was added.
+
+- `nist-sp-800-61r2-2012` (SP 800-61 Rev. 2, 80 pages, 8 table-heavy): removed to meet the table-heavy target. `nist-sp-800-61r3-2025` stays in the corpus, unpaired.
+
+## Added to reach the table-heavy target
+
+Measured on download, then included: `irs-pub-15t-2022` (68 pages, 48 table-heavy), `nist-sp-800-53b-2020` (85, 42), `nara-grs-02-2` (7, 7), `nara-grs-02-3` (7, 7), `nara-grs-02-4` (7, 7), `nara-grs-05-6` (14, 13), `nara-grs-06-1` (5, 3). Together with `irs-pub-15t-2023` they are extra editions or standalone documents, not revision pairs (`revision_pair` is null; the `irs-15t` pair is 2024/2025).
+
+## Measured, not needed
+
+Downloaded and measured, then deleted from `fixtures/corpus-gov/` and left out of the manifest because they only dilute the table-heavy share:
+
+| id | pages | scanned | table-heavy |
+| --- | --- | --- | --- |
+| `nara-grs-01-2` | 3 | 0 | 0 |
+| `nara-grs-02-7` | 8 | 0 | 1 |
+| `nara-grs-02-8` | 6 | 0 | 0 |
 
 ## Scanned documents and derived raster copies
 
