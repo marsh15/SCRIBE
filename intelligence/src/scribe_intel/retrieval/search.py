@@ -24,7 +24,7 @@ from typing import AsyncIterator, Awaitable, Sequence
 import psycopg
 
 from .dense import DenseMode, DenseResult, dense_search, legacy_dense_search
-from .lexical import lexical_search
+from .lexical import DEFAULT_LEXICAL_MODE, LexicalMode, lexical_search
 from .types import Candidate, SpanRef
 
 EmbedFuture = Awaitable[Sequence[float]]
@@ -116,12 +116,13 @@ async def _timed(coro_or_fut: EmbedFuture) -> tuple[Sequence[float], int]:
 async def run_retrievers(
     conn: psycopg.AsyncConnection, workspace_id: str, query: str, *, query_vec: Sequence[float] | EmbedFuture | None,
     index_profile_id, source_ids: Sequence[int] | None = None, dense_k: int = 40, lexical_k: int = 40,
-    dense_mode: DenseMode = "auto",
+    dense_mode: DenseMode = "auto", lexical_mode: LexicalMode = DEFAULT_LEXICAL_MODE,
 ) -> RetrievalSnapshot:
     """Run the lexical and dense retrievers on `conn`, which must already be inside `snapshot_tx`.
 
     `query_vec` is a ready vector or an awaitable/Task resolving to one (embedding in flight).
-    ``dense_k=0`` / ``lexical_k=0`` skip that retriever (single-method strategies)."""
+    ``dense_k=0`` / ``lexical_k=0`` skip that retriever (single-method strategies). ``lexical_mode`` is the
+    profile's lexical query mode (``"and"`` | ``"or_rank"``, see retrieval/lexical.py)."""
     t_all = time.monotonic()
     snap = RetrievalSnapshot()
     pending: asyncio.Future | None = None
@@ -136,7 +137,7 @@ async def run_retrievers(
     try:
         t = time.monotonic()
         lexical_coro = lexical_search(conn, workspace_id, query, index_profile_id=index_profile_id,
-                                      source_ids=source_ids, k=lexical_k)
+                                      source_ids=source_ids, k=lexical_k, lexical_mode=lexical_mode)
         if pending is not None:
             # return_exceptions: never leave the lexical query running on `conn` while we unwind.
             lex, emb = await asyncio.gather(lexical_coro, pending, return_exceptions=True)
