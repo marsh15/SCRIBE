@@ -30,6 +30,28 @@ Definitions, for an answerable case with n >= 1 evidence entries:
               so short rankings are penalised).
 Unanswerable cases are excluded from these metrics and reported separately
 (count and the top score of the ranking, if it has one).
+
+A4a additions (additive: no existing key is renamed or removed)
+---------------------------------------------------------------
+Rankings rows written by `run-profile` also carry provenance per item: ``workspace_id``, ``source_id`` and
+``source_deleted``; and per record ``embed_ms``, ``retrieval_ms`` and ``embed_cached`` next to ``latency_ms`` (which is
+now embed + retrieval, the user-facing latency). Records carry ``meta.workspace_id`` (the dataset's eval workspace).
+
+  leak               per case (all cases, answerable or not): leaked iff ANY of the top ``LEAK_DEPTH`` (10) ranked items
+                     or any cited item is (a) from a ``forbidden`` doc of the case, (b) from a workspace other than the
+                     dataset's eval workspace (a decoy workspace), or (c) from a soft-deleted source.
+                     ``leak_rate`` = leaked cases / cases. It must be 0 for a release (gate comes later; only reported
+                     here). ``leak_rate_verified`` is False when some item lacked provenance (old rankings files): the
+                     decoy/soft-delete checks could not run for those items, so 0.0 then proves nothing.
+  citation validity  deterministic, per answer: a citation is valid iff its label resolves to an item of the turn's
+                     bundle, sha256(quote) equals the recorded quote hash, and the quote lies within that item's text.
+                     Hashing reuses ``scribe_intel.verification.sha256_hex``; labels use its ``claim_labels``. The DB
+                     bound ``check_item`` is NOT reused: it needs document_blocks rows (and requires quote == whole
+                     chunk), which an offline bundle does not have.
+  latency            p50 / p95 by the nearest-rank method over per-case ``latency_ms`` (total), ``embed_ms`` and
+                     ``retrieval_ms``. ``embed_live_n`` counts cases whose query embedding was really requested from
+                     the provider; a cached embedding makes ``embed_ms`` ~0, so the total is only a real latency when
+                     ``embed_live_n == n``.
 """
 
 from __future__ import annotations
@@ -49,6 +71,8 @@ METRIC_NAMES: tuple[str, ...] = (
     "hit@1", "hit@5", "hit@10",
     "mrr", "ndcg@10", "precision@5",
 )
+LEAK_DEPTH = 10
+LEAK_FORBIDDEN, LEAK_DECOY, LEAK_DELETED = "forbidden_doc", "decoy_workspace", "soft_deleted_source"
 CI_RESAMPLES = 10_000
 CI_SEED = 20260101
 
@@ -177,17 +201,121 @@ class CaseResult:
     cost: dict[str, Any] | None = None
     degraded: bool | None = None
     top_score: float | None = None
+    leak: dict[str, Any] | None = None
+    timing: dict[str, Any] | None = None  # embed_ms / retrieval_ms / embed_cached from the rankings record
 
 
-def evaluate_case(case: Case, record: dict[str, Any]) -> CaseResult:
+def item_leak_reasons(forbidden_docs: set[str], item: dict[str, Any], expected_workspace_id: str | None) -> list[str]:
+    reasons = []
+    if item.get("doc") in forbidden_docs:
+        reasons.append(LEAK_FORBIDDEN)
+    ws = item.get("workspace_id")
+    if expected_workspace_id is not None and ws is not None and str(ws) != str(expected_workspace_id):
+        reasons.append(LEAK_DECOY)
+    if item.get("source_deleted") is True:
+        reasons.append(LEAK_DELETED)
+    return reasons
+
+
+def case_leak(case: Case, ranking: Sequence[dict[str, Any]], expected_workspace_id: str | None = None,
+              cited: Sequence[dict[str, Any]] | None = None, depth: int = LEAK_DEPTH) -> dict[str, Any]:
+    """Leak verdict for one case: top-``depth`` ranked items plus every cited item (see module docstring)."""
+    forbidden = {f.doc for f in case.forbidden}
+    hits: list[dict[str, Any]] = []
+    unknown = 0
+    seen = [("rank", i, it) for i, it in enumerate(list(ranking)[:depth], 1)] + \
+           [("cited", i, it) for i, it in enumerate(cited or [], 1)]
+    for where, pos, it in seen:
+        if expected_workspace_id is None or it.get("workspace_id") is None or "source_deleted" not in it:
+            unknown += 1
+        reasons = item_leak_reasons(forbidden, it, expected_workspace_id)
+        if reasons:
+            hits.append({"where": where, "position": pos, "chunk_id": it.get("chunk_id"), "doc": it.get("doc"),
+                         "reasons": reasons})
+    return {"leaked": bool(hits), "reasons": sorted({r for h in hits for r in h["reasons"]}), "items": hits,
+            "provenance_missing_items": unknown}
+
+
+def leak_summary(leaks: Iterable[tuple[str, dict[str, Any] | None]]) -> dict[str, Any]:
+    rows = [(cid, lk) for cid, lk in leaks if lk is not None]
+    leaked = [cid for cid, lk in rows if lk["leaked"]]
+    missing = sum(lk.get("provenance_missing_items", 0) for _, lk in rows)
+    return {"cases": len(rows), "leaked_cases": len(leaked), "leaked_case_ids": leaked,
+            "leak_rate": (len(leaked) / len(rows)) if rows else None,
+            "leak_rate_verified": bool(rows) and missing == 0, "provenance_missing_items": missing}
+
+
+# ---- deterministic citation validity (reuses scribe_intel.verification helpers)
+
+@dataclass(frozen=True)
+class Citation:
+    label: str
+    quote: str
+    quote_hash: str
+
+
+def check_citation(citation: Citation, bundle: dict[str, str]) -> str | None:
+    """Failure code, or None when valid. ``bundle`` maps label -> chunk text. Codes follow verification.check_item:
+    label_not_in_turn, quote_hash_mismatch, plus quote_not_in_chunk (the span lies outside the chunk text)."""
+    from scribe_intel.verification import sha256_hex
+
+    chunk = bundle.get(citation.label)
+    if chunk is None:
+        return "label_not_in_turn"
+    if sha256_hex(citation.quote) != citation.quote_hash:
+        return "quote_hash_mismatch"
+    if not citation.quote or citation.quote not in chunk:
+        return "quote_not_in_chunk"
+    return None
+
+
+def citation_validity(citations: Sequence[Citation], bundle: dict[str, str]) -> dict[str, Any]:
+    failures = []
+    for c in citations:
+        code = check_citation(c, bundle)
+        if code:
+            failures.append({"label": c.label, "code": code})
+    n = len(citations)
+    return {"total": n, "valid": n - len(failures), "failures": failures,
+            "rate": ((n - len(failures)) / n) if n else None}
+
+
+# ---- latency
+
+def percentile(values: Sequence[float], q: float) -> float | None:
+    """Nearest-rank percentile (q in (0, 1]): the value at rank ceil(q * n) of the sorted values."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    return float(ordered[max(0, math.ceil(q * len(ordered)) - 1)])
+
+
+def latency_summary(records: Iterable[dict[str, Any] | None]) -> dict[str, Any]:
+    """p50/p95 of total (``latency_ms``), ``embed_ms`` and ``retrieval_ms`` over rankings records / result rows."""
+    rows = [r for r in records if r]
+    out: dict[str, Any] = {"n": len(rows)}
+    for key, name in (("latency_ms", "total"), ("embed_ms", "embed"), ("retrieval_ms", "retrieval")):
+        vals = [float(r[key]) for r in rows if r.get(key) is not None]
+        out[f"{name}_p50_ms"] = percentile(vals, 0.50)
+        out[f"{name}_p95_ms"] = percentile(vals, 0.95)
+    timed = [r for r in rows if r.get("embed_cached") is not None]
+    out["embed_live_n"] = sum(1 for r in timed if r["embed_cached"] is False)
+    out["embed_timed_n"] = len(timed)
+    return out
+
+
+def evaluate_case(case: Case, record: dict[str, Any], expected_workspace_id: str | None = None) -> CaseResult:
     items = [RankedItem.from_dict(d) for d in record.get("ranking", [])]
     answerable = case.answerable and bool(case.evidence)
+    ws = expected_workspace_id or (record.get("meta") or {}).get("workspace_id")
     return CaseResult(
         case_id=case.id, category=case.category, answerable=answerable,
         metrics=case_metrics(case, items) if answerable else None,
         ranking=[d for d in record.get("ranking", [])],
         latency_ms=record.get("latency_ms"), cost=record.get("cost"), degraded=record.get("degraded"),
         top_score=None if answerable else top_score(items),
+        leak=case_leak(case, record.get("ranking", []), ws),
+        timing={k: record.get(k) for k in ("embed_ms", "retrieval_ms", "embed_cached") if k in record} or None,
     )
 
 
@@ -219,7 +347,10 @@ def summarize(results: Sequence[CaseResult], with_ci: bool = True) -> dict[str, 
             by_cat[r.category].append(r)
     unans = [r for r in results if not r.answerable]
     scores = [r.top_score for r in unans if r.top_score is not None]
+    latency_rows = [{"latency_ms": r.latency_ms, **(r.timing or {})} for r in results]
     return {
+        "leak": leak_summary((r.case_id, r.leak) for r in results),
+        "latency": latency_summary(latency_rows),
         "overall": aggregate([r for r in results if r.answerable], with_ci),
         "per_category": {c: aggregate(rs, with_ci) for c, rs in sorted(by_cat.items())},
         "unanswerable": {

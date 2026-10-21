@@ -21,6 +21,13 @@ Metrics (per case, then per category and overall with a percentile bootstrap CI 
                       reported pooled over all claims.
   abstention matrix   answerable x abstained counts, plus rates.
 
+A4a: every answer also gets ``citation_validity`` (deterministic: label resolves to a bundle item, quote hash matches,
+quote lies within the chunk text; metrics.check_citation) and ``leak`` (a CITED item from a forbidden doc, a decoy
+workspace or a soft-deleted source; metrics.case_leak). The summary pools them: ``citation_validity.rate`` and
+``leak.leak_rate``. Provenance comes from the rankings rows (``workspace_id``, ``source_deleted``) and
+``meta.workspace_id``. With a real generator/verifier the run first checks the spend cap (scribe_eval.cost) and
+appends its estimated spend to the ledger.
+
 Nothing here calls a provider unless a real generator/verifier is passed in. Fakes carry ``is_fake = True`` and any run
 that used one is stamped ``FAKE - NOT A MEASUREMENT`` and recorded with ``measurement: false``.
 """
@@ -41,7 +48,7 @@ from typing import Any, Protocol, Sequence
 import httpx
 
 from .dataset import Case
-from .metrics import RankedItem, bootstrap_ci_mean, match_matrix
+from .metrics import Citation, RankedItem, bootstrap_ci_mean, case_leak, citation_validity, leak_summary, match_matrix
 from .normalize import normalize
 
 FAKE_STAMP = "FAKE - NOT A MEASUREMENT"
@@ -80,6 +87,15 @@ class EvidenceItem:
     label: str
     doc: str | None
     text: str
+    # A4a provenance (None when the rankings row predates it)
+    chunk_id: str | None = None
+    workspace_id: str | None = None
+    source_deleted: bool | None = None
+    quote_hash: str = ""  # sha256 of ``text`` at bundle time: what a citation's quote hash is checked against
+
+    def as_ranked_dict(self) -> dict[str, Any]:
+        return {"chunk_id": self.chunk_id, "doc": self.doc, "workspace_id": self.workspace_id,
+                "source_deleted": self.source_deleted}
 
 
 @dataclass
@@ -89,6 +105,7 @@ class Bundle:
     items: list[EvidenceItem]
     top_score: float | None
     tau: float
+    workspace_id: str | None = None  # the dataset's eval workspace (rankings meta), for the leak check
 
 
 def neutralize(text: str) -> str:
@@ -101,13 +118,16 @@ def build_bundle(record: dict[str, Any] | None, *, top_k: int = DEFAULT_TOP_K, t
     """Top-k ranked items become E1..Ek. Gate (D13): no items -> INSUFFICIENT; a top score below tau -> INSUFFICIENT;
     otherwise ANSWERABLE (also when no score exists: the gate fails open, like evidence_bundle.evaluate_gate)."""
     ranking = (record or {}).get("ranking") or []
+    ws = ((record or {}).get("meta") or {}).get("workspace_id")
     top = next((float(r["score"]) for r in ranking if r.get("score") is not None), None)
     if not ranking:
-        return Bundle("INSUFFICIENT_EVIDENCE", "no_results", [], top, tau)
+        return Bundle("INSUFFICIENT_EVIDENCE", "no_results", [], top, tau, ws)
     if top is not None and top < tau:
-        return Bundle("INSUFFICIENT_EVIDENCE", "below_tau", [], top, tau)
-    items = [EvidenceItem(f"E{i}", r.get("doc"), r.get("text") or "") for i, r in enumerate(ranking[:top_k], 1)]
-    return Bundle("ANSWERABLE", "ok" if top is not None else "no_rerank_score", items, top, tau)
+        return Bundle("INSUFFICIENT_EVIDENCE", "below_tau", [], top, tau, ws)
+    items = [EvidenceItem(f"E{i}", r.get("doc"), r.get("text") or "", r.get("chunk_id"), r.get("workspace_id"),
+                          r.get("source_deleted"), hashlib.sha256((r.get("text") or "").encode("utf-8")).hexdigest())
+             for i, r in enumerate(ranking[:top_k], 1)]
+    return Bundle("ANSWERABLE", "ok" if top is not None else "no_rerank_score", items, top, tau, ws)
 
 
 def format_context(bundle: Bundle) -> str:
@@ -414,12 +434,14 @@ class AnswerResult:
     cited_labels: list[str]
     metrics: dict[str, float | None]
     error: str | None = None
+    leak: dict[str, Any] | None = None
+    citation_validity: dict[str, Any] | None = None
 
     def row(self) -> dict[str, Any]:
         return {"case_id": self.case_id, "category": self.category, "answerable": self.answerable,
                 "abstained": self.abstained, "answer": self.answer, "claims": self.claims,
                 "bundle_state": self.bundle_state, "cited_labels": self.cited_labels, "metrics": self.metrics,
-                "error": self.error}
+                "error": self.error, "leak": self.leak, "citation_validity": self.citation_validity}
 
 
 def score_case(case: Case, bundle: Bundle, answer: str, outcomes: Sequence[ClaimOutcome]) -> AnswerResult:
@@ -448,10 +470,22 @@ def score_case(case: Case, bundle: Bundle, answer: str, outcomes: Sequence[Claim
         m["wrong_version_citations"] = float(sum(1 for it in items if it.doc in forbidden))
     else:
         m["correct"] = 1.0 if abstained else 0.0
-    return AnswerResult(case.id, case.category, answerable, abstained, answer,
-                        [{"index": c.index, "text": c.text, "labels": c.labels, "status": c.status, "verdict": c.verdict}
-                         for c in outcomes],
-                        bundle.state, cited, m)
+    # A4a: every label the answer cites (verified or not) is checked for validity and for leaking
+    by_label = {i.label: i for i in bundle.items}
+    cited_all = list(dict.fromkeys(l for c in outcomes for l in c.labels))
+    validity = citation_validity(
+        [Citation(l, by_label[l].text, by_label[l].quote_hash) if l in by_label
+         else Citation(l, "", hashlib.sha256(b"").hexdigest()) for l in cited_all],
+        {i.label: i.text for i in bundle.items})
+    leak = case_leak(case, [], bundle.workspace_id, [by_label[l].as_ranked_dict() for l in cited_all if l in by_label])
+    m["citation_validity"] = validity["rate"]
+    m["leak"] = 1.0 if leak["leaked"] else 0.0
+    res = AnswerResult(case.id, case.category, answerable, abstained, answer,
+                       [{"index": c.index, "text": c.text, "labels": c.labels, "status": c.status, "verdict": c.verdict}
+                        for c in outcomes],
+                       bundle.state, cited, m)
+    res.leak, res.citation_validity = leak, validity
+    return res
 
 
 def _mean_ci(vals: list[float]) -> dict[str, Any]:
@@ -459,6 +493,12 @@ def _mean_ci(vals: list[float]) -> dict[str, Any]:
         return {"n": 0, "mean": None, "ci95": None}
     lo, hi = bootstrap_ci_mean(vals)
     return {"n": len(vals), "mean": statistics.fmean(vals), "ci95": [lo, hi]}
+
+
+def _pooled_validity(results: Sequence["AnswerResult"]) -> dict[str, Any]:
+    total = sum((r.citation_validity or {}).get("total", 0) for r in results)
+    valid = sum((r.citation_validity or {}).get("valid", 0) for r in results)
+    return {"total": total, "valid": valid, "rate": (valid / total) if total else None}
 
 
 SCORE_KEYS = ("correct", "must_include_frac", "exact_match", "citation_precision", "citation_recall", "groundedness")
@@ -495,6 +535,8 @@ def summarize_answers(results: Sequence[AnswerResult]) -> dict[str, Any]:
         },
         "claims": {"total": len(claims), "verified_or_partial": good,
                    "pooled_groundedness": (good / len(claims)) if claims else None, "status_counts": dict(status_counts)},
+        "leak": leak_summary((r.case_id, r.leak) for r in results),
+        "citation_validity": _pooled_validity(results),
         "no_citation_cases": sum(1 for r in results if r.answerable and r.metrics.get("citation_precision") is None),
         "errors": sum(1 for r in results if r.error),
     }
@@ -561,5 +603,7 @@ def report_markdown(run: dict[str, Any], summary: dict[str, Any], review: dict[s
               f"hallucination rate {a['hallucination_rate']}", "",
               f"## Claims\n\n{json.dumps(summary['claims'])}", "",
               f"Answerable cases that cited nothing verified (precision undefined): {summary['no_citation_cases']}.",
-              f"Generation errors: {summary['errors']}.", ""]
+              f"Generation errors: {summary['errors']}.",
+              f"Citation validity (deterministic): {json.dumps(summary['citation_validity'])}.",
+              f"Leak (cited items): {json.dumps({k: v for k, v in summary['leak'].items() if k != 'leaked_case_ids'})}.", ""]
     return "\n".join(lines)

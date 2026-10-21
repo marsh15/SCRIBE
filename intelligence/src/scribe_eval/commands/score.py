@@ -9,7 +9,8 @@ from pathlib import Path
 from ..dataset import load_cases
 from ..review.require import refusal_message, unreviewed_ids
 from ..runs import DEFAULT_RUNS_DIR, RunRecord, config_hash, now_iso
-from ..scoring import ScoreError, dataset_version, format_table, score_split, summary_to_json
+from ..cost import cost_summary
+from ..scoring import ScoreError, dataset_version, format_table, load_rankings, score_split, summary_to_json
 
 
 def _kv(items: list[str] | None) -> dict[str, str]:
@@ -41,6 +42,8 @@ def _score(args: argparse.Namespace) -> int:
                       file=sys.stderr)
                 return 2
         models, prompts = _kv(args.model), _kv(args.prompt)
+        rankings = load_rankings(Path(args.rankings))
+        meta = next((r.get("meta") or {} for r in rankings.values() if r.get("meta")), {})
         _, results, summary = score_split(dataset_dir, args.split, Path(args.rankings))
     except (ScoreError, ValueError, OSError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
@@ -50,6 +53,10 @@ def _score(args: argparse.Namespace) -> int:
         dataset_version=dataset_version(dataset_dir), split=args.split, profile_name=args.profile,
         config_hash=config_hash(args.profile), model_ids=models, prompt_versions=prompts,
         started_at=started, summary=summary_to_json(summary),
+        dataset_name=dataset_dir.resolve().name, corpus=args.corpus, workspace_owner=meta.get("workspace_owner"),
+        workspace_id=meta.get("workspace_id"), milestone_id=meta.get("milestone_id"),
+        leak_rate=summary["leak"]["leak_rate"], leak_rate_verified=summary["leak"]["leak_rate_verified"],
+        latency=summary["latency"], cost=cost_summary(r.cost for r in results),
     )
     run_dir = run.write(args.out, results)
     print(f"\nrun written: {run_dir}")
@@ -60,6 +67,7 @@ def register(sub: argparse._SubParsersAction) -> None:
     sc = sub.add_parser("score", help="score a rankings JSONL file on a dataset split")
     sc.add_argument("--rankings", required=True)
     sc.add_argument("--dataset", default="benchmarks/datasets/golden-v1")
+    sc.add_argument("--corpus", default="fixtures/corpus", help="corpus the rankings were made on (recorded in the run)")
     sc.add_argument("--split", required=True, choices=["dev", "validation", "test"])
     sc.add_argument("--profile", default="unnamed")
     sc.add_argument("--out", default=str(DEFAULT_RUNS_DIR))

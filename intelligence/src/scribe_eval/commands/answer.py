@@ -17,6 +17,29 @@ def _dataset_sha(dataset_dir: Path) -> str:
     return hashlib.sha256((dataset_dir / "cases.jsonl").read_bytes()).hexdigest()
 
 
+def _estimate_answer_usd(cases, rankings, system, args, generator, verifier) -> float:
+    """cases x per-case estimate from the REAL bundle text of each case: generator input = system + question +
+    context, output = GENERATION_OUTPUT_TOKENS_EST; verifier input = quotes + overhead, output per claim."""
+    from .. import answer as ans
+    from .. import cost as costmod
+
+    usd = 0.0
+    for case in cases:
+        bundle = ans.build_bundle(rankings.get(case.id), top_k=args.top_k, tau=args.tau)
+        context = ans.format_context(bundle)
+        if generator is not None:
+            usd += costmod.tokens_usd(
+                generator.model_id,
+                costmod.estimate_tokens(system) + costmod.estimate_tokens(case.question) + costmod.estimate_tokens(context),
+                costmod.GENERATION_OUTPUT_TOKENS_EST)
+        if verifier is not None and bundle.items:
+            usd += costmod.tokens_usd(
+                verifier.model,
+                costmod.VERIFY_OVERHEAD_TOKENS_EST + sum(costmod.estimate_tokens(i.text) for i in bundle.items),
+                costmod.VERIFY_OUTPUT_TOKENS_PER_CLAIM_EST * costmod.CLAIMS_PER_ANSWER_EST)
+    return usd
+
+
 def _answer(args: argparse.Namespace) -> int:
     from .. import answer as ans
 
@@ -72,8 +95,39 @@ def _answer(args: argparse.Namespace) -> int:
     except (ScoreError, ValueError, OSError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
-    results, verifier_states = ans.run_answers(cases, rankings, generator, verifier, system=system,
-                                               top_k=args.top_k, tau=args.tau)
+    from .. import cost as costmod
+
+    ledger = getattr(args, "ledger", None)
+    real_gen = not generator.is_fake
+    real_ver = verifier is not None and not verifier.is_fake
+    if real_gen or real_ver:
+        try:
+            estimate = _estimate_answer_usd(cases, rankings, system, args, generator if real_gen else None,
+                                            verifier if real_ver else None)
+            total, cap = costmod.preflight(estimate, spend_cap=getattr(args, "spend_cap", None), path=ledger,
+                                           what=f"answer {len(cases)} case(s) of {args.split}")
+        except costmod.SpendError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
+        print(f"spend: pre-run estimate ${estimate:.4f}, ledger ${total:.4f}, cap ${cap:.2f}")
+    import uuid
+
+    run_id = str(uuid.uuid4())
+    metered_gen = costmod.MeteredGenerator(generator) if real_gen else None
+    metered_ver = costmod.MeteredVerifier(verifier) if real_ver else None
+    try:
+        results, verifier_states = ans.run_answers(
+            cases, rankings, metered_gen or generator, metered_ver or verifier, system=system, top_k=args.top_k,
+            tau=args.tau)
+    finally:  # spend that happened before a crash is still spend
+        spend = costmod.RunSpend("answer", run_id)
+        if metered_gen:
+            spend.add(metered_gen.usage(), calls=metered_gen.calls)
+        if metered_ver:
+            spend.add(metered_ver.usage(), calls=metered_ver.calls)
+        if spend.usages:
+            spend.write(ledger)
+        spend_usages = spend
     summary = ans.summarize_answers(results)
     summary["verifier_states"] = verifier_states
     fake_components = [n for n, c in (("generator", generator), ("verifier", verifier)) if c is not None and c.is_fake]
@@ -94,12 +148,19 @@ def _answer(args: argparse.Namespace) -> int:
         prompt_versions["claim_verify"] = PROMPT_VERSION
     config = {"top_k": args.top_k, "tau": args.tau, "verifier": args.verifier, "generator": args.generator}
     run = RunRecord(
-        dataset_version=_dv(dataset_dir), split=args.split, profile_name=args.profile,
+        run_id=run_id, dataset_version=_dv(dataset_dir), split=args.split, profile_name=args.profile,
         config_hash=config_hash(args.profile, config), model_ids=model_ids, prompt_versions=prompt_versions,
         started_at=started, summary={**summary, "review": review},
         measurement=not fake_components, stamp=ans.FAKE_STAMP if fake_components else None,
         dataset_sha256=_dataset_sha(dataset_dir),
     )
+    run.dataset_name, run.corpus = dataset_dir.resolve().name, getattr(args, "corpus", None)
+    ws_ids = {(r.get("meta") or {}).get("workspace_id") for r in rankings.values()} - {None}
+    run.workspace_id = next(iter(ws_ids)) if len(ws_ids) == 1 else None
+    run.leak_rate, run.leak_rate_verified = summary["leak"]["leak_rate"], summary["leak"]["leak_rate_verified"]
+    if spend_usages.usages:
+        run.cost = {"usd": round(sum(u.usd for u in spend_usages.usages), 8), "estimated": True,
+                    "tokens": {f"{u.model_id}": u.input_tokens + u.output_tokens for u in spend_usages.usages}}
     run_dir = run.write(out_dir, [])
     rec = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
     rec["fake_components"] = fake_components
@@ -169,6 +230,9 @@ def register(sub: argparse._SubParsersAction) -> None:
     an = sub.add_parser("answer", help="answer-level scoring: generate, verify citations, score (T28)")
     an.add_argument("--rankings", required=True, help="retrieval bundles, same JSONL format as `score`")
     an.add_argument("--dataset", default="benchmarks/datasets/golden-v1")
+    an.add_argument("--corpus", default="fixtures/corpus", help="corpus the rankings were made on (recorded in the run)")
+    an.add_argument("--spend-cap", type=float, default=None, help="USD cap for ledger total + estimate; can only lower $10")
+    an.add_argument("--ledger", default="benchmarks/spend-ledger.jsonl")
     an.add_argument("--split", required=True, choices=["dev", "validation", "test"])
     an.add_argument("--profile", default="unnamed")
     an.add_argument("--out", default=None)
