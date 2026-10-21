@@ -42,6 +42,10 @@ class Case(BaseModel):
     # has checked the question, reference answer, quotes and forbidden docs. Absent on the original T05 cases.
     origin: str | None = None
     reviewed: bool | None = None
+    # A1: set by `scribe-eval review` when a person accepts or edits the case. Optional, so older files parse unchanged.
+    reviewed_by: str | None = None
+    reviewed_at: str | None = None
+    review_note: str | None = None
 
 
 def parse_cases(path: Path) -> tuple[list[Case], list[str]]:

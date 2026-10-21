@@ -18,7 +18,7 @@ Built (literal repo facts):
 - Postgres row-level-security policies, a NOBYPASSRLS application role and SECURITY DEFINER queue functions. The policies are not yet forced.
 - Evaluation toolkit: 24-document synthetic corpus, 200-case golden set across 10 categories (80 cases machine-drafted and unreviewed), metrics with paired bootstrap confidence intervals, answer-level scoring, run dashboard, 2-5 profile compare lab, CI regression gate (not armed), scaling harness.
 - Security work: an adversarial-document suite, an IDOR sweep over every route and server action, a token-rejection matrix of about 550 parametrised cases, log-canary tests, and a written threat model with 15 documented residual risks. This was an engineering review with tests, not a penetration test.
-- 12 architecture decision records, 20 SQL migrations (`0000`-`0019`), a documented 14-week milestone plan.
+- 12 architecture decision records, 21 SQL migrations (`0000`-`0020`), a documented 14-week milestone plan.
 
 Measured, with limits (from `docs/scribe2/benchmarks/performance.md`, synthetic data, one Mac laptop, OrbStack Postgres 17 with pgvector 0.8.7, scales 1k/10k/30k chunks, 100k not measured, not Neon, not Vercel, not real embeddings):
 - Exact dense search about 14 microseconds per eligible chunk, linear: p50 9.9 ms at 700 chunks, 79 ms at 7,000, 300 ms at 21,000.

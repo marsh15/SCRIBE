@@ -27,5 +27,7 @@ benchmarks/cache/
 fixtures/distractors/
 fixtures/corpus-large/
 
+# local launch-video output (brag skill)
+brag-output/
 # gov-v1 corpus: downloaded PDFs (scribe-eval fetch-corpus); not committed
 fixtures/corpus-gov/

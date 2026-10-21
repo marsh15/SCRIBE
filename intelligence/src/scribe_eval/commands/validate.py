@@ -6,6 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from ..review.require import unreviewed_ids
 from ..splits import assign_splits_file
 from ..validate import summary_table, validate_dataset
 
@@ -17,6 +18,11 @@ def _validate(args: argparse.Namespace) -> int:
         print(f"ERROR: corpus directory not found: {corpus_dir}", file=sys.stderr)
         return 2
     cases, errors = validate_dataset(dataset_dir, corpus_dir)
+    if args.require_reviewed:
+        unreviewed = unreviewed_ids(cases)
+        if unreviewed:
+            errors.append(f"{len(unreviewed)} of {len(cases)} case(s) are not human-reviewed (reviewed is not true):")
+            errors += [f"[{cid}] not reviewed" for cid in unreviewed]
     if cases:
         print(summary_table(cases))
     if errors:
@@ -42,6 +48,8 @@ def register(sub: argparse._SubParsersAction) -> None:
     v = sub.add_parser("validate", help="validate a golden dataset against the corpus")
     v.add_argument("dataset_dir")
     v.add_argument("--corpus", default="fixtures/corpus")
+    v.add_argument("--require-reviewed", action="store_true",
+                   help="also fail (exit 1) and list every case whose `reviewed` is not true")
     v.set_defaults(func=_validate)
     a = sub.add_parser("assign-splits", help="deterministically assign dev/validation/test splits")
     a.add_argument("dataset_dir")

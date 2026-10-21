@@ -311,6 +311,12 @@ def test_test_split_refused_without_milestone_report(mini, capsys):
     assert run_cli(ds, rk, tmp / "out", "--split", "test") == 2
     assert "INV-12" in capsys.readouterr().err
     assert not (tmp / "out").exists()  # nothing was generated or written
+    # A1: a milestone report additionally needs every case of the split to be human-reviewed
+    assert run_cli(ds, rk, tmp / "out", "--split", "test", "--milestone-report") == 2
+    assert "not human-reviewed" in capsys.readouterr().err
+    assert not (tmp / "out").exists()
+    rows = [json.loads(l) for l in (ds / "cases.jsonl").read_text(encoding="utf-8").splitlines()]
+    (ds / "cases.jsonl").write_text("".join(json.dumps({**r, "reviewed": True}) + "\n" for r in rows), encoding="utf-8")
     assert run_cli(ds, rk, tmp / "out", "--split", "test", "--milestone-report") == 0
 
 

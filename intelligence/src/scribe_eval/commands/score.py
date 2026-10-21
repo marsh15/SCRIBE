@@ -6,6 +6,8 @@ import argparse
 import sys
 from pathlib import Path
 
+from ..dataset import load_cases
+from ..review.require import refusal_message, unreviewed_ids
 from ..runs import DEFAULT_RUNS_DIR, RunRecord, config_hash, now_iso
 from ..scoring import ScoreError, dataset_version, format_table, score_split, summary_to_json
 
@@ -31,6 +33,13 @@ def _score(args: argparse.Namespace) -> int:
     dataset_dir = Path(args.dataset)
     started = now_iso()
     try:
+        if args.milestone_report:
+            split_cases = [c for c in load_cases(dataset_dir / "cases.jsonl") if c.split == args.split]
+            unreviewed = unreviewed_ids(split_cases)
+            if unreviewed:
+                print(refusal_message(unreviewed, len(split_cases), f"score a milestone report on split '{args.split}'"),
+                      file=sys.stderr)
+                return 2
         models, prompts = _kv(args.model), _kv(args.prompt)
         _, results, summary = score_split(dataset_dir, args.split, Path(args.rankings))
     except (ScoreError, ValueError, OSError) as exc:

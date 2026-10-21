@@ -21,7 +21,7 @@
 
 ## Schema (one JSON object per line in `cases.jsonl`)
 
-`id`, `split` (`dev`|`validation`|`test`), `category`, `tags[]`, optional `origin` and `reviewed` (T28: set on the machine-drafted cases), `question`, `answerable`, `reference_answer` (1-3 sentences), `must_include[]` (short strings a correct answer must contain; empty when unanswerable), `evidence[]` of `{doc, version, quote, page, grade}`, and `forbidden[]` of `{doc}`. The authoritative definition is `intelligence/src/scribe_eval/dataset.py`.
+`id`, `split` (`dev`|`validation`|`test`), `category`, `tags[]`, optional `origin` and `reviewed` (T28: set on the machine-drafted cases), and optional `reviewed_by`, `reviewed_at`, `review_note` (A1: set by `scribe-eval review`), `question`, `answerable`, `reference_answer` (1-3 sentences), `must_include[]` (short strings a correct answer must contain; empty when unanswerable), `evidence[]` of `{doc, version, quote, page, grade}`, and `forbidden[]` of `{doc}`. The authoritative definition is `intelligence/src/scribe_eval/dataset.py`.
 
 - `doc`: filename in the corpus. `version`: 1 for every document here.
 - `quote`: at most 200 characters, copied verbatim, within one sentence or one table row, occurring exactly once in that document after normalization.
@@ -36,6 +36,22 @@ Labels are profile-independent: `(doc, version, quote, page, grade)`. A retrieve
 ## Split policy (INV-12)
 
 Splits are assigned per category (stratified) with `scribe-eval assign-splits benchmarks/datasets/golden-v1 --seed 20260101`, ratios in `meta.json` (dev 0.4, validation 0.2, test 0.4). Original 120 cases: 50 dev, 20 validation, 50 test. The 80 T28 cases were split afterwards with `--only-origin machine-drafted-t28` (same seed; the 120 original splits are not moved), giving 80 dev, 40 validation, 80 test overall (8/4/8 per category). Tuning and debugging use `dev`; model and parameter selection use `validation`. The `test` split is used only for milestone reports and is never used to tune anything. Do not edit cases after looking at test results; add new cases to a new dataset version instead.
+
+## How to review
+
+Every case must be checked by a person against the source page before any number from this dataset is published. Start the local review page (served on 127.0.0.1 only, nothing leaves your machine):
+
+```
+uv run --project intelligence scribe-eval review --items benchmarks/datasets/golden-v1/cases.jsonl --kind case --corpus fixtures/corpus
+```
+
+Then open the printed URL. Each case is shown next to the source page of every evidence item (PDF pages rendered, the extracted text beside them, the quote highlighted; a red "QUOTE NOT FOUND ON THIS PAGE" warning when it does not match). Keys: `a` accept, `e` edit, `d` drop (asks for a one-line reason), `n` next (skip without deciding), `p` previous. Order: the cases named in `REVIEW_FIRST.md`, then `UNREVIEWED_T28.md`, then the rest (`--order <file of ids>` overrides this). It resumes at the first case that is neither reviewed nor dropped, so you can stop and continue at any time.
+
+- Accept and edit set `reviewed: true`, `reviewed_by`, `reviewed_at` (UTC) and an optional `review_note` on the case in `cases.jsonl`. Edits are re-validated against the schema and the corpus before anything is written; if they fail, nothing is written.
+- Drop removes the case from `cases.jsonl` and appends it, with `dropped_by`, `dropped_at` and `drop_reason`, to `dropped.jsonl` in this directory.
+- Every write is atomic (temp file, fsync, rename); untouched lines stay byte-identical.
+- After dropping any case, re-balance the splits so the 40/20/40 ratios and per-category coverage hold again: `uv run --project intelligence scribe-eval assign-splits benchmarks/datasets/golden-v1 --seed 20260101` (note this reassigns every split; add `--only-origin <origin>` to re-balance only one batch), then re-run validate. Do this before any test-split number exists.
+- `scribe-eval validate benchmarks/datasets/golden-v1 --require-reviewed` exits 1 and lists every case that is not yet reviewed. `score --milestone-report`, `answer --milestone-report` and `publish-run` (unless `--seeded` or `--mark-fake`) refuse while any case in the reported split is unreviewed.
 
 ## Validation
 

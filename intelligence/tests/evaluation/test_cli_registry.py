@@ -20,11 +20,12 @@ EXPECTED_COMMANDS = [
     "gate",
     "ingest-corpus",
     "run-profile",
+    "review",
     "fetch-corpus",
 ]
 
 EXPECTED_OPTIONS = {
-    "validate": {"--corpus", "--help", "-h"},
+    "validate": {"--corpus", "--help", "--require-reviewed", "-h"},
     "assign-splits": {"--help", "--only-origin", "--seed", "-h"},
     "score": {"--dataset", "--help", "--milestone-report", "--model", "--out", "--profile", "--prompt", "--rankings", "--split", "-h"},
     "answer": {"--dataset", "--generator", "--help", "--milestone-report", "--out", "--profile", "--rankings", "--split", "--tau", "--top-k", "--verifier", "-h"},
@@ -36,6 +37,7 @@ EXPECTED_OPTIONS = {
     "ingest-corpus": {"--cache-path", "--corpus", "--database-url", "--embedder", "--help", "--profile", "--reset", "-h"},
     "fetch-corpus": {"--help", "--manifest", "--out", "--pin", "--rasterize-ocr-layer", "--stats", "-h"},
     "run-profile": {"--cache-path", "--database-url", "--dataset", "--help", "--limit", "--out", "--profile", "--split", "-h"},
+    "review": {"--corpus", "--help", "--items", "--kind", "--order", "--port", "--reviewer", "-h"},
 }
 
 

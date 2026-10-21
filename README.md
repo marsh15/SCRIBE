@@ -183,11 +183,11 @@ TypeScript tests also read `TEST_DATABASE_URL` in two baseline-related suites, a
 
 ## Database and migrations
 
-`lib/db-schema.ts` is the Drizzle schema and the source of truth. SQL lives in `drizzle/`, journaled in `drizzle/meta/_journal.json` (`0000` to `0019`).
+`lib/db-schema.ts` is the Drizzle schema and the source of truth. SQL lives in `drizzle/`, journaled in `drizzle/meta/_journal.json` (`0000` to `0020`).
 
 - `0000`-`0009` are the original Scribe history and cannot be replayed on an empty database (for example `0004` assumes columns earlier files never create).
-- `0010`-`0019` are hand-written and idempotent: source versions, profiles, index generations, chunks, retrieval, evidence and eval tables (`0010`), seed profiles (`0011`, `0012`), RLS roles and policies (`0013`), resumable ingestion (`0014`), version uploads (`0015`), soft delete and purge (`0016`), OCR pages (`0017`), legacy upgrade state (`0018`), composite workspace foreign keys (`0019`).
-- `drizzle/rollback/` holds `.down.sql` files for `0013` to `0019`. `drizzle/deferred/` holds guarded, manual, non-journaled SQL (`force_rls.sql`, `retire_legacy.sql`).
+- `0010`-`0020` are hand-written and idempotent: source versions, profiles, index generations, chunks, retrieval, evidence and eval tables (`0010`), seed profiles (`0011`, `0012`), RLS roles and policies (`0013`), resumable ingestion (`0014`), version uploads (`0015`), soft delete and purge (`0016`), OCR pages (`0017`), legacy upgrade state (`0018`), composite workspace foreign keys (`0019`), the legacy-build workspace default shim (`0020`, lets the 1.0 build insert files, chats and traces without a `workspace_id` while it is a rollback target).
+- `drizzle/rollback/` holds `.down.sql` files for `0013` to `0020`. `drizzle/deferred/` holds guarded, manual, non-journaled SQL (`force_rls.sql`, `retire_legacy.sql`).
 - Embeddings: `chunk_embeddings_1536` (HNSW, cosine) for 2.0 and `chunk_embeddings_3072` (legacy, exact search only, since HNSW is capped at 2,000 dimensions).
 
 For a **test or throwaway** database, `scripts/apply-migrations.sh <url>` exports the schema from `lib/db-schema.ts` with `drizzle-kit export` and replays `0010+`. `scripts/test-migrations-nosuperuser.sh` proves the migrations apply twice as a non-superuser that owns the database, as on a managed Postgres.
@@ -258,7 +258,7 @@ Hobby limits drive the design: functions run at most 300 seconds and cron runs o
 
 Not verified: that the Python function co-deploys with Next.js on Hobby (checklist in [`T02-verification.md`](docs/scribe2/T02-verification.md); the fallback is a second Vercel project rooted at `intelligence/`, ADR-0002). Before any production promotion:
 
-1. Rehearse migrations `0008`-`0019` on a Neon branch copy of production. Check `drizzle.__drizzle_migrations`, the Postgres version, `pgvector` 0.8 or newer for iterative HNSW scans, and whether the app's database role has `BYPASSRLS`.
+1. Rehearse migrations `0008`-`0020` on a Neon branch copy of production. Check `drizzle.__drizzle_migrations`, the Postgres version, `pgvector` 0.8 or newer for iterative HNSW scans, and whether the app's database role has `BYPASSRLS`.
 2. Deploy with `INGEST_ENGINE=legacy` and `RETRIEVAL_ENGINE=legacy` first, then switch to `python` on a preview.
 3. Enable RLS enforcement in the order given in [`HANDOVER.md`](docs/scribe2/HANDOVER.md) section 8.
 
@@ -306,7 +306,7 @@ components/, lib/     UI components; server helpers (workspace, internal token, 
 proxy.ts              Clerk middleware and the public-route list
 api/py/index.py       Vercel entry for the Python service (rewrite in vercel.json)
 intelligence/         Python package: scribe_intel (service), scribe_ingest, scribe_eval, scribe_perf, tests
-drizzle/              Migrations 0000-0019, rollback/, deferred/
+drizzle/              Migrations 0000-0020, rollback/, deferred/
 benchmarks/           golden-v1 dataset, gate/ (baseline and cache absent), perf/ results
 fixtures/             Northwind corpus (24 docs), adversarial documents, distractor generators
 scripts/              Migration helpers, eval baseline, legacy backfill, demo seed, diagram generator
