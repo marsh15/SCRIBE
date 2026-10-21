@@ -41,6 +41,14 @@ def _answer(args: argparse.Namespace) -> int:
         cases = [c for c in load_cases(dataset_dir / "cases.jsonl") if c.split == args.split]
         if not cases:
             raise ScoreError(f"no cases in split '{args.split}' of {dataset_dir}")
+        if args.milestone_report:
+            from ..review.require import refusal_message, unreviewed_ids
+
+            unreviewed = unreviewed_ids(cases)
+            if unreviewed:
+                print(refusal_message(unreviewed, len(cases), f"run a milestone report on split '{args.split}'"),
+                      file=sys.stderr)
+                return 2
         rankings = ans.load_rankings_lenient(Path(args.rankings))
         missing = [c.id for c in cases if c.id not in rankings]
         if missing:
