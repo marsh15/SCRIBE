@@ -20,6 +20,7 @@ EXPECTED_COMMANDS = [
     "gate",
     "ingest-corpus",
     "run-profile",
+    "fetch-corpus",
 ]
 
 EXPECTED_OPTIONS = {
@@ -33,6 +34,7 @@ EXPECTED_OPTIONS = {
     "publish-run": {"--database-url", "--dataset", "--help", "--mark-fake", "--parse-lost", "--seeded", "-h"},
     "gate": {"--accept-seeded-baseline", "--baseline", "--cache", "--corpus", "--database-url", "--dataset", "--help", "--out", "--profile", "--refresh-cache", "--seeded", "--split", "--status", "--tau", "--write-baseline", "-h"},
     "ingest-corpus": {"--cache-path", "--corpus", "--database-url", "--embedder", "--help", "--profile", "--reset", "-h"},
+    "fetch-corpus": {"--help", "--manifest", "--out", "--pin", "--rasterize-ocr-layer", "--stats", "-h"},
     "run-profile": {"--cache-path", "--database-url", "--dataset", "--help", "--limit", "--out", "--profile", "--split", "-h"},
 }
 
