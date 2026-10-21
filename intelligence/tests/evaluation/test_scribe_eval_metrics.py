@@ -266,8 +266,15 @@ def test_cli_end_to_end_oracle(tmp_path, capsys):
     rk = tmp_path / "r.jsonl"
     oracle_rankings(rk)
     out = tmp_path / "runs"
+    # A1: a milestone report needs reviewed cases; the real golden set is unreviewed, so the test split is scored from a
+    # copy with every case marked reviewed (the real file is never touched).
+    reviewed = tmp_path / "golden-reviewed"
+    reviewed.mkdir()
+    (reviewed / "meta.json").write_bytes((DATASET / "meta.json").read_bytes())
+    rows = [json.loads(l) for l in (DATASET / "cases.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+    (reviewed / "cases.jsonl").write_text("".join(json.dumps({**r, "reviewed": True}, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
     for split, extra in (("dev", []), ("validation", []), ("test", ["--milestone-report"])):
-        rc = main(["score", "--rankings", str(rk), "--dataset", str(DATASET), "--split", split,
+        rc = main(["score", "--rankings", str(rk), "--dataset", str(reviewed if extra else DATASET), "--split", split,
                    "--profile", "oracle", "--out", str(out), *extra])
         assert rc == 0, capsys.readouterr().err
     runs = sorted(out.iterdir())

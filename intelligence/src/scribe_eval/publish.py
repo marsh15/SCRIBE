@@ -142,6 +142,24 @@ def find_eval_workspace(conn: Any) -> str | None:
     return str(row[0]) if row else None
 
 
+def reviewed_refusal(run_dir: str | Path, dataset_dir: str | Path) -> str | None:
+    """A refusal message when the run's split holds any case that is not human-reviewed, else None.
+
+    Not applied to ``--seeded`` / ``--mark-fake`` publishes, which are labelled as non-measurements.
+    """
+    from .review.require import refusal_message, unreviewed_ids
+
+    run, _, _ = load_run_files(Path(run_dir))
+    cases = load_cases(Path(dataset_dir) / "cases.jsonl")
+    split = run.get("split")
+    in_split = [c for c in cases if split is None or c.split == split]
+    unreviewed = unreviewed_ids(in_split)
+    if not unreviewed:
+        return None
+    return refusal_message(unreviewed, len(in_split), f"publish a run on split {split!r} as a measurement") + \
+        " (or pass --seeded / --mark-fake to publish it labelled as a non-measurement)"
+
+
 def run(args: Any) -> int:
     import sys
 
@@ -150,6 +168,15 @@ def run(args: Any) -> int:
     if not args.database_url:
         print("ERROR: --database-url is required (the environment is never consulted)", file=sys.stderr)
         return 2
+    if not (args.seeded or args.mark_fake):
+        try:
+            refusal = reviewed_refusal(args.run_dir, args.dataset)
+        except (PublishError, OSError, ValueError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
+        if refusal:
+            print(refusal, file=sys.stderr)
+            return 2
     try:
         with psycopg.connect(args.database_url) as conn:
             wid = find_eval_workspace(conn)
