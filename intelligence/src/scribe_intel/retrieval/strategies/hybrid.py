@@ -25,7 +25,7 @@ import psycopg
 from ..packing import ParentContent
 from ..parents import load_parents
 from ..pipeline import run_pipeline
-from ..profiles import SEED_PROFILES, RetrievalProfile
+from ..profiles import ALL_PROFILES, RetrievalProfile
 from ..registry import (STRUCTURAL_INDEX, Handler, RetrieveContext, StrategyResult, _first, _release, register)
 from ..search import RetrievalSnapshot, resolve_index_profile, run_retrievers, snapshot_tx
 
@@ -51,7 +51,8 @@ async def read_in_snapshot(conn, workspace_id: str, query: str, p: RetrievalProf
     cfg = p.config
     snap = await run_retrievers(
         conn, workspace_id, query, query_vec=query_vec if cfg.dense_top_k is not None else None, index_profile_id=prof,
-        source_ids=source_ids, dense_k=cfg.dense_top_k or 0, lexical_k=cfg.lexical_top_k or 0, dense_mode="auto")
+        source_ids=source_ids, dense_k=cfg.dense_top_k or 0, lexical_k=cfg.lexical_top_k or 0, dense_mode="auto",
+        lexical_mode=cfg.lexical_mode)
     prefetched: Mapping[UUID, ParentContent] | None = None
     prefetch_ms = 0
     if cfg.expand_parents:
@@ -122,5 +123,5 @@ def make_handler(p: RetrievalProfile) -> Handler:
     return handler
 
 
-for _p in SEED_PROFILES:
+for _p in ALL_PROFILES:
     register(_p.name)(make_handler(_p))

@@ -15,7 +15,7 @@ from conftest import DATABASE_URL_TEST, SECRET, needs_db
 from scribe_ingest.embedding import FakeEmbedder
 from scribe_intel import compare_routes
 from scribe_intel.retrieval import compare as cmp
-from scribe_intel.retrieval.profiles import SEED_PROFILES
+from scribe_intel.retrieval.profiles import ALL_PROFILES, SEED_PROFILES
 from scribe_intel.retrieval.rerank import FakeReranker, RerankError
 
 NAMES = [p.name for p in SEED_PROFILES]
@@ -160,7 +160,7 @@ async def test_unknown_profile_is_404_and_lists_the_comparable_ones(client, seed
     r = await post(client, seeded["wa"], ["hybrid-rrf", bad])
     assert r.status_code == 404, r.text
     j = r.json()
-    assert j["error_code"] == "UNKNOWN_PROFILE" and j["unknown"] == [bad] and sorted(j["profiles"]) == sorted(NAMES)
+    assert j["error_code"] == "UNKNOWN_PROFILE" and j["unknown"] == [bad] and sorted(j["profiles"]) == sorted(p.name for p in ALL_PROFILES)
 
 
 @needs_db

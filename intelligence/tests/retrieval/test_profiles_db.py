@@ -1,7 +1,7 @@
 """DB-backed tests for retrieval profile seeding (T14).
 
 Every test runs inside a transaction that is ALWAYS rolled back, so the shared test DB keeps
-exactly the five rows seeded by drizzle/0012_seed_retrieval_profiles.sql.
+the five rows seeded by drizzle/0012_seed_retrieval_profiles.sql.
 
 The migration/code consistency test (test_migration_seed_matches_code) needs no database and is
 deliberately left unmarked so it always runs.
@@ -148,4 +148,4 @@ def test_migration_seed_matches_code():
     parsed = [tuple(m) for m in ROW_RE.findall(sql)]
     expected = [params for _, params in P.seed_sql()]
     assert len(parsed) == 5
-    assert parsed == expected
+    assert parsed == expected[:5]  # migration 0012 seeds A-E only; the v2/flat profiles go through upsert_profiles
