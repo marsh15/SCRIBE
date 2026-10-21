@@ -13,6 +13,11 @@ export const COMPARE_PROFILES: ReadonlyArray<{ name: string; label: string; summ
   { name: "hybrid-rrf", label: "Hybrid (RRF)", summary: "Dense and lexical fused by rank (k=60), no rerank" },
   { name: "dense-rerank", label: "Dense + rerank", summary: "Dense top 40, reranked top 20" },
   { name: "hybrid-rrf-rerank", label: "Hybrid + rerank", summary: "RRF, rerank top 20, parent expansion, packed context (default)" },
+  { name: "lexical-only-v2", label: "Lexical only v2", summary: "Full-text OR-ranked with identifier boost, top 40, no rerank" },
+  { name: "hybrid-rrf-v2", label: "Hybrid (RRF) v2", summary: "Dense and OR-ranked lexical fused by rank (k=60), no rerank" },
+  { name: "hybrid-rrf-rerank-v2", label: "Hybrid + rerank v2", summary: "Hybrid + rerank with OR-ranked lexical and parent expansion" },
+  { name: "hybrid-rrf-rerank-flat", label: "Hybrid + rerank (flat)", summary: "Hybrid + rerank without parent expansion" },
+  { name: "hybrid-rrf-rerank-flat-v2", label: "Hybrid + rerank flat v2", summary: "Flat hybrid + rerank with OR-ranked lexical" },
 ];
 
 export type MovementDirection = "same" | "up" | "down" | "new" | "dropped" | "absent";

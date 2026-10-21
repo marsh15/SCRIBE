@@ -57,7 +57,7 @@ def test_upsert_idempotent_and_verifies():
     c = FakeConn()
     P.upsert_profiles(c)
     P.upsert_profiles(c)
-    assert len(c.rows) == 5
+    assert len(c.rows) == len(P.ALL_PROFILES) == 10
     assert all("ON CONFLICT (name) DO NOTHING" in s for s in c.executed if s.startswith("INSERT"))
 
 
@@ -76,4 +76,4 @@ def test_upsert_detects_drift():
 
 def test_seed_sql_params():
     sql = P.seed_sql()
-    assert len(sql) == 5 and sql[0][1][0].endswith("1") and sql[4][1][0].endswith("5")
+    assert len(sql) == 10 and sql[0][1][0].endswith("1") and sql[4][1][0].endswith("5")

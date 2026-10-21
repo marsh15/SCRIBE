@@ -5,7 +5,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CompareLab } from "@/components/compare-lab";
-import { degradedLabel, describeMovement, orderedStages } from "@/lib/compare";
+import { COMPARE_PROFILES, degradedLabel, describeMovement, orderedStages } from "@/lib/compare";
 import type { CompareResponse, CompareProfileResult, CompareResult } from "@/lib/compare";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -107,7 +107,8 @@ describe("CompareLab", () => {
     for (const n of ["Dense only", "Hybrid (RRF)", "Lexical only", "Dense + rerank"]) act(() => box(el, n).click());
     expect(el.textContent).toContain("5 selected");
     const unchecked = Array.from(el.querySelectorAll("fieldset input[type=checkbox]")).filter((i) => !(i as HTMLInputElement).checked);
-    expect(unchecked.length).toBe(0); // all five selected: nothing left to disable
+    expect(unchecked.length).toBe(COMPARE_PROFILES.length - 5); // five selected: every other profile is capped out
+    expect(unchecked.every((i) => (i as HTMLInputElement).disabled)).toBe(true);
   });
 
   it("posts the profiles with the chosen baseline first and renders aligned columns with movement text", async () => {
