@@ -57,6 +57,7 @@ class RunRecord(BaseModel):
     profile_name: str
     profile_id: str | None = None  # retrieval_profiles.id (uuid) when known
     config_hash: str
+    retrieval_config_hash: str | None = None  # profile hash for retrieval rankings used by an answer run
     code_commit: str = Field(default_factory=git_commit)
     model_ids: dict[str, str] = {}
     prompt_versions: dict[str, str] = {}

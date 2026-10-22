@@ -22,14 +22,15 @@ EXPECTED_COMMANDS = [
     "run-profile",
     "review",
     "fetch-corpus",
+    "report",
 ]
 
 EXPECTED_OPTIONS = {
     "validate": {"--corpus", "--help", "--require-reviewed", "-h"},
     "assign-splits": {"--help", "--only-origin", "--seed", "-h"},
     "score": {"--corpus", "--dataset", "--help", "--milestone-report", "--model", "--out", "--profile", "--prompt", "--rankings", "--split", "-h"},
-    "answer": {"--corpus", "--dataset", "--generator", "--help", "--ledger", "--milestone-report", "--out", "--profile", "--rankings", "--spend-cap", "--split", "--tau", "--top-k", "--verifier", "-h"},
-    "judge-sheet": {"--dataset", "--help", "--judge", "--out-dir", "--run", "-h", "-n"},
+    "answer": {"--cache-mode", "--corpus", "--dataset", "--generator", "--help", "--judge", "--judge-model", "--ledger", "--milestone-id", "--milestone-report", "--out", "--profile", "--rankings", "--response-cache", "--runs-dir", "--spend-cap", "--split", "--tau", "--top-k", "--verifier", "-h"},
+    "judge-sheet": {"--cache-mode", "--dataset", "--help", "--judge", "--judge-model", "--ledger", "--out-dir", "--response-cache", "--run", "--spend-cap", "-h", "-n"},
     "judge-agreement": {"--help", "--key", "--labels", "--out", "-h"},
     "compare": {"--help", "-h"},
     "publish-run": {"--database-url", "--dataset", "--help", "--mark-fake", "--parse-lost", "--seeded", "-h"},
@@ -38,6 +39,7 @@ EXPECTED_OPTIONS = {
     "fetch-corpus": {"--help", "--manifest", "--out", "--pin", "--rasterize-ocr-layer", "--stats", "-h"},
     "run-profile": {"--cache-path", "--corpus", "--database-url", "--dataset", "--help", "--ledger", "--limit", "--milestone-id", "--milestone-report", "--out", "--profile", "--profiles", "--runs-dir", "--spend-cap", "--split", "-h"},
     "review": {"--corpus", "--help", "--items", "--kind", "--order", "--port", "--reviewer", "-h"},
+    "report": {"--dataset", "--help", "--out", "-h"},
 }
 
 

@@ -22,6 +22,7 @@ MODULES: tuple[str, ...] = (
     "run_profile",
     "review",
     "fetch_corpus",
+    "report",
 )
 
 

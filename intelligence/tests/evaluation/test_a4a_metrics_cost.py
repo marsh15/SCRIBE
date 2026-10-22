@@ -155,14 +155,17 @@ def test_latency_summary_includes_embed_and_marks_live_embeds():
 
 # ---------------------------------------------------------------- price table and cost math
 
-def test_price_table_entries_are_dated_and_marked_to_verify():
+def test_price_table_entries_have_sources_and_unverified_entry_is_explicit():
     from scribe_ingest.embedding import DEFAULT_MODEL
 
     ids = {p.model_id for p in cost.PRICES}
     assert {"gemini-embedding-001", DEFAULT_MODEL, "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite",
             "rerank-2.5"} <= ids
     for p in cost.PRICES:
-        assert "2026-10-20" in p.source_note and "TO VERIFY" in p.source_note and p.usd > 0 and p.unit
+        assert p.usd > 0 and p.unit
+    assert cost.price_usd("gemini-embedding-2", cost.UNIT_TOKENS) == 0.20
+    assert "UNVERIFIED" in next(p.source_note for p in cost.PRICES if p.model_id == "gemini-embedding-001")
+    assert all("2026-10-21" in p.source_note for p in cost.PRICES if p.model_id != "gemini-embedding-001")
     for m in ("gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"):
         assert cost.price_usd(m, cost.UNIT_INPUT) < cost.price_usd(m, cost.UNIT_OUTPUT)
 
