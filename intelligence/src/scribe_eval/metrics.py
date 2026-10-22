@@ -226,7 +226,8 @@ def case_leak(case: Case, ranking: Sequence[dict[str, Any]], expected_workspace_
     seen = [("rank", i, it) for i, it in enumerate(list(ranking)[:depth], 1)] + \
            [("cited", i, it) for i, it in enumerate(cited or [], 1)]
     for where, pos, it in seen:
-        if expected_workspace_id is None or it.get("workspace_id") is None or "source_deleted" not in it:
+        if (expected_workspace_id is None or it.get("workspace_id") is None or
+                it.get("source_deleted") is None):
             unknown += 1
         reasons = item_leak_reasons(forbidden, it, expected_workspace_id)
         if reasons:

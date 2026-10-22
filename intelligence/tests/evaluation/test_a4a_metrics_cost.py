@@ -84,6 +84,9 @@ def test_leak_rate_is_leaked_cases_over_cases_and_flags_missing_provenance():
     old_format = {"chunk_id": "x", "doc": "a.md", "text": "t"}  # a pre-A4a rankings row
     unverified = leak_summary([("a", case_leak(case, [old_format], WS))])
     assert unverified["leak_rate"] == 0.0 and unverified["leak_rate_verified"] is False
+    missing_deleted_state = {**item(), "source_deleted": None}
+    unverified = leak_summary([("a", case_leak(case, [missing_deleted_state], WS))])
+    assert unverified["leak_rate"] == 0.0 and unverified["leak_rate_verified"] is False
 
 
 def test_evaluate_case_uses_workspace_from_record_meta_and_summary_carries_leak():

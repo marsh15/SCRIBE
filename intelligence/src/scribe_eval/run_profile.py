@@ -46,12 +46,14 @@ exit 2 on refusal. The actual spend is appended to ``benchmarks/spend-ledger.jso
 from __future__ import annotations
 
 import asyncio
+import fcntl
 import hashlib
 import json
 import os
 import sys
 import time
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -125,45 +127,81 @@ def _write_lock(path: Path, data: dict[str, Any]) -> None:
     os.replace(tmp, path)
 
 
+@contextmanager
+def _test_lock_guard(path: Path):
+    """Serialize lock-file read/modify/write operations across processes."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    guard_path = path.with_suffix(path.suffix + ".guard")
+    with guard_path.open("a", encoding="utf-8") as guard:
+        fcntl.flock(guard.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(guard.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def test_split_execution_guard(runs_dir: str | Path, dataset: str):
+    """Hold a nonblocking interprocess guard for the full test-split command.
+
+    Lock-file acquisition remains resumable after a crash, while this separate guard prevents two live commands from
+    treating the same ``started`` entries as simultaneous resume requests.
+    """
+    path = lock_path(runs_dir, dataset).with_suffix(".execution.guard")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as guard:
+        try:
+            fcntl.flock(guard.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise RunProfileError(f"a test-split milestone run for dataset {dataset!r} is already in progress; "
+                                  "wait for it to finish or exit, then resume with the same --milestone-id") from exc
+        try:
+            yield
+        finally:
+            fcntl.flock(guard.fileno(), fcntl.LOCK_UN)
+
+
 def acquire_test_lock(runs_dir: str | Path, dataset: str, sha: str, profiles: list[str], milestone_id: str,
                       commit: str) -> list[str]:
     """Record ``profiles`` as started under ``milestone_id`` and return those still to run (completed ones are
     skipped). Raises RunProfileError when INV-12's once-only rule forbids it."""
     path = lock_path(runs_dir, dataset)
-    lock: dict[str, Any] = (json.loads(path.read_text(encoding="utf-8")) if path.is_file()
-                            else {"dataset": dataset, "dataset_sha256": sha, "entries": {}, "milestones": {}})
-    if lock["dataset_sha256"] != sha:
-        raise RunProfileError(f"{path}: cases.jsonl changed since the test split of {dataset!r} was locked "
-                              f"(was {lock['dataset_sha256'][:12]}, now {sha[:12]}); refusing")
-    ms = lock["milestones"].get(milestone_id)
-    if ms is not None and sorted(ms["profiles"]) != sorted(profiles):
-        raise RunProfileError(f"milestone {milestone_id!r} was started with profiles {ms['profiles']}; its profile set "
-                              "cannot change (resume with the same --profiles, or use a new milestone id for new profiles)")
-    for p in profiles:
-        e = lock["entries"].get(p)
-        if e and e["milestone_id"] != milestone_id:
-            raise RunProfileError(
-                f"INV-12: the test split of {dataset!r} was already run for profile {p!r} (milestone "
-                f"{e['milestone_id']!r}, {e['started_at']}); it is scored once per dataset. Only resuming that "
-                f"milestone with --milestone-id {e['milestone_id']} is allowed.")
-    todo = []
-    for p in profiles:
-        e = lock["entries"].get(p)
-        if e and e["status"] == "completed":
-            continue
-        todo.append(p)
-        lock["entries"].setdefault(p, {"milestone_id": milestone_id, "status": "started", "commit": commit,
-                                       "started_at": _now(), "completed_at": None})
-    lock["milestones"].setdefault(milestone_id, {"profiles": sorted(profiles), "commit": commit, "created_at": _now()})
-    _write_lock(path, lock)
-    return todo
+    with _test_lock_guard(path):
+        lock: dict[str, Any] = (json.loads(path.read_text(encoding="utf-8")) if path.is_file()
+                                else {"dataset": dataset, "dataset_sha256": sha, "entries": {}, "milestones": {}})
+        if lock["dataset_sha256"] != sha:
+            raise RunProfileError(f"{path}: cases.jsonl changed since the test split of {dataset!r} was locked "
+                                  f"(was {lock['dataset_sha256'][:12]}, now {sha[:12]}); refusing")
+        ms = lock["milestones"].get(milestone_id)
+        if ms is not None and sorted(ms["profiles"]) != sorted(profiles):
+            raise RunProfileError(f"milestone {milestone_id!r} was started with profiles {ms['profiles']}; its profile set "
+                                  "cannot change (resume with the same --profiles, or use a new milestone id for new profiles)")
+        for p in profiles:
+            e = lock["entries"].get(p)
+            if e and e["milestone_id"] != milestone_id:
+                raise RunProfileError(
+                    f"INV-12: the test split of {dataset!r} was already run for profile {p!r} (milestone "
+                    f"{e['milestone_id']!r}, {e['started_at']}); it is scored once per dataset. Only resuming that "
+                    f"milestone with --milestone-id {e['milestone_id']} is allowed.")
+        todo = []
+        for p in profiles:
+            e = lock["entries"].get(p)
+            if e and e["status"] == "completed":
+                continue
+            todo.append(p)
+            lock["entries"].setdefault(p, {"milestone_id": milestone_id, "status": "started", "commit": commit,
+                                           "started_at": _now(), "completed_at": None})
+        lock["milestones"].setdefault(milestone_id, {"profiles": sorted(profiles), "commit": commit, "created_at": _now()})
+        _write_lock(path, lock)
+        return todo
 
 
 def mark_profile_complete(runs_dir: str | Path, dataset: str, profile: str, out: Path) -> None:
     path = lock_path(runs_dir, dataset)
-    lock = json.loads(path.read_text(encoding="utf-8"))
-    lock["entries"][profile].update({"status": "completed", "completed_at": _now(), "out": str(out)})
-    _write_lock(path, lock)
+    with _test_lock_guard(path):
+        lock = json.loads(path.read_text(encoding="utf-8"))
+        lock["entries"][profile].update({"status": "completed", "completed_at": _now(), "out": str(out)})
+        _write_lock(path, lock)
 
 
 # ---------------------------------------------------------------- embedding / spend helpers
@@ -250,6 +288,12 @@ def run(args) -> int:
         names = profiles_from_args(args)
         for n in names:
             check_profile(n, os.environ)
+        if split == "test":
+            dataset_dir = Path(getattr(args, "dataset", None) or DEFAULT_DATASET)
+            ds_name = dataset_name(dataset_dir)
+            runs_dir = getattr(args, "runs_dir", None) or DEFAULT_RUNS_DIR
+            with test_split_execution_guard(runs_dir, ds_name):
+                return asyncio.run(_go(args, names))
         return asyncio.run(_go(args, names))
     except (RunProfileError, costmod.SpendError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import multiprocessing
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
@@ -38,6 +39,26 @@ def make_dataset(tmp_path: Path, cases: list[dict], name: str | None = None) -> 
     d.mkdir()
     (d / "cases.jsonl").write_text("".join(json.dumps(c) + "\n" for c in cases), encoding="utf-8")
     return d
+
+
+def _compete_for_test_lock(runs, barrier, milestone_id, result_queue):
+    from scribe_eval.run_profile import RunProfileError, acquire_test_lock
+
+    barrier.wait()
+    try:
+        acquire_test_lock(runs, "ds", "a" * 64, ["profile"], milestone_id, "abc123")
+        result_queue.put((milestone_id, "acquired"))
+    except RunProfileError:
+        result_queue.put((milestone_id, "refused"))
+
+
+def _hold_execution_guard(runs, ready_queue, release_event, milestone_id):
+    from scribe_eval.run_profile import acquire_test_lock, test_split_execution_guard
+
+    with test_split_execution_guard(runs, "ds"):
+        acquire_test_lock(runs, "ds", "a" * 64, ["profile"], milestone_id, "abc123")
+        ready_queue.put("held")
+        release_event.wait(timeout=10)
 
 
 def ingest(dataset: Path, docs=DOCS) -> str:
@@ -178,6 +199,44 @@ def test_lock_unit_rules(tmp_path):
     with pytest.raises(rp.RunProfileError, match="changed"):
         rp.acquire_test_lock(runs, "ds", "0" * 64, ["c"], "m3", "abc123")
     assert rp.acquire_test_lock(runs, "ds", sha, ["c"], "m3", "abc123") == ["c"]  # a never-run profile is fine
+
+
+def test_concurrent_milestones_cannot_both_acquire_same_profile(tmp_path):
+    ctx = multiprocessing.get_context("spawn")
+    barrier = ctx.Barrier(2)
+    result_queue = ctx.Queue()
+    runs = str(tmp_path / "runs")
+    processes = [ctx.Process(target=_compete_for_test_lock,
+                             args=(runs, barrier, milestone_id, result_queue))
+                 for milestone_id in ("m1", "m2")]
+    for process in processes:
+        process.start()
+    results = [result_queue.get(timeout=10) for _ in processes]
+    for process in processes:
+        process.join(timeout=10)
+        assert process.exitcode == 0
+    assert sorted(status for _, status in results) == ["acquired", "refused"]
+
+
+def test_execution_guard_rejects_overlap_and_recovers_after_owner_exit(tmp_path):
+    ctx = multiprocessing.get_context("spawn")
+    ready_queue = ctx.Queue()
+    release_event = ctx.Event()
+    runs = str(tmp_path / "runs")
+    owner = ctx.Process(target=_hold_execution_guard, args=(runs, ready_queue, release_event, "m1"))
+    owner.start()
+    assert ready_queue.get(timeout=10) == "held"
+    assert rp.acquire_test_lock(runs, "ds", "a" * 64, ["profile"], "m1", "abc123") == ["profile"]
+
+    with pytest.raises(rp.RunProfileError, match="already in progress"):
+        with rp.test_split_execution_guard(runs, "ds"):
+            pytest.fail("overlapping test-split execution acquired the guard")
+
+    release_event.set()
+    owner.join(timeout=10)
+    assert owner.exitcode == 0
+    with rp.test_split_execution_guard(runs, "ds"):
+        assert rp.acquire_test_lock(runs, "ds", "a" * 64, ["profile"], "m1", "abc123") == ["profile"]
 
 
 def test_metered_embedder_separates_live_from_cached_calls():
