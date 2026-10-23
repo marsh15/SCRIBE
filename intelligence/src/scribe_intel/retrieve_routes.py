@@ -123,7 +123,7 @@ def span_json(s: SpanRef) -> dict[str, Any]:
 
 def context_json(p: PackedContext, items: dict[Any, "eb.ItemDraft"] | None = None) -> dict[str, Any]:
     items = items or {}
-    return {
+    context = {
         "budget_tokens": p.budget_tokens, "used_tokens": p.used_tokens,
         "entries": [{
             "chunk_id": str(e.item.chunk_id), "parent_id": str(e.item.parent_id) if e.item.parent_id else None,
@@ -137,9 +137,23 @@ def context_json(p: PackedContext, items: dict[Any, "eb.ItemDraft"] | None = Non
             "label": items[e.item.chunk_id].label if e.item.chunk_id in items else None,
             "evidence_item_id": str(items[e.item.chunk_id].id) if e.item.chunk_id in items else None,
         } for e in p.entries],
-        "dropped": [{"chunk_id": str(d.chunk_id), "reason": d.reason, "token_count": d.token_count}
-                    for d in p.dropped],
+        "dropped": [{
+            "chunk_id": str(d.chunk_id), "reason": d.reason, "token_count": d.token_count,
+            **({"dropped_spans": [{"start": span.start, "end": span.end} for span in d.dropped_spans]}
+               if p.context_strategy == "compressed" and d.dropped_spans else {}),
+        } for d in p.dropped],
     }
+    if p.context_strategy is not None:
+        context["strategy"] = p.context_strategy
+        if p.context_strategy == "compressed":
+            for entry, serialized in zip(p.entries, context["entries"]):
+                serialized["kept_spans"] = [
+                    {"start": span.start, "end": span.end} for span in entry.kept_spans
+                ]
+                serialized["dropped_spans"] = [
+                    {"start": span.start, "end": span.end} for span in entry.dropped_spans
+                ]
+    return context
 
 
 def candidate_json(rank: int, rc: RankedCandidate) -> dict[str, Any]:

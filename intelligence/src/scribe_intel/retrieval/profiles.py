@@ -28,6 +28,8 @@ hashes are byte-identical to the values migration 0012 seeded. `config_hash`
 is sha256 of the canonical JSON (sorted keys, compact separators, UTF-8). NOTE: this is a Python
 canonical-JSON hash, not the `sha256(jsonb::text)` the SQL seeds in 0011 use for other profile
 tables; it is stable across processes and verified on every upsert.
+`context_strategy` is omitted while it equals `legacy`, preserving the runtime behavior and hashes of all
+existing profiles. The C8 profiles opt into one of the named context strategies.
 """
 
 from __future__ import annotations
@@ -37,6 +39,8 @@ import json
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
+
+from .context import ContextStrategy
 
 SCHEMA_VERSION = 1
 SEED_ID_PREFIX = "a0000000-0000-4000-8000-00000000000"  # + 1..5 (profiles A-E only; see SEED_IDS)
@@ -59,11 +63,15 @@ class ProfileConfig(BaseModel):
     # Lexical query mode (retrieval/lexical.py). Omitted from the canonical JSON when "and" (the default) so
     # profiles created before this field existed keep their stored config and hash.
     lexical_mode: Literal["and", "or_rank"] = "and"
+    # Legacy keeps the exact pre-C8 pipeline behavior and is omitted from stored JSON.
+    context_strategy: ContextStrategy = "legacy"
 
     def canonical_dict(self) -> dict[str, Any]:
         d = self.model_dump(mode="json")
         if d["lexical_mode"] == "and":
             del d["lexical_mode"]
+        if d["context_strategy"] == "legacy":
+            del d["context_strategy"]
         return d
 
 
@@ -170,11 +178,41 @@ PROFILE_F_V2 = RetrievalProfile(
     ),
 )
 
+PROFILE_TOP20_FUSED = RetrievalProfile(
+    name="hybrid-top20-fused", description="Top 20 fused candidates in fusion order, without reranking.",
+    config=ProfileConfig(dense_top_k=40, lexical_top_k=40, context_strategy="top20_fused"),
+)
+PROFILE_TOP5_RERANKED = RetrievalProfile(
+    name="hybrid-top5-reranked", description="Top 5 candidates after reranking, without parent expansion.",
+    config=ProfileConfig(
+        dense_top_k=40, lexical_top_k=40, rerank=True, rerank_model="rerank-2.5", rerank_top_n=5,
+        context_strategy="top5_reranked",
+    ),
+)
+PROFILE_TOP5_PARENT = RetrievalProfile(
+    name="hybrid-top5-parent", description="Top 5 reranked candidates expanded to their parent context.",
+    config=ProfileConfig(
+        dense_top_k=40, lexical_top_k=40, rerank=True, rerank_model="rerank-2.5", rerank_top_n=5,
+        expand_parents=True, context_strategy="top5_parent",
+    ),
+)
+PROFILE_COMPRESSED = RetrievalProfile(
+    name="hybrid-compressed",
+    description="Top 5 reranked candidates with extractive sentence compression (1000-token context budget).",
+    config=ProfileConfig(
+        dense_top_k=40, lexical_top_k=40, rerank=True, rerank_model="rerank-2.5", rerank_top_n=5,
+        budget_tokens=1000, context_strategy="compressed",
+    ),
+)
+
 # A-E: the profiles migration 0012 seeds (ids SEED_ID_PREFIX + "1".."5"). Unchanged.
 SEED_PROFILES: tuple[RetrievalProfile, ...] = (PROFILE_A, PROFILE_B, PROFILE_C, PROFILE_D, PROFILE_E)
 # A5 additions; seeded through `upsert_profiles`/`seed_sql` (no SQL migration).
 V2_PROFILES: tuple[RetrievalProfile, ...] = (PROFILE_B_V2, PROFILE_C_V2, PROFILE_E_V2, PROFILE_F, PROFILE_F_V2)
-ALL_PROFILES: tuple[RetrievalProfile, ...] = SEED_PROFILES + V2_PROFILES
+CONTEXT_PROFILES: tuple[RetrievalProfile, ...] = (
+    PROFILE_TOP20_FUSED, PROFILE_TOP5_RERANKED, PROFILE_TOP5_PARENT, PROFILE_COMPRESSED,
+)
+ALL_PROFILES: tuple[RetrievalProfile, ...] = SEED_PROFILES + V2_PROFILES + CONTEXT_PROFILES
 DEFAULT_PROFILE = PROFILE_E  # a new default is a later, measured decision
 BY_NAME = {p.name: p for p in ALL_PROFILES}
 
@@ -186,6 +224,10 @@ SEED_IDS: dict[str, str] = {
     "hybrid-rrf-rerank-v2": "a0000000-0000-4000-8000-000000000008",
     "hybrid-rrf-rerank-flat": "a0000000-0000-4000-8000-000000000009",
     "hybrid-rrf-rerank-flat-v2": "a0000000-0000-4000-8000-000000000010",
+    "hybrid-top20-fused": "a0000000-0000-4000-8000-000000000011",
+    "hybrid-top5-reranked": "a0000000-0000-4000-8000-000000000012",
+    "hybrid-top5-parent": "a0000000-0000-4000-8000-000000000013",
+    "hybrid-compressed": "a0000000-0000-4000-8000-000000000014",
 }
 
 

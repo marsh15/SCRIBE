@@ -102,7 +102,7 @@ def test_new_profiles_definitions():
     by = P.BY_NAME
     assert [p.name for p in P.V2_PROFILES] == ["lexical-only-v2", "hybrid-rrf-v2", "hybrid-rrf-rerank-v2",
                                                "hybrid-rrf-rerank-flat", "hybrid-rrf-rerank-flat-v2"]
-    assert [p.name for p in P.ALL_PROFILES] == [p.name for p in P.SEED_PROFILES + P.V2_PROFILES]
+    assert [p.name for p in P.ALL_PROFILES] == [p.name for p in P.SEED_PROFILES + P.V2_PROFILES + P.CONTEXT_PROFILES]
     for name in ("lexical-only-v2", "hybrid-rrf-v2", "hybrid-rrf-rerank-v2", "hybrid-rrf-rerank-flat-v2"):
         assert by[name].config_json["lexical_mode"] == "or_rank"
     assert "lexical_mode" not in by["hybrid-rrf-rerank-flat"].config_json
@@ -113,13 +113,13 @@ def test_new_profiles_definitions():
     assert by["hybrid-rrf-rerank-flat"].config == e.model_copy(update={"expand_parents": False})
     assert by["hybrid-rrf-rerank-flat-v2"].config == e.model_copy(update={"expand_parents": False, "lexical_mode": "or_rank"})
     assert P.DEFAULT_PROFILE is P.PROFILE_E and P.DEFAULT_PROFILE.name == "hybrid-rrf-rerank"
-    assert len({p.config_hash for p in P.ALL_PROFILES}) == 10 and len({p.name for p in P.ALL_PROFILES}) == 10
+    assert len({p.config_hash for p in P.ALL_PROFILES}) == 14 and len({p.name for p in P.ALL_PROFILES}) == 14
 
 
 def test_seed_ids_are_valid_distinct_uuids():
     assert set(P.SEED_IDS) == {p.name for p in P.ALL_PROFILES}
     parsed = [uuid.UUID(v) for v in P.SEED_IDS.values()]
-    assert len(set(parsed)) == 10 and all(str(u) == v for u, v in zip(parsed, P.SEED_IDS.values()))
+    assert len(set(parsed)) == 14 and all(str(u) == v for u, v in zip(parsed, P.SEED_IDS.values()))
     assert all(u.version == 4 for u in parsed)
     assert [params[0] for _, params in P.seed_sql()] == [P.SEED_IDS[p.name] for p in P.ALL_PROFILES]
 

@@ -1,7 +1,7 @@
-"""DB-backed tests for retrieval profile seeding (T14).
+"""DB-backed tests for retrieval profile seeding (T14 and C8).
 
 Every test runs inside a transaction that is ALWAYS rolled back, so the shared test DB keeps
-the five rows seeded by drizzle/0012_seed_retrieval_profiles.sql.
+the five rows seeded by drizzle/0012_seed_retrieval_profiles.sql and verifies code-seeded rows.
 
 The migration/code consistency test (test_migration_seed_matches_code) needs no database and is
 deliberately left unmarked so it always runs.
@@ -19,8 +19,8 @@ from conftest import DATABASE_URL_TEST, needs_db
 from scribe_intel.retrieval import profiles as P
 
 MIGRATION = Path(__file__).resolve().parents[3] / "drizzle" / "0012_seed_retrieval_profiles.sql"
-SEED_NAMES = [p.name for p in P.SEED_PROFILES]
-SEED_IDS = {p.name: f"{P.SEED_ID_PREFIX}{i}" for i, p in enumerate(P.SEED_PROFILES, start=1)}
+SEED_NAMES = [p.name for p in P.ALL_PROFILES]
+SEED_IDS = P.SEED_IDS
 ROW_RE = re.compile(
     r"\('([0-9a-f-]{36})',\s*'([^']+)',\s*'(\{[^']*\})',\s*'([0-9a-f]{64})'\)"
 )
@@ -75,7 +75,7 @@ def test_upsert_against_real_db_is_idempotent_and_matches_code(conn):
 
     rows = _stored_rows(conn)
     assert set(rows) == set(SEED_NAMES)
-    for p in P.SEED_PROFILES:
+    for p in P.ALL_PROFILES:
         rid, config, config_hash = rows[p.name]
         assert rid == SEED_IDS[p.name]
         assert config == p.config_json
@@ -83,15 +83,15 @@ def test_upsert_against_real_db_is_idempotent_and_matches_code(conn):
 
 
 @needs_db
-def test_upsert_on_empty_table_inserts_all_five(conn):
+def test_upsert_on_empty_table_inserts_all_profiles(conn):
     _delete_profiles(conn, SEED_NAMES)
     assert _stored_rows(conn) == {}
 
     P.upsert_profiles(conn)
 
     rows = _stored_rows(conn)
-    assert len(rows) == 5
-    for p in P.SEED_PROFILES:
+    assert len(rows) == len(P.ALL_PROFILES)
+    for p in P.ALL_PROFILES:
         rid, config, config_hash = rows[p.name]
         assert rid == SEED_IDS[p.name]
         assert config == p.config_json
