@@ -17,6 +17,7 @@ export const ROUTE_TABLE: Record<string, { category: RouteCategory; note: string
   "app/api/chat/route.ts": { category: "idor", note: "chatId query parameter; 404 for a chat the caller does not own" },
   "app/api/compare/route.ts": { category: "idor", note: "optional source ids in the body; workspace and user come from the session only, a foreign id yields empty rankings" },
   "app/api/evidence/[id]/route.ts": { category: "idor", note: "evidence item id; Python re-checks the workspace on every open (INV-8)" },
+  "app/api/feedback/route.ts": { category: "idor", note: "message id is accepted only for an assistant answer in the session workspace" },
   "app/api/files/[id]/view/route.ts": { category: "idor", note: "source id and ?version=; scoped by workspace and user" },
   "app/api/rag/latest/route.ts": { category: "idor", note: "chatId / assistantMessageId; a foreign id yields the same empty trace as an unknown one" },
   "app/api/sources/[id]/versions/route.ts": { category: "idor", note: "source id; the reserve SQL function refuses a foreign source" },

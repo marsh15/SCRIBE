@@ -405,6 +405,9 @@ export default function DocumentUpload() {
                       <p className="text-[11px] text-muted-foreground mt-3 max-w-sm mx-auto bg-muted/50 p-2 rounded border border-border/50">
                         <strong className="text-foreground">Private by default:</strong> Originals upload to secure storage, then index in the background.
                       </p>
+                      <p className="mt-2 max-w-sm text-[11px] text-muted-foreground">
+                        Questions and feedback are logged to improve answers; documents stay private.
+                      </p>
                     </div>
                   </div>
                 )}

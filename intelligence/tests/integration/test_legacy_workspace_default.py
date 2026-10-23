@@ -499,10 +499,12 @@ def test_rollback_file_also_deletes_the_journal_row_when_the_journal_table_exist
 
 def test_journal_has_the_0020_entry():
     journal = json.loads((DRIZZLE / "meta" / "_journal.json").read_text())
-    last = journal["entries"][-1]
-    assert (last["idx"], last["tag"], last["when"]) == (20, "0020_legacy_workspace_default", 1784937600000)
-    assert last["when"] > journal["entries"][-2]["when"]
-    assert (DRIZZLE / f"{last['tag']}.sql").exists() and (DRIZZLE / "rollback" / f"{last['tag']}.down.sql").exists()
+    entries = [entry for entry in journal["entries"] if entry["idx"] == 20]
+    assert len(entries) == 1
+    entry = entries[0]
+    assert (entry["idx"], entry["tag"], entry["when"]) == (20, "0020_legacy_workspace_default", 1784937600000)
+    assert entry["when"] > next(item["when"] for item in journal["entries"] if item["idx"] == 19)
+    assert (DRIZZLE / f"{entry['tag']}.sql").exists() and (DRIZZLE / "rollback" / f"{entry['tag']}.down.sql").exists()
 
 
 # --- j. concurrency ---------------------------------------------------------------------------------------------------
