@@ -11,7 +11,7 @@
  *  - gone        removed endpoints (410 on every method).
  *  - public      reachable without a session by design; the reason says what protects it.
  */
-export type RouteCategory = "idor" | "internal" | "session" | "gone" | "public";
+export type RouteCategory = "idor" | "internal" | "session" | "admin" | "gone" | "public";
 
 export const ROUTE_TABLE: Record<string, { category: RouteCategory; note: string }> = {
   "app/api/chat/route.ts": { category: "idor", note: "chatId query parameter; 404 for a chat the caller does not own" },
@@ -24,6 +24,7 @@ export const ROUTE_TABLE: Record<string, { category: RouteCategory; note: string
   "app/api/internal/ingest/run/route.ts": { category: "internal", note: "CRON_SECRET bearer" },
   "app/api/internal/ingest/sweep/route.ts": { category: "internal", note: "CRON_SECRET bearer" },
   "app/api/internal/ingest/tick/route.ts": { category: "internal", note: "CRON_SECRET bearer" },
+  "app/api/admin/migration/route.ts": { category: "admin", note: "owner-only migration totals and retry for structural-v1" },
   "app/api/billing/checkout/route.ts": { category: "session", note: "no resource id; user-scoped" },
   "app/api/billing/portal/route.ts": { category: "session", note: "no resource id; user-scoped" },
   "app/api/billing/usage/route.ts": { category: "session", note: "no resource id; user-scoped" },

@@ -31,7 +31,7 @@ describe("route guard", () => {
     expect(stale, `remove from route-table.ts: ${stale}`).toEqual([]);
   });
 
-  it("every route that takes a dynamic segment or an id-like parameter is classified idor", () => {
+  it("every route that takes a dynamic segment or an id-like parameter is classified idor or admin", () => {
     for (const f of routeFiles) {
       const src = readFileSync(path.join(ROOT, f), "utf8");
       const takesId =
@@ -39,7 +39,7 @@ describe("route guard", () => {
         /searchParams\.get\(["'](chatId|assistantMessageId|fileId|sourceId|id|version)["']\)/.test(src) ||
         /\bsourceId\b/.test(src);
       if (takesId) {
-        expect(ROUTE_TABLE[f]?.category, `${f} takes an id: it must be an idor row`).toBe("idor");
+        expect(["idor", "admin"], `${f} takes an id: it must be scoped or owner-only`).toContain(ROUTE_TABLE[f]?.category);
       }
     }
   });

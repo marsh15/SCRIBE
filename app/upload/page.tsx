@@ -524,6 +524,8 @@ export default function DocumentUpload() {
                             attempts={file.jobAttempts}
                             errorCode={file.jobErrorCode}
                             lastError={file.jobLastError}
+                            embeddedChunks={file.jobEmbeddedChunks}
+                            expectedChunks={file.jobExpectedChunks}
                             retrying={retryingId === file.id}
                             onRetry={() => handleRetry(file.id)}
                           />

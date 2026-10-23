@@ -9,6 +9,8 @@ export interface IngestStatusProps {
   attempts?: number;
   errorCode?: string | null;
   lastError?: string | null;
+  embeddedChunks?: number | null;
+  expectedChunks?: number | null;
   retrying?: boolean;
   onRetry?: () => void;
 }
@@ -24,8 +26,12 @@ const STAGE_LABEL: Record<string, string> = {
 };
 
 /** Stage, attempts and last error code for one Source, plus Retry once indexing has failed. */
-export function SourceIngestStatus({ status, stage, attempts = 0, errorCode, lastError, retrying, onRetry }: IngestStatusProps) {
-  if (status === "ready" || status === "uploading") return null;
+export function SourceIngestStatus({ status, stage, attempts = 0, errorCode, lastError, embeddedChunks, expectedChunks, retrying, onRetry }: IngestStatusProps) {
+  const hasProgress = typeof embeddedChunks === "number" && typeof expectedChunks === "number";
+  if ((status === "ready" || status === "uploading") && !hasProgress) return null;
+  const progressPct = hasProgress && expectedChunks! > 0
+    ? Math.min(100, Math.round((1000 * embeddedChunks!) / expectedChunks!) / 10)
+    : null;
   const stageLabel = stage ? (STAGE_LABEL[stage] ?? stage) : null;
   return (
     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="ingest-status">
@@ -33,6 +39,28 @@ export function SourceIngestStatus({ status, stage, attempts = 0, errorCode, las
         <span className="font-mono text-[10px] text-muted-foreground" data-testid="ingest-stage">
           Stage: {stageLabel}
         </span>
+      )}
+      {hasProgress && (
+        <div className="flex min-w-40 items-center gap-2" data-testid="ingest-progress">
+          {progressPct === null ? (
+            <span className="font-mono text-[10px] text-muted-foreground">Progress unavailable</span>
+          ) : (
+            <>
+              <div
+                className="h-1.5 min-w-16 flex-1 overflow-hidden rounded-sm bg-muted"
+                role="progressbar"
+                aria-label="Source ingestion progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progressPct}
+                aria-valuetext={`${progressPct}%; ${embeddedChunks} of ${expectedChunks} passages embedded`}
+              >
+                <div className="h-full bg-rag" style={{ width: `${progressPct}%` }} />
+              </div>
+              <span className="font-mono text-[10px] text-muted-foreground">{progressPct}%</span>
+            </>
+          )}
+        </div>
       )}
       {attempts > 0 && (
         <span className="font-mono text-[10px] text-muted-foreground" data-testid="ingest-attempts">

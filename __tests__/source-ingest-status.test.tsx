@@ -24,9 +24,11 @@ function render(props: Parameters<typeof SourceIngestStatus>[0]) {
 }
 
 it("shows stage and attempts while indexing, with no Retry button", () => {
-  render({ status: "processing", stage: "EMBED", attempts: 2, onRetry: vi.fn() });
+  render({ status: "processing", stage: "EMBED", attempts: 2, embeddedChunks: 3, expectedChunks: 4, onRetry: vi.fn() });
   expect(host.textContent).toContain("Embedding passages");
   expect(host.textContent).toContain("Attempts: 2");
+  expect(host.textContent).toContain("75%");
+  expect(host.querySelector('[role="progressbar"]')?.getAttribute("aria-valuetext")).toContain("3 of 4");
   expect(host.querySelector("button")).toBeNull();
 });
 
@@ -44,6 +46,13 @@ it("disables Retry while a retry is in flight and renders nothing for ready Sour
   render({ status: "failed", errorCode: "RESOURCE_LIMIT", retrying: true, onRetry: vi.fn() });
   expect(host.querySelector("button")!.disabled).toBe(true);
   render({ status: "ready", stage: "DONE", attempts: 1 });
+  expect(host.textContent).toBe("");
+});
+
+it("shows progress for a ready Source only when its latest job has generation counts", () => {
+  render({ status: "ready", embeddedChunks: 2, expectedChunks: 3 });
+  expect(host.textContent).toContain("66.7%");
+  render({ status: "ready" });
   expect(host.textContent).toBe("");
 });
 
