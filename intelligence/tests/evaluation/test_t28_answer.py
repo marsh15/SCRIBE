@@ -353,7 +353,8 @@ def test_fake_run_needs_explicit_out_and_real_needs_a_key(mini, monkeypatch, cap
     monkeypatch.delenv("GOOGLE_GENERATIVE_AI_API_KEY", raising=False)
     assert main(["answer", "--dataset", str(ds), "--rankings", str(rk), "--split", "dev", "--generator", "fake"]) == 2
     assert "explicit --out" in capsys.readouterr().err
-    assert main(["answer", "--dataset", str(ds), "--rankings", str(rk), "--split", "dev", "--out", str(tmp / "o2")]) == 2
+    assert main(["answer", "--dataset", str(ds), "--rankings", str(rk), "--split", "dev",
+                 "--cache-mode", "live", "--out", str(tmp / "o2")]) == 2
     assert "GOOGLE_GENERATIVE_AI_API_KEY" in capsys.readouterr().err
     assert not (tmp / "o2").exists()
 
