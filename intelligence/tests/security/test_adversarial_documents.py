@@ -123,9 +123,10 @@ async def test_hostile_text_is_stored_and_returned_verbatim_as_data(client, seed
 async def test_the_response_has_no_tool_or_scope_fields_a_document_could_have_injected(client, seeded):
     j = await retrieve(client, seeded, "sync job nightly", files=["tool-call.md"])
     allowed = {"profile", "trace_id", "degraded", "config_hash", "candidates", "stage_ms", "counts", "meta",
-               "answerability", "evidence", "context"}
+               "answerability", "evidence", "context", "cost"}
     assert set(j) == allowed
     assert set(j["evidence"]) == {"bundle_id", "next_label", "items"}
+    assert set(j["cost"]) == {"embed_tokens", "rerank_tokens", "usd", "estimated", "prices_as_of"}
 
 
 # ---------------------------------------------------------------- verification: statuses stay deterministic

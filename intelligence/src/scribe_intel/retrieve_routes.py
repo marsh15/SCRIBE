@@ -33,6 +33,7 @@ from scribe_ingest.ocr import OCR_NOTICE
 
 from scribe_ingest.embedding import (Embedder, EmbeddingError, FakeEmbedder, FakeEmbedderRefused,
                                      GeminiEmbedder, TaskFormat, database_name, embedder_from_env)
+from scribe_ingest.tokens import count_tokens
 
 from .auth import Principal, require_scope
 from .config import get_settings
@@ -43,12 +44,96 @@ from .retrieval.registry import DEFAULT_PROFILE, RetrieveContext, StrategyResult
 from .retrieval.packing import PackedContext
 from .retrieval.rerank import CacheMiss, FakeReranker, VoyageReranker
 from .retrieval.types import RankedCandidate, SpanRef
+from .pricing import PRICE_TABLE_DATE, UnknownPrice, tokens_usd
 
 router = APIRouter()
 log = logging.getLogger("scribe.retrieve")
 
 LEGACY_MODEL = "gemini-embedding-2-preview"
 LEGACY_TASK_FORMAT = TaskFormat(name="legacy-none-v1", document="{text}", query="{text}")
+
+
+class _RetrievalCost:
+    """Tracks only provider stages actually invoked by the selected retrieval strategy."""
+
+    def __init__(self) -> None:
+        self.embed_tokens = 0
+        self.rerank_tokens = 0
+        self.usd = 0.0
+        self.estimated = False
+        self.unknown_price = False
+
+    def add(self, model: str, token_count: int, *, cached: bool = False, is_fake: bool = False) -> None:
+        self.estimated = True  # current retrieval adapters do not return provider token usage
+        if cached or is_fake or model.startswith("fake"):
+            return
+        try:
+            self.usd += tokens_usd(model, token_count)
+        except UnknownPrice:
+            # Keep an unknown model from failing retrieval; null USD is more honest than an invented rate.
+            self.unknown_price = True
+
+    def as_json(self) -> dict[str, Any]:
+        return {"embed_tokens": self.embed_tokens, "rerank_tokens": self.rerank_tokens,
+                "usd": None if self.unknown_price else round(self.usd, 8), "estimated": self.estimated,
+                "prices_as_of": PRICE_TABLE_DATE}
+
+
+class _TrackedEmbedder:
+    def __init__(self, inner: Embedder, cost: _RetrievalCost, dimensions: int | None = None) -> None:
+        self._inner, self._cost = inner, cost
+        model = getattr(inner, "model", None)
+        self.model = model if isinstance(model, str) and model else "unknown-embedding"
+        self.dimensions = getattr(inner, "dimensions", dimensions)
+        self.is_fake = bool(getattr(inner, "is_fake", False))
+
+    async def embed_documents(self, texts, titles=None):
+        return await self._inner.embed_documents(texts, titles)
+
+    async def embed_queries(self, texts):
+        before = getattr(self._inner, "requests_made", None)
+        task_format = getattr(self._inner, "task_format", None)
+        billed_texts = [task_format.format_query(text) for text in texts] if task_format else texts
+        tokens = sum(count_tokens(text) for text in billed_texts)
+        try:
+            return await self._inner.embed_queries(texts)
+        finally:
+            after = getattr(self._inner, "requests_made", None)
+            cached = before is not None and after == before
+            self._cost.embed_tokens += tokens
+            self._cost.add(self.model, tokens, cached=cached, is_fake=self.is_fake)
+
+
+class _TrackedReranker:
+    def __init__(self, inner, cost: _RetrievalCost) -> None:
+        self._inner, self._cost = inner, cost
+        model = getattr(inner, "model", None)
+        self.model = model if isinstance(model, str) and model else "unknown-reranker"
+        self.is_fake = bool(getattr(inner, "is_fake", False))
+
+    async def rerank(self, query, docs, top_n):
+        before_requests = getattr(getattr(self._inner, "inner", self._inner), "requests_made", None)
+        before_hits = getattr(self._inner, "hits", 0)
+        tokens = count_tokens(query) * len(docs) + sum(count_tokens(doc) for doc in docs)
+        try:
+            return await self._inner.rerank(query, docs, top_n)
+        finally:
+            after_requests = getattr(getattr(self._inner, "inner", self._inner), "requests_made", None)
+            after_hits = getattr(self._inner, "hits", before_hits)
+            cached = after_hits > before_hits or (before_requests is not None and after_requests == before_requests)
+            self._cost.rerank_tokens += tokens
+            self._cost.add(self.model, tokens, cached=cached, is_fake=self.is_fake)
+
+
+def _costed_embedder_factory(factory, cost: _RetrievalCost):
+    return lambda dims: _TrackedEmbedder(factory(dims), cost, dims)
+
+
+def _costed_reranker_factory(factory, cost: _RetrievalCost):
+    def tracked(model):
+        reranker = factory(model)
+        return _TrackedReranker(reranker, cost) if reranker is not None else None
+    return tracked
 
 
 class RetrieveBody(BaseModel):
@@ -172,6 +257,7 @@ def trace_config_hash(body: RetrieveBody) -> str:
 
 async def persist_trace(pool, wid: str, body: RetrieveBody, status: str, *, result: StrategyResult | None,
                         returned: int, stage_ms: dict[str, int], degraded: list[str],
+                        cost: dict[str, Any] | None = None,
                         drafts: list["eb.ItemDraft"] | None = None) -> tuple[uuid.UUID, "eb.EvidenceOutcome | None"]:
     """Separate short write transaction (the read snapshot is already closed). With `drafts` (a packed profile) the
     evidence bundle + items are written in the same transaction and returned."""
@@ -189,11 +275,11 @@ async def persist_trace(pool, wid: str, body: RetrieveBody, status: str, *, resu
         async with conn.transaction():
             await conn.execute("select set_config('app.workspace_id', %s, true)", (wid,))
             cur = await conn.execute(
-                "insert into retrieval_traces(workspace_id, query, config_hash, status, degraded, stage_ms, counts, "
-                "profile_id) values (%s,%s,%s,%s,%s,%s,%s, (select id from retrieval_profiles "
+                "insert into retrieval_traces(workspace_id, query, config_hash, status, degraded, stage_ms, counts, cost, "
+                "profile_id) values (%s,%s,%s,%s,%s,%s,%s,%s, (select id from retrieval_profiles "
                 "where name = %s and config_hash = %s)) returning id",
                 (wid, body.query, cfg_hash, status, ",".join(degraded) or None,
-                 Jsonb(stage_ms), Jsonb(counts), profile_name, profile_hash))
+                 Jsonb(stage_ms), Jsonb(counts), Jsonb(cost) if cost is not None else None, profile_name, profile_hash))
             trace_id = (await cur.fetchone())[0]
             outcome = None
             if drafts is not None and result is not None:
@@ -243,8 +329,10 @@ async def retrieve(body: RetrieveBody, principal: Principal = Depends(require_sc
     except ValueError as exc:
         return _error(500, "RERANKER_MISCONFIGURED", str(exc), False)
 
+    retrieval_cost = _RetrievalCost()
     ctx = RetrieveContext(pool=pool, workspace_id=wid, query=body.query, source_ids=body.source_ids,
-                          limit=body.limit, embedder_for=embedder_for, reranker_for=reranker_for)
+                          limit=body.limit, embedder_for=_costed_embedder_factory(embedder_for, retrieval_cost),
+                          reranker_for=_costed_reranker_factory(reranker_for, retrieval_cost))
     try:
         result = await handler(ctx)
     except (EmbeddingError, CacheMiss, psycopg.Error, LookupError, OSError) as exc:
@@ -259,7 +347,7 @@ async def retrieve(body: RetrieveBody, principal: Principal = Depends(require_sc
         try:
             trace_id = str((await persist_trace(pool, wid, body, "failed", result=None, returned=0,
                                                 stage_ms={"total": int((time.monotonic() - started) * 1000)},
-                                                degraded=[]))[0])
+                                                degraded=[], cost=retrieval_cost.as_json()))[0])
         except Exception:  # noqa: BLE001
             log.warning("trace persist failed (failed retrieval) workspace=%s", wid)
         failed = eb.retrieval_failed(gate_for(body.profile)).as_json()
@@ -281,7 +369,8 @@ async def retrieve(body: RetrieveBody, principal: Principal = Depends(require_sc
     t = time.monotonic()
     try:
         tid, outcome = await persist_trace(pool, wid, body, "ok", result=result, returned=len(returned),
-                                           stage_ms=stage_ms, degraded=degraded, drafts=drafts)
+                                           stage_ms=stage_ms, degraded=degraded, cost=retrieval_cost.as_json(),
+                                           drafts=drafts)
         trace_id = str(tid)
     except Exception as exc:  # noqa: BLE001 - tracing must never fail the request
         log.warning("trace persist failed workspace=%s cause=%s", wid, type(exc).__name__)
@@ -304,6 +393,7 @@ async def retrieve(body: RetrieveBody, principal: Principal = Depends(require_sc
         "candidates": [candidate_json(i, rc) for i, rc in enumerate(returned, 1)],
         "stage_ms": stage_ms, "counts": {**result.counts, "returned": len(returned)}, "meta": result.extra,
         "answerability": answer.as_json(), "evidence": evidence,
+        "cost": retrieval_cost.as_json(),
     }
     if result.packed is not None:
         out["context"] = context_json(result.packed, {d.chunk_id: d for d in outcome.items} if outcome else None)

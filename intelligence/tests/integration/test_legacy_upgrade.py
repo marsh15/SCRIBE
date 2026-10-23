@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import pytest
+from psycopg.types.json import Jsonb
 from _db import aconnect, doc, new_workspace, skip_or_fail_if_foreign_jobs
 from _legacy import legacy_source
 from conftest import DATABASE_URL_TEST, needs_db
 from scribe_ingest import upgrade
 from scribe_ingest.blob import BlobDownloadError
 from scribe_ingest.embedding import FakeEmbedder
+from scribe_ingest.indexer import IndexerError
 from scribe_intel.ingest_steps import run_step
 
 pytestmark = needs_db
@@ -98,6 +100,81 @@ async def test_queue_is_drained_by_the_existing_step_machine_on_version_1(env):
     assert p["states"]["upgraded"] == 1 and p["retire_ready"] is True
     rep = await upgrade.run_backfill(conn, workspace=wid)
     assert (rep.queued, rep.requeued, rep.marked_reupload) == (0, 0, 0) and rep.untouched == {"upgraded": 1}
+
+
+async def _seed_structural_alias(conn, name="structural-test-alias"):
+    row = await (await conn.execute(
+        "select parser_profile, chunk_profile_id, embedding_profile_id, config from index_profiles "
+        "where name='structural-v1'" )).fetchone()
+    cur = await conn.execute(
+        "insert into index_profiles(name, parser_profile, chunk_profile_id, embedding_profile_id, config) "
+        "values (%s,%s,%s,%s,%s) on conflict do nothing returning id",
+        (name, row[0], row[1], row[2], Jsonb(row[3])))
+    inserted = await cur.fetchone()
+    if inserted:
+        return name, inserted[0]
+    cur = await conn.execute("select id from index_profiles where name=%s", (name,))
+    return name, (await cur.fetchone())[0]
+
+
+async def test_backfill_target_profile_is_carried_through_generation_and_worker(env):
+    conn, wid = env
+    fid = await legacy_source(conn, wid)
+    alias, alias_id = await _seed_structural_alias(conn)
+
+    rep = await upgrade.run_backfill(conn, workspace=wid, profile=alias)
+    assert rep.queued == 1
+    cur = await conn.execute(
+        "select j.generation_id, g.index_profile_id from ingestion_jobs j "
+        "join index_generations g on g.id=j.generation_id where j.file_id=%s", (fid,))
+    generation_id, profile_id = await cur.fetchone()
+    assert profile_id == alias_id
+
+    result = await run_step(conn, FakeEmbedder(), download=lambda url, tok, **k: doc(1))
+    assert result["outcome"] == "completed", result
+    cur = await conn.execute(
+        "select ip.name, g.status, g.expected_chunks, g.embedded_chunks from index_generations g "
+        "join index_profiles ip on ip.id=g.index_profile_id where g.id=%s", (generation_id,))
+    assert await cur.fetchone() == (alias, "ACTIVE", 3, 3)
+    progress = await upgrade.progress(conn, workspace=wid, profile=alias)
+    assert progress["sources"][0]["stage"] == "DONE"
+    assert progress["sources"][0]["embedded_chunks"] == progress["sources"][0]["expected_chunks"] == 3
+    assert progress["totals"] == {"sources": 1, "embedded_chunks": 3, "expected_chunks": 3,
+                                  "progress_pct": 100.0, "failures": 0}
+    again = await upgrade.run_backfill(conn, workspace=wid, profile=alias)
+    assert again.queued == 0 and again.untouched == {"upgraded": 1}
+    assert (await jobs(conn, wid))[0][1] == "completed"
+
+
+async def test_progress_has_per_source_stage_and_does_not_invent_zero_totals(env):
+    conn, wid = env
+    fid = await legacy_source(conn, wid)
+    rep = await upgrade.run_backfill(conn, workspace=wid)
+    assert rep.queued == 1
+    progress = await upgrade.progress(conn, workspace=wid)
+    assert progress["total"] == 1  # existing aggregate field remains available
+    assert progress["sources"] == [{
+        "source_id": fid, "name": "legacy.md", "state": "building", "stage": "BUILDING",
+        "generation_id": progress["sources"][0]["generation_id"], "embedded_chunks": 0,
+        "expected_chunks": 0, "job_id": progress["sources"][0]["job_id"],
+        "job_status": "queued", "error_code": None, "reupload_reason": None,
+    }]
+    assert progress["totals"]["progress_pct"] is None
+    assert progress["totals"]["expected_chunks"] == 0
+
+
+async def test_legacy_and_unknown_profiles_are_rejected_before_backfill_writes(env):
+    conn, wid = env
+    fid = await legacy_source(conn, wid)
+    for profile, phrase in (("legacy-v1", "not supported for backfill"),
+                            ("missing-profile", "not found")):
+        with pytest.raises(IndexerError, match=phrase):
+            await upgrade.run_backfill(conn, workspace=wid, profile=profile)
+        with pytest.raises(IndexerError, match=phrase):
+            await upgrade.progress(conn, workspace=wid, profile=profile)
+    assert await jobs(conn, wid) == []
+    cur = await conn.execute("select count(*) from index_generations where source_id=%s", (fid,))
+    assert (await cur.fetchone())[0] == 1  # the pre-existing legacy generation only
 
 
 async def test_unreadable_blob_fails_permanently_and_is_marked_reupload(env):
