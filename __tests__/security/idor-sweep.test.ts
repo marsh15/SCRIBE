@@ -44,6 +44,7 @@ const S = vi.hoisted(() => {
     chain,
     findFirst,
     mutations: [] as string[],
+    batchBatches: [] as unknown[][],
     callIntelligence: vi.fn(),
     after: vi.fn(),
     fireTick: vi.fn(),
@@ -78,6 +79,10 @@ vi.mock("@/lib/db-config", () => ({
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => S.sql(strings.join("?"), values),
   db: {
     select: () => S.chain([]),
+    batch: async (items: unknown[]) => {
+      S.batchBatches.push(items);
+      return [[], ...items.slice(1).map(() => [])];
+    },
     insert: () => ({ values: async () => void S.mutations.push("insert") }),
     update: () => ({ set: () => ({ where: async () => void S.mutations.push("update") }) }),
     delete: () => ({ where: async () => void S.mutations.push("delete") }),
@@ -129,6 +134,7 @@ import { GET as migrationGET, POST as migrationPOST } from "@/app/api/admin/migr
 import { POST as chatPOST } from "@/app/api/chat/route";
 import { POST as comparePOST } from "@/app/api/compare/route";
 import { GET as evidenceGET } from "@/app/api/evidence/[id]/route";
+import { POST as feedbackPOST } from "@/app/api/feedback/route";
 import { GET as viewGET } from "@/app/api/files/[id]/view/route";
 import { GET as healthGET } from "@/app/api/health/route";
 import { GET as runGET } from "@/app/api/internal/ingest/run/route";
@@ -167,6 +173,7 @@ beforeEach(() => {
   vi.unstubAllEnvs();
   S.wheres.length = 0;
   S.mutations.length = 0;
+  S.batchBatches.length = 0;
   S.env.INGEST_ENGINE = "python";
   S.env.CRON_SECRET = "cron-secret";
   S.sql.mockResolvedValue([]);
@@ -250,6 +257,21 @@ const ROUTE_HANDLERS: Record<string, () => Promise<void>> = {
     expect(path).toBe("/evidence/open");
     expect(token).toEqual({ sub: USER_A, wid: WS_A, scope: "evidence_read" }); // never the query/header value
     expect(JSON.parse(init.body)).toEqual({ item_id: FOREIGN_EVIDENCE });
+  },
+
+  "app/api/feedback/route.ts": async () => {
+    const post = (body: unknown) => feedbackPOST(url("/api/feedback", { method: "POST", body: JSON.stringify(body) }));
+    signedOut();
+    expect((await post({ messageId: FOREIGN_MESSAGE, rating: "down" })).status).toBe(401);
+    expect(S.batchBatches).toHaveLength(0);
+    signedIn();
+    const res = await post({ messageId: FOREIGN_MESSAGE, rating: "down", workspaceId: "ws-B" });
+    expect(res.status).toBe(400); // unknown/client-supplied fields fail before any lookup
+    const foreign = await post({ messageId: FOREIGN_MESSAGE, rating: "down" });
+    expect(foreign.status).toBe(404);
+    expectWhereHas(FOREIGN_MESSAGE, USER_A, WS_A);
+    expect(S.mutations).toEqual([]);
+    expect(S.batchBatches).toHaveLength(1);
   },
 
   "app/api/files/[id]/view/route.ts": async () => {

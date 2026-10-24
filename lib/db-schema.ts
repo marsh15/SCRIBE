@@ -815,6 +815,44 @@ export const retrievalTraces = pgTable(
   })
 );
 
+export const answerFeedback = pgTable(
+  "answer_feedback",
+  {
+    id: serial("id").primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .references(() => workspaces.id, { onDelete: "cascade" })
+      .notNull(),
+    chatId: text("chat_id")
+      .references(() => chats.id, { onDelete: "cascade" })
+      .notNull(),
+    messageId: text("message_id")
+      .references(() => chatMessages.id, { onDelete: "cascade" })
+      .notNull(),
+    ragTraceId: text("rag_trace_id").references(() => ragTraces.id, { onDelete: "set null" }),
+    retrievalTraceId: uuid("retrieval_trace_id").references(() => retrievalTraces.id, { onDelete: "set null" }),
+    userId: text("user_id").notNull(),
+    rating: text("rating").notNull(),
+    reasons: text("reasons").array().default(sql`'{}'::text[]`).notNull(),
+    comment: text("comment"),
+    createdAt: tstz("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    workspaceCreatedIndex: index("answer_feedback_workspace_created_at_index").on(
+      table.workspaceId,
+      table.createdAt
+    ),
+    ratingCheck: check("answer_feedback_rating_check", sql`${table.rating} IN ('up', 'down')`),
+    reasonsCheck: check(
+      "answer_feedback_reasons_check",
+      sql`${table.reasons} <@ ARRAY['wrong_citation', 'missing_info', 'outdated_version', 'should_abstain']::text[]`
+    ),
+    commentLengthCheck: check(
+      "answer_feedback_comment_length_check",
+      sql`${table.comment} IS NULL OR char_length(${table.comment}) <= 2000`
+    ),
+  })
+);
+
 export const retrievalCandidates = pgTable(
   "retrieval_candidates",
   {
@@ -961,6 +999,8 @@ export type InsertChatMessage = typeof chatMessages.$inferInsert;
 export type SelectChatMessage = typeof chatMessages.$inferSelect;
 export type InsertRagTrace = typeof ragTraces.$inferInsert;
 export type SelectRagTrace = typeof ragTraces.$inferSelect;
+export type InsertAnswerFeedback = typeof answerFeedback.$inferInsert;
+export type SelectAnswerFeedback = typeof answerFeedback.$inferSelect;
 export type InsertRagTraceChunk = typeof ragTraceChunks.$inferInsert;
 export type SelectRagTraceChunk = typeof ragTraceChunks.$inferSelect;
 export type InsertRagEvaluation = typeof ragEvaluations.$inferInsert;

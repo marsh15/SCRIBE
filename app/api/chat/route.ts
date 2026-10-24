@@ -265,6 +265,7 @@ export async function POST(req: Request) {
     let turnDone!: (t: TurnFinish) => void;
     const turnFinished = new Promise<TurnFinish>((resolve) => (turnDone = resolve));
 
+    const assistantMessageId = nanoid();
     const result = streamText({
       model,
       messages: await convertToModelMessages(sanitizedMessages),
@@ -345,7 +346,6 @@ export async function POST(req: Request) {
             });
           }
 
-          const assistantMessageId = nanoid();
           await db.insert(chatMessages).values({
             id: assistantMessageId,
             chatId,
@@ -419,7 +419,10 @@ export async function POST(req: Request) {
 
     if (retrievalEngine === "python") {
       const stream = streamWithVerification({
-        modelStream: result.toUIMessageStream({ sendFinish: false }),
+        modelStream: result.toUIMessageStream({
+          generateMessageId: () => assistantMessageId,
+          sendFinish: false,
+        }),
         finished: turnFinished,
         verify: (t) =>
           requestVerification({ userId, workspaceId, messageId: t.messageId, text: t.text, results: ragToolResults }),
@@ -432,6 +435,7 @@ export async function POST(req: Request) {
     }
 
     return result.toUIMessageStreamResponse({
+      generateMessageId: () => assistantMessageId,
       onError: (error) => {
         const formatted = formatChatError(error);
         console.error("[Chat] Stream failed:", error);

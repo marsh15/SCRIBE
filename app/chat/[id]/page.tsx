@@ -12,6 +12,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { DefaultChatTransport } from "ai";
 import { messageUsesKnowledgeBase } from "@/lib/chat-tools";
+import { AnswerFeedback } from "@/components/answer-feedback";
 
 type StoredPart = {
   type?: string;
@@ -141,6 +142,7 @@ function ChatInterface({
     "Draft a customer-facing response with citations for refund policy.",
   ];
   const isLoading = status === "submitted" || status === "streaming";
+  const currentMessageId = messages[messages.length - 1]?.id;
   const searchParams = useSearchParams();
   const initialSendDone = useRef(false);
   const initialQuery = searchParams.get("q");
@@ -308,6 +310,9 @@ function ChatInterface({
                       }
                     />
                   </div>
+                  {m.role === "assistant" && (status === "ready" || m.id !== currentMessageId) && (
+                    <AnswerFeedback messageId={m.id} />
+                  )}
                 </div>
                 {/* User Avatar */}
                 {m.role === "user" && (
