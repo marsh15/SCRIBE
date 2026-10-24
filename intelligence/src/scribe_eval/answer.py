@@ -40,6 +40,9 @@ import json
 import os
 import re
 import statistics
+import tempfile
+import time
+import fcntl
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -54,6 +57,7 @@ from .normalize import normalize
 FAKE_STAMP = "FAKE - NOT A MEASUREMENT"
 DEFAULT_TOP_K = 6
 DEFAULT_GENERATOR_MODEL = "gemini-2.5-flash"
+DEFAULT_JUDGE_MODEL = "gemini-2.5-pro"
 GENERATE_TIMEOUT_S = 60.0
 INSUFFICIENT_MESSAGE = "Insufficient evidence: your documents do not contain enough information to answer this question."
 LABEL_RE = re.compile(r"\[(E\d{1,6})\]")
@@ -106,6 +110,91 @@ class Bundle:
     top_score: float | None
     tau: float
     workspace_id: str | None = None  # the dataset's eval workspace (rankings meta), for the leak check
+
+
+def canonical_bundle(bundle: Bundle) -> str:
+    """Stable, compact JSON for response-cache identity."""
+    return json.dumps({"state": bundle.state, "reason": bundle.reason, "tau": bundle.tau,
+                       "workspace_id": bundle.workspace_id,
+                       "items": [{"label": i.label, "doc": i.doc, "text": i.text, "chunk_id": i.chunk_id,
+                                  "workspace_id": i.workspace_id, "source_deleted": i.source_deleted,
+                                  "quote_hash": i.quote_hash} for i in bundle.items]},
+                      ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+class ResponseCache:
+    """Atomic JSONL cache for generation, verification, and semantic-judge responses."""
+
+    def __init__(self, path: str | Path, mode: str) -> None:
+        if mode not in {"live", "replay", "record-missing"}:
+            raise ValueError("cache mode must be live, replay, or record-missing")
+        self.path, self.mode = Path(path), mode
+        self.hits = self.misses = 0
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def key(model_id: str, prompt_text: str, bundle_json: str) -> str:
+        payload = json.dumps([model_id, prompt_text, bundle_json], ensure_ascii=False, separators=(",", ":"))
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    def _read(self) -> dict[str, Any]:
+        if not self.path.exists():
+            return {}
+        rows = {}
+        for n, line in enumerate(self.path.read_text(encoding="utf-8").splitlines(), 1):
+            try:
+                row = json.loads(line)
+                rows[str(row["key"])] = row["response"]
+            except (ValueError, KeyError, TypeError) as exc:
+                raise RuntimeError(f"response cache {self.path}:{n} is invalid ({type(exc).__name__})") from None
+        return rows
+
+    def validate(self) -> None:
+        self._read()
+
+    def _write(self, rows: dict[str, Any]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        fd, name = tempfile.mkstemp(prefix=f".{self.path.name}.", suffix=".tmp", dir=self.path.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                for key, response in sorted(rows.items()):
+                    f.write(json.dumps({"key": key, "response": response}, ensure_ascii=False, sort_keys=True) + "\n")
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(name, self.path)
+        finally:
+            if os.path.exists(name):
+                os.unlink(name)
+
+    def call(self, model_id: str, prompt_text: str, bundle: Bundle, fn):
+        key = self.key(model_id, prompt_text, canonical_bundle(bundle))
+        # Serialize the entire read/modify/write so concurrent runs cannot lose another call's entries.
+        guard = self.path.with_suffix(self.path.suffix + ".guard")
+        with guard.open("a", encoding="utf-8") as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            try:
+                rows = self._read()
+                if self.mode != "live" and key in rows:
+                    self.hits += 1
+                    return rows[key], True
+                self.misses += 1
+                if self.mode == "replay":
+                    raise CacheMiss(f"response cache miss for model {model_id!r} in replay mode")
+                response = fn()
+                rows[key] = response
+                self._write(rows)
+                return response, False
+            finally:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
+class CacheMiss(RuntimeError):
+    pass
+
+
+def default_cache_mode(env: dict[str, str] | None = None) -> str:
+    env = env if env is not None else os.environ
+    return "replay" if env.get("CI") or env.get("SCRIBE_CACHE_MODE") == "replay" else "live"
 
 
 def neutralize(text: str) -> str:
@@ -381,6 +470,8 @@ def verify_claims_local(claims: Sequence[str], bundle: Bundle, verifier: ClaimVe
                 verdicts = verifier.verify([(c.index, c.text, c.labels) for c in send], quotes)
                 state = "ok" if all(c.index in verdicts for c in send) else "partial"
             except Exception as exc:  # noqa: BLE001
+                if isinstance(exc, CacheMiss):
+                    raise
                 verdicts, state = {}, f"error:{type(exc).__name__}"
             for c in send:
                 c.verdict = verdicts.get(c.index)
@@ -436,12 +527,17 @@ class AnswerResult:
     error: str | None = None
     leak: dict[str, Any] | None = None
     citation_validity: dict[str, Any] | None = None
+    semantic_judge_verdict: str | None = None
+    latency_ms: float | None = None
+    cost: dict[str, Any] | None = None
 
     def row(self) -> dict[str, Any]:
         return {"case_id": self.case_id, "category": self.category, "answerable": self.answerable,
                 "abstained": self.abstained, "answer": self.answer, "claims": self.claims,
                 "bundle_state": self.bundle_state, "cited_labels": self.cited_labels, "metrics": self.metrics,
-                "error": self.error, "leak": self.leak, "citation_validity": self.citation_validity}
+                "error": self.error, "leak": self.leak, "citation_validity": self.citation_validity,
+                "semantic_judge_verdict": self.semantic_judge_verdict, "latency_ms": self.latency_ms,
+                "cost": self.cost}
 
 
 def score_case(case: Case, bundle: Bundle, answer: str, outcomes: Sequence[ClaimOutcome]) -> AnswerResult:
@@ -452,6 +548,7 @@ def score_case(case: Case, bundle: Bundle, answer: str, outcomes: Sequence[Claim
     m: dict[str, float | None] = {
         "correct": None, "must_include_frac": None, "exact_match": None,
         "citation_precision": None, "citation_recall": None, "groundedness": None, "wrong_version_citations": None,
+        "abstention_accuracy": None,
     }
     if outcomes:
         m["groundedness"] = len(good) / len(outcomes)
@@ -470,6 +567,7 @@ def score_case(case: Case, bundle: Bundle, answer: str, outcomes: Sequence[Claim
         m["wrong_version_citations"] = float(sum(1 for it in items if it.doc in forbidden))
     else:
         m["correct"] = 1.0 if abstained else 0.0
+    m["abstention_accuracy"] = 1.0 if abstained == (not answerable) else 0.0
     # A4a: every label the answer cites (verified or not) is checked for validity and for leaking
     by_label = {i.label: i for i in bundle.items}
     cited_all = list(dict.fromkeys(l for c in outcomes for l in c.labels))
@@ -552,20 +650,117 @@ def load_rankings_lenient(path: Path) -> dict[str, dict[str, Any]]:
 
 def run_answers(cases: Sequence[Case], rankings: dict[str, dict[str, Any]], generator: Generator,
                 verifier: ClaimVerifier | None, *, system: str, top_k: int = DEFAULT_TOP_K,
-                tau: float = 0.0) -> tuple[list[AnswerResult], dict[str, int]]:
+                tau: float = 0.0, judge: Any | None = None, response_cache: ResponseCache | None = None
+                ) -> tuple[list[AnswerResult], dict[str, int]]:
     results: list[AnswerResult] = []
     states: dict[str, int] = defaultdict(int)
     for case in cases:
+        started = time.perf_counter()
+        event_marks = {name: len(getattr(comp, "events", [])) for name, comp in
+                       (("generator", generator), ("verifier", verifier), ("judge", judge)) if comp is not None}
         bundle = build_bundle(rankings.get(case.id), top_k=top_k, tau=tau)
+        context = format_context(bundle)
+        prompt_text = f"{system}\n\nQUESTION:\n{case.question}\n\nCONTEXT:\n{context}"
         try:
-            answer = generator.generate(system, case.question, format_context(bundle))
+            call = lambda: generator.generate(system, case.question, context)
+            if response_cache:
+                answer, hit = response_cache.call(generator.model_id, prompt_text, bundle, call)
+                if hit and hasattr(generator, "events"):
+                    from .cost import Usage, estimate_tokens
+                    generator.events.append(Usage(generator.model_id, estimate_tokens(system) + estimate_tokens(case.question)
+                                                  + estimate_tokens(context), estimate_tokens(answer), True, cached=True))
+            else:
+                answer = call()
             err = None
         except Exception as exc:  # noqa: BLE001 - provider text never recorded
+            if isinstance(exc, CacheMiss):
+                raise
+            if not getattr(generator, "configured", True):
+                raise CacheMiss("response cache miss for an unconfigured generator; provide the API key or record the response") from None
             answer, err = "", f"generator failed ({type(exc).__name__})"
-        outcomes, state = verify_claims_local(split_claims(answer), bundle, verifier)
+        claims = split_claims(answer)
+        actual_verifier = verifier
+        if verifier is not None and response_cache is not None:
+            class _CachedVerifier:
+                model = verifier.model
+                is_fake = verifier.is_fake
+
+                def verify(self, verify_claims, quotes):
+                    from scribe_intel import verification as v
+                    prompt = v.build_prompt(list(verify_claims), quotes)
+                    prompt_text = v._SYSTEM + "\n" + prompt + "\n" + v.PROMPT_VERSION
+                    result, hit = response_cache.call(self.model, prompt_text, bundle,
+                                                      lambda: self._compute(verify_claims, quotes))
+                    self.last_cached = hit
+                    if hit and hasattr(verifier, "events"):
+                        from .cost import Usage, estimate_tokens
+                        in_tokens = 300 + sum(estimate_tokens(t) for _, t, _ in verify_claims) + sum(estimate_tokens(q) for q in quotes.values())
+                        out_tokens = 20 * len(verify_claims)
+                        verifier.events.append(Usage(self.model, in_tokens, out_tokens, True, cached=True))
+                    return {int(k): v for k, v in result}
+
+                def _compute(self, verify_claims, quotes):
+                    if not getattr(verifier, "configured", True):
+                        raise CacheMiss("response cache miss for an unconfigured verifier; provide the API key or record the response")
+                    return [[int(k), val] for k, val in verifier.verify(verify_claims, quotes).items()]
+            actual_verifier = _CachedVerifier()
+        outcomes, state = verify_claims_local(claims, bundle, actual_verifier)
         states[state] += 1
         r = score_case(case, bundle, answer, outcomes)
         r.error = err
+        if judge is not None:
+            try:
+                if hasattr(judge, "inner") and hasattr(judge.inner, "prompt_parts"):
+                    jsystem, jprompt = judge.inner.prompt_parts(case.question, case.reference_answer, answer)
+                elif hasattr(judge, "prompt_parts"):
+                    jsystem, jprompt = judge.prompt_parts(case.question, case.reference_answer, answer)
+                else:
+                    jsystem, jprompt = "", f"{case.question}\n{case.reference_answer}\n{answer}"
+                from .judge import PROMPT_VERSION
+                jp = jsystem + "\n" + jprompt + "\n" + PROMPT_VERSION
+                call = lambda: judge.judge(case.question, case.reference_answer, answer)
+                if response_cache:
+                    def judge_call():
+                        if not getattr(judge, "configured", True):
+                            raise CacheMiss("response cache miss for an unconfigured judge; provide the API key or record the response")
+                        return call()
+                    r.semantic_judge_verdict, hit = response_cache.call(judge.model_id, jp, bundle, judge_call)
+                    if hit and hasattr(judge, "events"):
+                        from .cost import Usage, estimate_tokens
+                        judge.events.append(Usage(judge.model_id, estimate_tokens(jp) + 300, 8, True, cached=True))
+                else:
+                    r.semantic_judge_verdict = call()
+            except Exception as exc:  # noqa: BLE001 - provider text never recorded
+                if isinstance(exc, CacheMiss):
+                    raise
+                r.semantic_judge_verdict = None
+                r.error = (r.error + "; " if r.error else "") + f"judge failed ({type(exc).__name__})"
+        r.latency_ms = round((time.perf_counter() - started) * 1000, 3)
+        if event_marks:
+            from .cost import price_per_query
+            usages = [event for name, comp in (("generation", generator), ("verifier", verifier), ("judge", judge))
+                      if comp is not None for event in getattr(comp, "events", [])[event_marks.get(
+                          {"generation": "generator", "verifier": "verifier", "judge": "judge"}[name], 0):]]
+            if usages:
+                roles = {}
+                for role, comp in (("generation", generator), ("verifier", verifier), ("judge", judge)):
+                    if comp is None:
+                        continue
+                    selected = getattr(comp, "events", [])[event_marks.get(
+                        {"generation": "generator", "verifier": "verifier", "judge": "judge"}[role], 0):]
+                    if selected:
+                        roles[role] = selected
+                total_usd = 0.0
+                token_counts = {}
+                cached = True
+                for role, selected in roles.items():
+                    for usage in selected:
+                        price_role = "generation" if role == "verifier" else role
+                        total_usd += 0.0 if usage.cached else price_per_query(**{price_role: usage}).usd
+                        token_counts[f"{usage.model_id}:input"] = token_counts.get(f"{usage.model_id}:input", 0) + usage.input_tokens
+                        token_counts[f"{usage.model_id}:output"] = token_counts.get(f"{usage.model_id}:output", 0) + usage.output_tokens
+                        cached = cached and usage.cached
+                r.cost = {"usd": round(total_usd, 8), "estimated": True, "cached": cached, "tokens": token_counts}
         results.append(r)
     return results, dict(states)
 

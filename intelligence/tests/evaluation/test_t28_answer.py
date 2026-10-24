@@ -303,7 +303,9 @@ def mini(tmp_path):
 
 def run_cli(ds, rk, out, *extra):
     return main(["answer", "--dataset", str(ds), "--rankings", str(rk), "--profile", "unit", "--generator", "fake",
-                 "--verifier", "fake", "--out", str(out), *extra])
+                 "--verifier", "fake", "--judge", "fake", "--cache-mode", "live", "--out", str(out),
+                 "--response-cache", str(out.parent / "responses.jsonl"), "--ledger", str(out.parent / "ledger.jsonl"),
+                 "--runs-dir", str(out.parent / "runs"), *extra])
 
 
 def test_test_split_refused_without_milestone_report(mini, capsys):
@@ -317,7 +319,11 @@ def test_test_split_refused_without_milestone_report(mini, capsys):
     assert not (tmp / "out").exists()
     rows = [json.loads(l) for l in (ds / "cases.jsonl").read_text(encoding="utf-8").splitlines()]
     (ds / "cases.jsonl").write_text("".join(json.dumps({**r, "reviewed": True}) + "\n" for r in rows), encoding="utf-8")
-    assert run_cli(ds, rk, tmp / "out", "--split", "test", "--milestone-report") == 0
+    assert run_cli(ds, rk, tmp / "out", "--split", "test", "--milestone-report", "--milestone-id", "m1") == 0
+    assert run_cli(ds, rk, tmp / "out", "--split", "test", "--milestone-report", "--milestone-id", "m1") == 0
+    assert "skipping" in capsys.readouterr().out
+    assert run_cli(ds, rk, tmp / "out", "--split", "test", "--milestone-report", "--milestone-id", "m2") == 2
+    assert "INV-12" in capsys.readouterr().err
 
 
 def test_fake_run_is_stamped_and_not_a_measurement(mini, capsys):
@@ -326,13 +332,13 @@ def test_fake_run_is_stamped_and_not_a_measurement(mini, capsys):
     (run_dir,) = list((tmp / "out").iterdir())
     run = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
     assert run["measurement"] is False and run["stamp"] == "FAKE - NOT A MEASUREMENT"
-    assert set(run["fake_components"]) == {"generator", "verifier"}
+    assert set(run["fake_components"]) == {"generator", "verifier", "judge"}
     report = (run_dir / "report.md").read_text(encoding="utf-8")
     assert report.startswith("# FAKE - NOT A MEASUREMENT")
     assert "human labels pending" in report
     # INV-11 record
     assert run["dataset_version"] == "mini-v0" and len(run["dataset_sha256"]) == 64 and len(run["config_hash"]) == 64
-    assert run["model_ids"] == {"generator": "fake-generator", "verifier": "fake-verifier"}
+    assert run["model_ids"] == {"generator": "fake-generator", "verifier": "fake-verifier", "judge": "fake-judge"}
     assert run["prompt_versions"]["chat"].startswith("chat-evidence-") and run["prompt_versions"]["claim_verify"]
     assert run["code_commit"] and run["split"] == "dev"
     rows = [json.loads(l) for l in (run_dir / "answers.jsonl").read_text(encoding="utf-8").splitlines()]
@@ -347,7 +353,8 @@ def test_fake_run_needs_explicit_out_and_real_needs_a_key(mini, monkeypatch, cap
     monkeypatch.delenv("GOOGLE_GENERATIVE_AI_API_KEY", raising=False)
     assert main(["answer", "--dataset", str(ds), "--rankings", str(rk), "--split", "dev", "--generator", "fake"]) == 2
     assert "explicit --out" in capsys.readouterr().err
-    assert main(["answer", "--dataset", str(ds), "--rankings", str(rk), "--split", "dev", "--out", str(tmp / "o2")]) == 2
+    assert main(["answer", "--dataset", str(ds), "--rankings", str(rk), "--split", "dev",
+                 "--cache-mode", "live", "--out", str(tmp / "o2")]) == 2
     assert "GOOGLE_GENERATIVE_AI_API_KEY" in capsys.readouterr().err
     assert not (tmp / "o2").exists()
 
@@ -364,7 +371,8 @@ def sheet_flow(mini, judge="fake"):
     assert run_cli(ds, rk, tmp / "out", "--split", "dev") == 0
     (run_dir,) = list((tmp / "out").iterdir())
     code = main(["judge-sheet", "--run", str(run_dir), "--dataset", str(ds), "--out-dir", str(tmp / "sheet"),
-                 "--judge", judge, "-n", "12"])
+                 "--judge", judge, "--cache-mode", "live", "-n", "12", "--response-cache", str(tmp / "sheet-responses.jsonl"),
+                 "--ledger", str(tmp / "sheet-ledger.jsonl")])
     return tmp / "sheet", code
 
 

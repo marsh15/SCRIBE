@@ -429,7 +429,9 @@ def test_milestone_report_runs_when_the_split_is_fully_reviewed(tmp_path, capsys
     for r in rows:
         r["reviewed"] = r["split"] == "test"  # dev/validation stay unreviewed: only the reported split matters
     (d / "cases.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
-    extra = ["--generator", "fake", "--verifier", "fake"] if cmd == "answer" else []
+    extra = ["--generator", "fake", "--verifier", "fake", "--judge", "fake", "--cache-mode", "live",
+             "--milestone-id", "review-proof", "--runs-dir", str(tmp_path / "locks"),
+             "--response-cache", str(tmp_path / "responses.jsonl")] if cmd == "answer" else []
     rc = main([cmd, "--rankings", str(rk), "--dataset", str(d), "--split", "test", "--milestone-report", "--out", str(tmp_path / "o"), *extra])
     assert rc == 0, capsys.readouterr().err
 

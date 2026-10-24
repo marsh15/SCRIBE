@@ -543,10 +543,10 @@ def test_answer_real_generator_is_refused_over_the_spend_cap_before_any_call(tmp
 
     monkeypatch.setattr(httpx.Client, "post", boom)
     rc = cli_main(["answer", "--rankings", str(rk), "--dataset", str(ds), "--split", "dev", "--generator", "real",
-                   "--verifier", "none", "--ledger", str(led), "--out", str(tmp_path / "o")])
+                   "--verifier", "none", "--cache-mode", "live", "--ledger", str(led), "--out", str(tmp_path / "o")])
     assert rc == 2 and "spend cap" in capsys.readouterr().err and not (tmp_path / "o").exists()
     rc = cli_main(["answer", "--rankings", str(rk), "--dataset", str(ds), "--split", "dev", "--generator", "real",
-                   "--verifier", "none", "--ledger", str(led), "--spend-cap", "99", "--out", str(tmp_path / "o")])
+                   "--verifier", "none", "--cache-mode", "live", "--ledger", str(led), "--spend-cap", "99", "--out", str(tmp_path / "o")])
     assert rc == 2 and "raise the cap" in capsys.readouterr().err
 
 
@@ -555,7 +555,9 @@ def test_answer_with_fakes_never_touches_the_ledger_and_records_leak_in_the_run(
     led = tmp_path / "l.jsonl"
     out = tmp_path / "o"
     rc = cli_main(["answer", "--rankings", str(rk), "--dataset", str(ds), "--split", "dev", "--generator", "fake",
-                   "--verifier", "fake", "--ledger", str(led), "--out", str(out), "--corpus", "fixtures/corpus-x"])
+                   "--verifier", "fake", "--judge", "fake", "--cache-mode", "live",
+                   "--response-cache", str(tmp_path / "responses.jsonl"),
+                   "--ledger", str(led), "--out", str(out), "--corpus", "fixtures/corpus-x"])
     assert rc == 0 and not led.exists()
     run = json.loads(next(out.glob("*/run.json")).read_text())
     assert run["leak_rate"] == 1.0 and run["corpus"] == "fixtures/corpus-x" and run["dataset_name"] == ds.name

@@ -1,10 +1,8 @@
-"""Cost model and spend ledger for provider-calling eval commands (A4a).
+"""Cost model and spend ledger for provider-calling eval commands (A4a/C2).
 
 Nothing here talks to a provider. It holds:
 
-* a DATED PRICE TABLE (``PRICES``). The author had no network access, so every entry is a price recalled from the
-  public list price pages and is marked "to verify" in its ``source_note``. Verify each one against the provider's
-  pricing page, then update the entry and ``PRICE_TABLE_DATE``. Never edit a price to make a budget fit.
+* a DATED PRICE TABLE (``PRICES``). Never edit a price to make a budget fit.
 * ``price_per_query``: embed + rerank + generation + judge tokens x price. Token counts come from provider responses
   when the caller has them; otherwise they are estimated with the repo's tiktoken proxy (``scribe_ingest.tokens``,
   vendored vocabulary, no download) and the result carries ``estimated: True``.
@@ -30,18 +28,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
-from scribe_ingest.embedding import DEFAULT_MODEL as CODE_EMBEDDING_MODEL  # the id the code actually embeds with
-
 CAP_USD = 10.00
 DEFAULT_LEDGER = Path("benchmarks/spend-ledger.jsonl")
-PRICE_TABLE_DATE = "2026-10-20"
+PRICE_TABLE_DATE = "2026-10-21"
 
 UNIT_INPUT = "usd_per_1M_input_tokens"
 UNIT_OUTPUT = "usd_per_1M_output_tokens"
 UNIT_TOKENS = "usd_per_1M_tokens"  # one price for all tokens (embedding input, rerank)
 
-_TO_VERIFY = (f"{PRICE_TABLE_DATE}: recalled from the provider's public list price, written WITHOUT network access; "
-              "TO VERIFY against the live pricing page before relying on it.")
+GEMINI_PRICING = "https://ai.google.dev/gemini-api/docs/pricing"
+VOYAGE_PRICING = "https://docs.voyageai.com/docs/pricing"
 
 
 @dataclass(frozen=True)
@@ -53,16 +49,16 @@ class Price:
     source_note: str
 
 
-def _p(model: str, kind: str, unit: str, usd: float, note: str) -> Price:
-    return Price(model, kind, unit, usd, f"{note} {_TO_VERIFY}")
+def _p(model: str, kind: str, unit: str, usd: float, note: str, source: str = GEMINI_PRICING) -> Price:
+    return Price(model, kind, unit, usd, f"Verified {PRICE_TABLE_DATE}: {note} Source: {source}.")
 
 
 PRICES: tuple[Price, ...] = (
-    _p("gemini-embedding-001", "embedding", UNIT_TOKENS, 0.15,
+    Price("gemini-embedding-001", "embedding", UNIT_TOKENS, 0.15,
+          "UNVERIFIED: Gemini pricing page does not list embedding-001. Source checked 2026-10-21: "
+          "https://ai.google.dev/gemini-api/docs/pricing."),
+    _p("gemini-embedding-2", "embedding", UNIT_TOKENS, 0.20,
        "Gemini API paid tier, text embedding input, USD per 1M tokens."),
-    _p(CODE_EMBEDDING_MODEL, "embedding", UNIT_TOKENS, 0.15,
-       f"scribe_ingest.embedding.DEFAULT_MODEL ({CODE_EMBEDDING_MODEL!r}). No separate price was known; ASSUMED equal "
-       "to gemini-embedding-001. This one is a guess, check it first."),
     _p("gemini-2.5-flash", "generation", UNIT_INPUT, 0.30, "Gemini API paid tier, text/image/video input, per 1M tokens."),
     _p("gemini-2.5-flash", "generation", UNIT_OUTPUT, 2.50, "Gemini API paid tier, output incl. thinking tokens, per 1M."),
     _p("gemini-2.5-pro", "generation", UNIT_INPUT, 1.25, "Gemini API paid tier, prompts <= 200k tokens, per 1M tokens."),
@@ -70,7 +66,8 @@ PRICES: tuple[Price, ...] = (
     _p("gemini-2.5-flash-lite", "generation", UNIT_INPUT, 0.10, "Gemini API paid tier, text input, per 1M tokens."),
     _p("gemini-2.5-flash-lite", "generation", UNIT_OUTPUT, 0.40, "Gemini API paid tier, output, per 1M tokens."),
     _p("rerank-2.5", "rerank", UNIT_TOKENS, 0.05,
-       "Voyage AI rerank-2.5, per 1M tokens (query tokens x documents + document tokens)."),
+       "Voyage AI rerank-2.5, per 1M tokens (query tokens x documents + document tokens). Voyage says the first "
+       "200M tokens are free, but the pricing page contradicts itself; no free-tier assumption is applied.", VOYAGE_PRICING),
 )
 _BY_KEY = {(p.model_id, p.unit): p for p in PRICES}
 
@@ -424,13 +421,27 @@ class MeteredGenerator:
         self.input_tokens = 0
         self.output_tokens = 0
         self.calls = 0
+        self.events: list[Usage] = []
 
     def generate(self, system: str, question: str, context: str) -> str:
-        out = self.inner.generate(system, question, context)
-        self.input_tokens += estimate_tokens(system) + estimate_tokens(question) + estimate_tokens(context)
-        self.output_tokens += estimate_tokens(out)
         self.calls += 1
+        in_tokens = estimate_tokens(system) + estimate_tokens(question) + estimate_tokens(context)
+        try:
+            out = self.inner.generate(system, question, context)
+        except Exception:
+            self.input_tokens += in_tokens
+            self.events.append(Usage(self.model_id, in_tokens, 0, True))
+            raise
+        out_tokens = estimate_tokens(out)
+        self.input_tokens += in_tokens
+        self.output_tokens += out_tokens
+        cached = bool(getattr(self.inner, "last_cached", False))
+        self.events.append(Usage(self.model_id, in_tokens, out_tokens, True, cached=cached))
         return out
+
+    @property
+    def configured(self) -> bool:
+        return bool(getattr(self.inner, "configured", True))
 
     def usage(self) -> Usage | None:
         return Usage(self.model_id, self.input_tokens, self.output_tokens, True) if self.calls else None
@@ -443,13 +454,56 @@ class MeteredVerifier:
         self.input_tokens = 0
         self.output_tokens = 0
         self.calls = 0
+        self.events: list[Usage] = []
 
     def verify(self, claims: Sequence[tuple[int, str, list[str]]], quotes: dict[str, str]) -> dict[int, str]:
-        self.input_tokens += (VERIFY_OVERHEAD_TOKENS_EST + sum(estimate_tokens(t) for _, t, _ in claims)
-                              + sum(estimate_tokens(q) for q in quotes.values()))
-        self.output_tokens += VERIFY_OUTPUT_TOKENS_PER_CLAIM_EST * len(claims)
+        in_tokens = VERIFY_OVERHEAD_TOKENS_EST + sum(estimate_tokens(t) for _, t, _ in claims) + sum(estimate_tokens(q) for q in quotes.values())
+        out_tokens = VERIFY_OUTPUT_TOKENS_PER_CLAIM_EST * len(claims)
         self.calls += 1
-        return self.inner.verify(claims, quotes)
+        self.input_tokens += in_tokens
+        self.output_tokens += out_tokens
+        try:
+            result = self.inner.verify(claims, quotes)
+        except Exception:
+            self.events.append(Usage(self.model, in_tokens, out_tokens, True))
+            raise
+        self.events.append(Usage(self.model, in_tokens, out_tokens, True,
+                                 cached=bool(getattr(self.inner, "last_cached", False))))
+        return result
+
+    @property
+    def configured(self) -> bool:
+        return bool(getattr(self.inner, "configured", True))
 
     def usage(self) -> Usage | None:
         return Usage(self.model, self.input_tokens, self.output_tokens, True) if self.calls else None
+
+
+class MeteredJudge:
+    def __init__(self, inner: Any) -> None:
+        self.inner = inner
+        self.model_id, self.is_fake = inner.model_id, inner.is_fake
+        self.input_tokens = self.output_tokens = self.calls = 0
+        self.events: list[Usage] = []
+
+    def judge(self, question: str, reference: str, answer: str) -> str:
+        prompt = f"{question}\n{reference}\n{answer}"
+        in_tokens = estimate_tokens(prompt) + 300
+        self.calls += 1
+        self.input_tokens += in_tokens
+        try:
+            verdict = self.inner.judge(question, reference, answer)
+        except Exception:
+            self.events.append(Usage(self.model_id, in_tokens, 8, True))
+            raise
+        self.output_tokens += 8
+        self.events.append(Usage(self.model_id, in_tokens, 8, True,
+                                 cached=bool(getattr(self.inner, "last_cached", False))))
+        return verdict
+
+    @property
+    def configured(self) -> bool:
+        return bool(getattr(self.inner, "configured", True))
+
+    def usage(self) -> Usage | None:
+        return Usage(self.model_id, self.input_tokens, self.output_tokens, True) if self.calls else None
