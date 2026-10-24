@@ -64,6 +64,8 @@ jobs:
         run: scripts/apply-migrations.sh
       - run: uv sync
         working-directory: intelligence
+      - name: Check Vercel Python bundle size
+        run: scripts/check-py-bundle.sh
       - run: uv run pytest -v
         working-directory: intelligence
 

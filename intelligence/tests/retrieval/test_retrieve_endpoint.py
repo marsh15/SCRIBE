@@ -136,12 +136,16 @@ async def test_trace_and_candidates_persisted(client, seeded, conn):
     r = await client.post("/api/py/retrieve", json={"query": "annual leave", "profile": "dense-exact", "limit": 3},
                           headers=auth(seeded["wa"]))
     j = r.json()
-    cur = await conn.execute("select workspace_id, query, status, degraded, stage_ms, counts, config_hash "
+    cur = await conn.execute("select workspace_id, query, status, degraded, stage_ms, counts, config_hash, cost "
                              "from retrieval_traces where id=%s", (j["trace_id"],))
-    wid, query, status, degraded, stage_ms, counts, cfg = await cur.fetchone()
+    wid, query, status, degraded, stage_ms, counts, cfg, cost = await cur.fetchone()
     assert str(wid) == seeded["wa"] and query == "annual leave" and status == "ok" and degraded is None
     assert counts["profile"] == "dense-exact" and counts["returned"] == 3 and counts["dense"] >= 3 and cfg
     assert stage_ms["dense"] >= 0
+    assert cost == j["cost"]
+    assert cost["embed_tokens"] > 0 and cost["rerank_tokens"] == 0
+    assert cost["usd"] == 0.0 and cost["estimated"] is True
+    assert cost["prices_as_of"] == "2026-10-21"
     cur = await conn.execute("select chunk_id, dense_rank, dense_score, lexical_rank, selected from retrieval_candidates "
                              "where trace_id=%s order by dense_rank", (j["trace_id"],))
     rows = await cur.fetchall()

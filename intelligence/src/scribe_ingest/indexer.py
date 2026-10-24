@@ -193,6 +193,29 @@ async def load_index_profile(conn: psycopg.AsyncConnection, name: str = INDEX_PR
     return prof
 
 
+async def load_backfill_profile(conn: psycopg.AsyncConnection, name: str) -> IndexProfile:
+    """Load a backfill target supported by the current structural generation worker.
+
+    Profile rows are immutable and names are resolved from the database. The current worker can only
+    build the structural chunk format into the 1536-dimensional embedding table; legacy-v1 remains
+    searchable but has no compatible rebuild path here.
+    """
+    cur = await conn.execute(
+        "select ip.parser_profile, ep.dimensions from index_profiles ip "
+        "join embedding_profiles ep on ep.id = ip.embedding_profile_id where ip.name = %s", (name,))
+    row = await cur.fetchone()
+    if row is None:
+        raise IndexerError("PROFILE_MISMATCH", f"index profile {name!r} not found (run migration 0011)")
+    parser_profile, embedding_dims = row
+    if parser_profile != "structural-v1" or embedding_dims != 1536:
+        raise IndexerError(
+            "PROFILE_MISMATCH",
+            f"index profile {name!r} is not supported for backfill: this worker supports only "
+            "structural-v1 parser/chunking with 1536-dimensional embeddings",
+        )
+    return await load_index_profile(conn, name)
+
+
 # ------------------------------------------------------------------ REGISTER
 
 async def register_version(

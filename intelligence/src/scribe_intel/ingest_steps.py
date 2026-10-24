@@ -39,7 +39,7 @@ from scribe_ingest.indexer import (
     embed_generation,
     ensure_generation,
     fail_generation,
-    load_index_profile,
+    load_backfill_profile,
     load_stored_version,
     parse_for_index,
     persist_chunks,
@@ -212,7 +212,20 @@ async def run_step(
             await fence.touch(conn)
             await conn.execute("update files set status = 'processing', processing_error = null, updated_at = now() "
                                "where id = %s and workspace_id = %s and status in ('queued','retrying')", (file_id, wid))
-        profile = await load_index_profile(conn)
+        profile_name = None
+        if gen_id is not None:
+            async with conn.transaction():
+                await _begin(conn, wid)
+                target = await (await conn.execute(
+                    "select ip.name from index_generations g "
+                    "join index_profiles ip on ip.id = g.index_profile_id "
+                    "where g.id = %s and g.source_id = %s and g.workspace_id = %s "
+                    "and g.source_version_id = %s",
+                    (gen_id, file_id, wid, ver_id))).fetchone()
+            if target is None:
+                raise IndexerError("PROFILE_MISMATCH", "queued generation does not match this source version")
+            profile_name = target[0]
+        profile = await load_backfill_profile(conn, profile_name or "structural-v1")
 
         text_bytes = extracted = None
         if stage == "EMBED" and ver_id and gen_id:
