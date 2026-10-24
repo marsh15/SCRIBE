@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db-config";
-import { files, ingestionJobs } from "@/lib/db-schema";
+import { files, ingestionJobs, indexGenerations } from "@/lib/db-schema";
 import { and, eq, desc, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
@@ -25,13 +25,17 @@ export async function getFiles() {
         const jobs = await db
             .select({
                 fileId: ingestionJobs.fileId,
+                sourceVersionId: ingestionJobs.sourceVersionId,
                 stage: ingestionJobs.stage,
                 attempts: ingestionJobs.attempts,
                 errorCode: ingestionJobs.errorCode,
                 lastError: ingestionJobs.lastError,
+                embeddedChunks: indexGenerations.embeddedChunks,
+                expectedChunks: indexGenerations.expectedChunks,
                 updatedAt: ingestionJobs.updatedAt,
             })
             .from(ingestionJobs)
+            .leftJoin(indexGenerations, eq(ingestionJobs.generationId, indexGenerations.id))
             .where(inArray(ingestionJobs.fileId, allFiles.map((f) => f.id)))
             .orderBy(desc(ingestionJobs.updatedAt));
         const latest = new Map<number, (typeof jobs)[number]>();
@@ -44,6 +48,9 @@ export async function getFiles() {
                 jobAttempts: job?.attempts ?? 0,
                 jobErrorCode: job?.errorCode ?? null,
                 jobLastError: job?.lastError ?? null,
+                // When a new version is desired, don't show counts from its predecessor's generation.
+                jobEmbeddedChunks: job?.sourceVersionId === file.desiredVersionId ? job.embeddedChunks : null,
+                jobExpectedChunks: job?.sourceVersionId === file.desiredVersionId ? job.expectedChunks : null,
             };
         });
     } catch (error) {

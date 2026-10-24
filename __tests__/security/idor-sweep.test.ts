@@ -125,6 +125,7 @@ vi.mock("@/lib/search", () => ({ searchDocuments: vi.fn() }));
 vi.mock("@/lib/rag-eval", () => ({ evaluateRagAnswer: vi.fn() }));
 vi.mock("@/lib/db-compat", () => ({ ensureDocumentsChunkIndexSchema: vi.fn() }));
 
+import { GET as migrationGET, POST as migrationPOST } from "@/app/api/admin/migration/route";
 import { POST as chatPOST } from "@/app/api/chat/route";
 import { POST as comparePOST } from "@/app/api/compare/route";
 import { GET as evidenceGET } from "@/app/api/evidence/[id]/route";
@@ -336,6 +337,19 @@ const ROUTE_HANDLERS: Record<string, () => Promise<void>> = {
   "app/api/ingest/batch/finalize/route.ts": () => goneCase(batchFinalize),
   "app/api/uploads/complete/route.ts": () => goneCase(uploadsComplete),
   "app/api/uploads/sign/route.ts": () => goneCase(uploadsSign),
+
+  "app/api/admin/migration/route.ts": async () => {
+    for (const session of [signedOut, signedIn]) {
+      session();
+      expect((await migrationGET()).status).toBe(403);
+      expect((await migrationPOST(url("/api/admin/migration", {
+        method: "POST", body: JSON.stringify({ sourceId: FOREIGN_SOURCE }),
+      }))).status).toBe(403);
+    }
+    expect(S.sql).not.toHaveBeenCalled();
+    expect(S.mutations).toEqual([]);
+    expect(S.fireTick).not.toHaveBeenCalled();
+  },
 
   "app/api/health/route.ts": async () => {
     const body = await (await healthGET()).json();
