@@ -23,6 +23,7 @@ EXPECTED_COMMANDS = [
     "review",
     "fetch-corpus",
     "report",
+    "parse-compare",
 ]
 
 EXPECTED_OPTIONS = {
@@ -40,6 +41,7 @@ EXPECTED_OPTIONS = {
     "run-profile": {"--cache-path", "--corpus", "--database-url", "--dataset", "--help", "--ledger", "--limit", "--milestone-id", "--milestone-report", "--out", "--profile", "--profiles", "--runs-dir", "--spend-cap", "--split", "-h"},
     "review": {"--corpus", "--help", "--items", "--kind", "--order", "--port", "--reviewer", "-h"},
     "report": {"--dataset", "--help", "--out", "-h"},
+    "parse-compare": {"--cache-path", "--corpus", "--dry-run", "--engines", "--fields", "--help", "--ledger", "--out", "--spend-cap", "-h"},
 }
 
 

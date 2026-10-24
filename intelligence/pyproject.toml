@@ -16,6 +16,9 @@ dependencies = [
   "tiktoken>=0.14.0",
 ]
 
+[project.optional-dependencies]
+parsing-eval = ["pytesseract>=0.3.10"]
+
 [project.scripts]
 scribe-eval = "scribe_eval.cli:main"
 scribe-perf = "scribe_perf.cli:main"

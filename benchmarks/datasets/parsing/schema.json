@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scribe.invalid/schemas/parsing-field-item.json",
+  "title": "Scribe parsing field item",
+  "description": "An expected field value on a specific corpus document page. Ground truth must be reviewed before scored runs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "doc", "field_id", "kind", "expected"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "doc": {"type": "string", "minLength": 1, "description": "Path relative to the --corpus root."},
+    "page": {"type": ["integer", "null"], "minimum": 1},
+    "field_id": {"type": "string", "minLength": 1},
+    "kind": {"enum": ["text", "number", "date", "currency", "table_cell"]},
+    "expected": {"type": ["string", "number"]},
+    "quote": {"type": ["string", "null"], "description": "Optional reviewer context; not used for scoring."},
+    "reviewed": {"type": ["boolean", "null"]},
+    "reviewed_by": {"type": ["string", "null"]},
+    "reviewed_at": {"type": ["string", "null"]},
+    "review_note": {"type": ["string", "null"]}
+  }
+}

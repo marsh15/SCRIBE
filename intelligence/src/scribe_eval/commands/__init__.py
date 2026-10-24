@@ -23,6 +23,7 @@ MODULES: tuple[str, ...] = (
     "review",
     "fetch_corpus",
     "report",
+    "parse_compare",
 )
 
 
