@@ -16,7 +16,7 @@ from scribe_ingest.tokens import count_tokens as default_count_tokens
 
 from .dedup import DedupedItem, dedup
 from .fusion import rrf_fuse
-from .packing import PackedContext, ParentLoader, expand_parents, pack, to_entries
+from .packing import Dropped, PackedContext, ParentLoader, compress_entries, expand_parents, pack, to_entries
 from .profiles import RetrievalProfile
 from .rerank import DEGRADED_RERANK, Reranker, rerank_candidates
 from .types import Candidate, RankedCandidate
@@ -82,6 +82,8 @@ async def run_pipeline(
         eligible = [r for r in ranked if r.rerank_rank is not None] or ranked[: cfg.rerank_top_n]
     else:
         eligible = ranked
+    if cfg.context_strategy == "top20_fused":
+        eligible = ranked[:20]
 
     t = time.perf_counter()
     if cfg.dedup:
@@ -100,10 +102,20 @@ async def run_pipeline(
             entries = to_entries(items, count_tokens)
     else:
         entries = to_entries(items, count_tokens)
+    compression_dropped: list[Dropped] = []
+    if cfg.context_strategy == "compressed":
+        per_entry_budget = cfg.budget_tokens // max(cfg.rerank_top_n, 1)
+        entries, compression_dropped = compress_entries(
+            entries, query, budget_tokens=per_entry_budget, count_tokens=count_tokens,
+        )
     lap("expand", t)
 
     t = time.perf_counter()
-    packed = pack(entries, cfg.budget_tokens, count_tokens)
+    packed = pack(
+        entries, cfg.budget_tokens, count_tokens,
+        context_strategy=None if cfg.context_strategy == "legacy" else cfg.context_strategy,
+        pre_dropped=compression_dropped,
+    )
     lap("pack", t)
     counts["packed"] = len(packed.entries)
     counts["dropped"] = len(packed.dropped)
