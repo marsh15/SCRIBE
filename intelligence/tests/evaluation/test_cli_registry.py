@@ -27,16 +27,16 @@ EXPECTED_COMMANDS = [
 EXPECTED_OPTIONS = {
     "validate": {"--corpus", "--help", "--require-reviewed", "-h"},
     "assign-splits": {"--help", "--only-origin", "--seed", "-h"},
-    "score": {"--dataset", "--help", "--milestone-report", "--model", "--out", "--profile", "--prompt", "--rankings", "--split", "-h"},
-    "answer": {"--dataset", "--generator", "--help", "--milestone-report", "--out", "--profile", "--rankings", "--split", "--tau", "--top-k", "--verifier", "-h"},
+    "score": {"--corpus", "--dataset", "--help", "--milestone-report", "--model", "--out", "--profile", "--prompt", "--rankings", "--split", "-h"},
+    "answer": {"--corpus", "--dataset", "--generator", "--help", "--ledger", "--milestone-report", "--out", "--profile", "--rankings", "--spend-cap", "--split", "--tau", "--top-k", "--verifier", "-h"},
     "judge-sheet": {"--dataset", "--help", "--judge", "--out-dir", "--run", "-h", "-n"},
     "judge-agreement": {"--help", "--key", "--labels", "--out", "-h"},
     "compare": {"--help", "-h"},
     "publish-run": {"--database-url", "--dataset", "--help", "--mark-fake", "--parse-lost", "--seeded", "-h"},
     "gate": {"--accept-seeded-baseline", "--baseline", "--cache", "--corpus", "--database-url", "--dataset", "--help", "--out", "--profile", "--refresh-cache", "--seeded", "--split", "--status", "--tau", "--write-baseline", "-h"},
-    "ingest-corpus": {"--cache-path", "--corpus", "--database-url", "--embedder", "--help", "--profile", "--reset", "-h"},
+    "ingest-corpus": {"--cache-path", "--corpus", "--database-url", "--dataset", "--embedder", "--help", "--ledger", "--manifest", "--profile", "--reset", "--spend-cap", "-h"},
     "fetch-corpus": {"--help", "--manifest", "--out", "--pin", "--rasterize-ocr-layer", "--stats", "-h"},
-    "run-profile": {"--cache-path", "--database-url", "--dataset", "--help", "--limit", "--out", "--profile", "--split", "-h"},
+    "run-profile": {"--cache-path", "--corpus", "--database-url", "--dataset", "--help", "--ledger", "--limit", "--milestone-id", "--milestone-report", "--out", "--profile", "--profiles", "--runs-dir", "--spend-cap", "--split", "-h"},
     "review": {"--corpus", "--help", "--items", "--kind", "--order", "--port", "--reviewer", "-h"},
 }
 

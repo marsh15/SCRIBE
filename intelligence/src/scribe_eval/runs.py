@@ -68,6 +68,16 @@ class RunRecord(BaseModel):
     measurement: bool = True
     stamp: str | None = None
     dataset_sha256: str | None = None
+    # A4a (all optional and additive; older run.json files load unchanged)
+    dataset_name: str | None = None
+    corpus: str | None = None
+    workspace_owner: str | None = None  # eval workspace owner id derived from the dataset name (ingest_corpus.eval_owner)
+    workspace_id: str | None = None
+    milestone_id: str | None = None  # set for test-split milestone runs
+    leak_rate: float | None = None
+    leak_rate_verified: bool | None = None  # False: rankings lacked provenance, so 0.0 is not a proof
+    latency: dict[str, Any] = {}  # p50/p95 total, embed and retrieval ms for this profile (metrics.latency_summary)
+    cost: dict[str, Any] = {}  # cost.cost_summary of the per-query costs
     case_results: list[dict[str, Any]] = Field(default_factory=list, exclude=True)
 
     def write(self, out_dir: str | Path = DEFAULT_RUNS_DIR, results: list[CaseResult] | None = None) -> Path:
@@ -89,6 +99,7 @@ def result_row(r: CaseResult) -> dict[str, Any]:
         "case_id": r.case_id, "category": r.category, "answerable": r.answerable,
         "metrics": r.metrics, "ranking": r.ranking, "latency_ms": r.latency_ms,
         "cost": r.cost, "degraded": r.degraded, "top_score": r.top_score,
+        "leak": r.leak, "timing": r.timing,
     }
 
 

@@ -39,7 +39,8 @@ def dataset_version(dataset_dir: Path) -> str:
     return dataset_dir.name
 
 
-def score_split(dataset_dir: Path, split: str, rankings_path: Path) -> tuple[list[Case], list[CaseResult], dict[str, Any]]:
+def score_split(dataset_dir: Path, split: str, rankings_path: Path,
+                expected_workspace_id: str | None = None) -> tuple[list[Case], list[CaseResult], dict[str, Any]]:
     cases = [c for c in load_cases(dataset_dir / "cases.jsonl") if c.split == split]
     if not cases:
         raise ScoreError(f"no cases in split '{split}' of {dataset_dir}")
@@ -47,7 +48,7 @@ def score_split(dataset_dir: Path, split: str, rankings_path: Path) -> tuple[lis
     missing = [c.id for c in cases if c.id not in rankings]
     if missing:
         raise ScoreError(f"rankings file is missing {len(missing)} case(s) of split '{split}': {', '.join(missing)}")
-    results = [evaluate_case(c, rankings[c.id]) for c in cases]
+    results = [evaluate_case(c, rankings[c.id], expected_workspace_id) for c in cases]
     return cases, results, summarize(results)
 
 
@@ -67,6 +68,14 @@ def format_table(summary: dict[str, Any]) -> str:
         f"{c} [{ov.ci95[c][0]:.3f}, {ov.ci95[c][1]:.3f}]" for c in cols if c in ov.ci95))
     u = summary["unanswerable"]
     lines.append(f"unanswerable (excluded): {u['count']}, max top score: {u['max_top_score']}")
+    lk = summary.get("leak")
+    if lk and lk["cases"]:
+        note = "" if lk["leak_rate_verified"] else "  (NOT VERIFIED: some items carry no provenance, decoy/soft-delete checks could not run)"
+        lines.append(f"leak_rate: {lk['leak_rate']:.3f} ({lk['leaked_cases']}/{lk['cases']} cases){note}")
+    lat = summary.get("latency")
+    if lat and lat.get("total_p50_ms") is not None:
+        lines.append(f"latency p50/p95 ms: total {lat['total_p50_ms']:.0f}/{lat['total_p95_ms']:.0f}, embed "
+                     f"{(lat['embed_p50_ms'] or 0):.0f}/{(lat['embed_p95_ms'] or 0):.0f} (live embeds {lat['embed_live_n']}/{lat['embed_timed_n']})")
     return "\n".join(lines)
 
 
@@ -74,8 +83,12 @@ def summary_to_json(summary: dict[str, Any]) -> dict[str, Any]:
     def agg(a: Any) -> dict[str, Any]:
         return {"n": a.n, "mean": a.mean, "ci95": {k: list(v) for k, v in a.ci95.items()}}
 
-    return {
+    out = {
         "overall": agg(summary["overall"]),
         "per_category": {c: agg(a) for c, a in summary["per_category"].items()},
         "unanswerable": summary["unanswerable"],
     }
+    for key in ("leak", "latency"):  # A4a, additive
+        if key in summary:
+            out[key] = summary[key]
+    return out

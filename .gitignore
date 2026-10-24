@@ -20,6 +20,9 @@ next-env.d.ts
 # scribe-eval run outputs
 benchmarks/runs/
 
+# A4a: append-only provider spend ledger (cost.py); test-split locks live under benchmarks/runs/
+benchmarks/spend-ledger.jsonl
+
 # T07 baseline harness: local embedding cache (large JSONL)
 benchmarks/cache/
 
