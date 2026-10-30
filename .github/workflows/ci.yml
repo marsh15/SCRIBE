@@ -100,7 +100,10 @@ jobs:
         working-directory: intelligence
       - name: Is the gate armed (real baseline committed)?
         id: armed
-        run: uv run --project intelligence scribe-eval gate --status
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/retrieval-gate"
+          uv run --project intelligence scribe-eval gate --status 2>&1 | tee "$RUNNER_TEMP/retrieval-gate/status.log"
       # The heavy setup is skipped while the gate is not armed.
       - if: steps.armed.outputs.armed == 'true'
         uses: actions/setup-node@v4
@@ -113,4 +116,16 @@ jobs:
         name: Apply Drizzle migrations to test database
         run: scripts/apply-migrations.sh
       - name: Retrieval regression gate (replay mode, no provider keys)
-        run: uv run --project intelligence scribe-eval gate --database-url "$DATABASE_URL_TEST"
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/retrieval-gate"
+          uv run --project intelligence scribe-eval gate --database-url "$DATABASE_URL_TEST" \
+            --out "$RUNNER_TEMP/retrieval-gate" 2>&1 | tee "$RUNNER_TEMP/retrieval-gate/gate.log"
+      - name: Preserve retrieval verdict and failure diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: retrieval-gate-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/retrieval-gate/
+          if-no-files-found: warn
+          retention-days: 14

@@ -23,7 +23,7 @@ Let `delta = current - baseline`, per answerable case, on the same case ids.
 | **R1b** MRR | same for `mrr` | **the interval's upper bound is < 0** |
 | **R2** Scoping | cross-workspace hits == 0 | any chunk of any case's retrieved list (fused candidates included, not only the top 20) belongs to a workspace other than the eval workspace. Absolute, not relative to the baseline. |
 | **R3** Abstention | missed abstentions <= baseline | an unanswerable case that the baseline abstained on is now answered, i.e. the count of missed abstentions increased |
-| **P** Preconditions | same split, dataset sha256, profile name and case ids as the baseline; no document that the baseline indexed now fails to index | any mismatch. If it is legitimate (dataset edited, profile renamed) the PR refreshes the baseline and the diff is reviewed. |
+| **P** Preconditions | same split, dataset sha256, profile name/configuration hash, model IDs, abstention threshold/calibration and case IDs/answerability; complete finite gated metrics and explicit isolation/abstention results; no document that the baseline indexed now fails to index | any mismatch or incomplete result. If legitimate, regenerate from reviewed cases and review the changed acceptance bar. |
 
 Details:
 
@@ -34,14 +34,18 @@ Details:
 ## Known limits: what a green gate means
 
 - **Power.** With about 40 validation cases, the interval for a true drop of a few points usually contains 0, so the gate passes with a WARN. R1 catches statistically evident regressions, not small ones. Growing the validation split (T28 added unreviewed cases) tightens it.
-- **Unreviewed data.** The golden set is not yet human-reviewed (`benchmarks/datasets/golden-v1/REVIEW_FIRST.md`). The gate measures change relative to the baseline, so it is meaningful before review, but the baseline numbers must not be quoted as quality figures (INV-12 still bars the test split, which the gate refuses to score).
+- **Reviewed baseline.** The golden set is not yet human-reviewed (`benchmarks/datasets/golden-v1/REVIEW_FIRST.md`). Baseline creation refuses unreviewed cases in the selected split before replay, and arming requires explicit review and non-fake model metadata. Dataset-level descriptive metadata alone is insufficient: each evaluated case must be marked reviewed. INV-12 still bars the test split, which the gate refuses to score.
 - **Scanned PDF.** OCR responses are not cached, so the scanned PDF fails to index in both the baseline and replay. It is recorded in the baseline's `failed_docs`; cases that need it count as misses on both sides.
 - **Rerank in the path.** A change to fusion changes what is sent to the reranker, so replay raises a cache miss (still a FAIL, with a refresh message). Use `--profile hybrid-rrf` (no rerank) to see a pure metric comparison of fusion changes without keys.
 - **Not a latency or cost gate.** The gate checks retrieval quality only.
 
 ## Gate not armed
 
-Until `benchmarks/gate/baseline.json` exists and is a **real** baseline (`measurement: true`, `seeded: false`, no fake model ids), the CI job exits 0 with a warning annotation `GATE NOT ARMED` and a banner in the log. A seeded or fake baseline never arms the gate. The step that prints this also skips `npm ci` and the migrations, so an unarmed job is quick.
+With no `benchmarks/gate/baseline.json`, the CI job exits 0 with a warning annotation `GATE NOT ARMED` and a banner in the log. Explicit seeded/fake non-measurement fixtures also remain unarmed. A real baseline must have `measurement: true`, `seeded: false`, `dataset_reviewed: true` and non-fake model metadata; incomplete real metadata fails instead of silently disabling the check. The status step skips heavy setup only for an intentionally unarmed gate.
+
+CI preserves `status.log`, `gate.log` and `gate-result.json` when scoring reaches that point as a `retrieval-gate-<attempt>` artifact for 14 days, even on failure. Cache misses and malformed inputs may produce only logs. Bash pipe failure propagation preserves the nonzero gate exit code while recording those logs.
+
+Baseline/cache updates change the acceptance bar and require explicit reviewer scrutiny. These files are not measurements merely because they were committed. This workflow does not configure repository approval requirements or branch protection; direct commits to `main` need the same human review of any baseline change. Older baselines lacking review/configuration metadata must be regenerated, not patched by hand.
 
 ## Arming the gate (run once, locally, by the owner)
 

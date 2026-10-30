@@ -24,7 +24,8 @@ def doc(recall, mrr, *, hits=0, missed=0, unans=3, **over):
     for j in range(unans):
         cases[f"u{j}"] = {"answerable": False, "missed_abstention": j < missed, "top_score": 0.1}
     d = {"format": 1, "kind": "retrieval-gate-result", "split": "validation", "profile": "p", "dataset_sha256": "x",
-         "failed_docs": [], "cross_workspace_hits": hits, "tau": 0.5, "tau_calibrated": False, "degraded_cases": 0,
+         "profile_config_hash": "config", "models": {"embedding": "embed", "rerank": "rerank"},
+         "dataset_reviewed": True, "failed_docs": [], "cross_workspace_hits": hits, "tau": 0.5, "tau_calibrated": False, "degraded_cases": 0,
          "summary": {"unanswerable": unans}, "cases": cases, "seeded": False, "measurement": True}
     d.update(over)
     return d
@@ -85,7 +86,9 @@ def test_missed_abstention_increase_fails_r3_equal_or_fewer_pass():
     assert gate.compare(doc(R, R, missed=2), doc(R, R, missed=0), n_resamples=500).passed
 
 
-@pytest.mark.parametrize("field,value", [("dataset_sha256", "y"), ("profile", "q"), ("split", "dev")])
+@pytest.mark.parametrize("field,value", [("dataset_sha256", "y"), ("profile", "q"), ("split", "dev"),
+    ("profile_config_hash", "different"), ("models", {"embedding": "other", "rerank": "rerank"}),
+    ("tau", 0.9), ("tau_calibrated", True)])
 def test_precondition_mismatch_fails(field, value):
     rep = gate.compare(doc(R, R), doc(R, R, **{field: value}), n_resamples=500)
     assert not rep.passed and any(c.rule == "P" and c.level == "fail" for c in rep.checks)
@@ -212,24 +215,21 @@ def env(tmp_path_factory):
     work = tmp_path_factory.mktemp("gate-seeded")
     paths = seed.record_cache(work, DATABASE_URL_TEST)
     paths["work"] = work
-    paths["real_baseline"] = work / "real-looking-baseline.json"
-    d = json.loads(seed.SEEDED_BASELINE.read_text())
-    d.update(seeded=False, measurement=True, stamp=None)  # arms the gate in this temp dir ONLY
-    paths["real_baseline"].write_text(json.dumps(d))
+    paths["real_baseline"] = seed.SEEDED_BASELINE
     return paths
 
 
 def check(env, *extra, baseline=None, cache=None, tau="0.5"):
     return run_cli("--dataset", str(env["dataset"]), "--corpus", str(env["corpus"]), "--cache", str(cache or env["cache"]),
                    "--baseline", str(baseline or env["real_baseline"]), "--database-url", DATABASE_URL_TEST,
-                   "--tau", tau, *extra)
+                   "--tau", tau, "--accept-seeded-baseline", *extra)
 
 
 @needs_db
 def test_unchanged_run_passes_against_committed_seeded_baseline(env, capsys):
     """Also proves the committed seeded baseline is exactly reproducible from a fresh seeded cache."""
     before = gate_workspaces()
-    rc = check(env, "--accept-seeded-baseline", baseline=seed.SEEDED_BASELINE)
+    rc = check(env, baseline=seed.SEEDED_BASELINE)
     out = capsys.readouterr().out
     assert rc == 0, out
     assert "GATE PASSED" in out and "FAIL" not in out.replace("GATE FAILED", "")
@@ -292,7 +292,8 @@ def test_changed_question_is_a_cache_miss(env, tmp_path, capsys):
     rows[0]["question"] += " extra"
     (ds / "cases.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
     rc = run_cli("--dataset", str(ds), "--corpus", str(env["corpus"]), "--cache", str(env["cache"]),
-                 "--baseline", str(env["real_baseline"]), "--database-url", DATABASE_URL_TEST, "--tau", "0.5")
+                 "--baseline", str(env["real_baseline"]), "--database-url", DATABASE_URL_TEST, "--tau", "0.5",
+                 "--accept-seeded-baseline")
     assert rc == 1 and "CACHE MISS" in capsys.readouterr().err
 
 
@@ -313,9 +314,6 @@ def c_baseline(env):
     out = env["work"] / "hybrid-rrf-baseline.json"
     if not out.exists():
         seed.write_baseline(env["work"], env, DATABASE_URL_TEST, out, profile="hybrid-rrf")
-        d = json.loads(out.read_text())
-        d.update(seeded=False, measurement=True, stamp=None)
-        out.write_text(json.dumps(d))
     return out
 
 
@@ -393,3 +391,62 @@ async def test_count_cross_workspace_hits_detects_a_planted_foreign_chunk(env):
     finally:
         gate.purge_workspaces(DATABASE_URL_TEST, wids)
         await conn.close()
+
+
+def test_unreviewed_baseline_creation_refused_before_replay(tmp_path, capsys):
+    dataset = seed.build_dataset(tmp_path / "dataset")
+    baseline = tmp_path / "baseline.json"
+    assert run_cli("--write-baseline", "--dataset", str(dataset), "--baseline", str(baseline)) == 1
+    assert "not human-reviewed" in capsys.readouterr().err
+    assert not baseline.exists()
+
+
+def test_unreviewed_or_fake_measurement_cannot_arm(tmp_path):
+    for override in ({"dataset_reviewed": False}, {"models": {"embedding": "fake", "rerank": None}}):
+        with pytest.raises(gate.GateError):
+            gate.arming_status(write(tmp_path / "baseline.json", doc(R, R, **override)))
+
+
+def test_missing_configuration_cannot_compare():
+    baseline = doc(R, R)
+    del baseline["profile_config_hash"]
+    assert not gate.compare(baseline, doc(R, R), n_resamples=100).passed
+
+
+@pytest.mark.parametrize("field,value", [("measurement", None), ("measurement", False), ("seeded", None)])
+def test_incomplete_measurement_metadata_fails_arming(tmp_path, field, value):
+    baseline = doc(R, R)
+    if value is None:
+        del baseline[field]
+    else:
+        baseline[field] = value
+    with pytest.raises(gate.GateError):
+        gate.arming_status(write(tmp_path / "invalid.json", baseline))
+
+
+@pytest.mark.parametrize("side", ["baseline", "current"])
+@pytest.mark.parametrize("mutation", ["missing_metric", "nan_metric", "missing_hits", "bad_hits", "missing_missed", "bad_missed", "infinite_tau"])
+def test_malformed_results_fail_closed(side, mutation):
+    baseline, current = doc(R, R), doc(R, R)
+    target = baseline if side == "baseline" else current
+    if mutation == "missing_metric":
+        del target["cases"]["c0"]["metrics"]["mrr"]
+    elif mutation == "nan_metric":
+        target["cases"]["c0"]["metrics"]["mrr"] = float("nan")
+    elif mutation == "missing_hits":
+        del target["cross_workspace_hits"]
+    elif mutation == "bad_hits":
+        target["cross_workspace_hits"] = True
+    elif mutation == "missing_missed":
+        del target["cases"]["u0"]["missed_abstention"]
+    elif mutation == "bad_missed":
+        target["cases"]["u0"]["missed_abstention"] = 0
+    else:
+        target["tau"] = float("inf")
+    assert not gate.compare(baseline, current, n_resamples=100).passed
+
+
+def test_answerability_change_cannot_hide_regressing_case():
+    baseline, current = doc(R, R), doc(R, R)
+    current["cases"]["c0"] = {"answerable": False, "missed_abstention": False}
+    assert not gate.compare(baseline, current, n_resamples=100).passed

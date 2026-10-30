@@ -32,6 +32,7 @@ import asyncio
 import gzip
 import hashlib
 import json
+import math
 import os
 import shutil
 import sys
@@ -358,12 +359,15 @@ def build_result(
                                "missed_abstentions": missed}
     for m in GATED_METRICS:
         summary[m] = round(sum(r.metrics[m] for r in ans) / len(ans), 6) if ans else None  # type: ignore[index]
+    from .review.require import unreviewed_ids
+
     measurement = not seeded and not fake
     return {
         "format": FORMAT, "kind": "retrieval-gate-result", "split": split, "profile": profile,
         "profile_config_hash": out.profile_config_hash, "dataset_version": dataset_version(dataset_dir),
         "dataset_sha256": hashlib.sha256((dataset_dir / "cases.jsonl").read_bytes()).hexdigest(),
         "dataset_review_status": meta.get("review_status", "unknown"),
+        "dataset_reviewed": not unreviewed_ids(cases),
         "models": models, "code_commit": git_commit(), "created_at": datetime.now(timezone.utc).isoformat(),
         "tau": out.tau, "tau_calibrated": out.tau_calibrated,
         "seeded": seeded, "measurement": measurement, "stamp": SEEDED_STAMP if seeded else (None if measurement else "FAKE - NOT A MEASUREMENT"),
@@ -390,8 +394,18 @@ def arming_status(path: Path, accept_seeded: bool = False) -> tuple[bool, str]:
     if not path.is_file():
         return False, f"no baseline file at {path}"
     doc = load_baseline(path)
-    if (doc.get("seeded") or not doc.get("measurement")) and not accept_seeded:
+    seeded = doc.get("seeded") is True and doc.get("measurement") is False
+    fake = (doc.get("seeded") is False and doc.get("measurement") is False
+            and isinstance(doc.get("stamp"), str) and doc["stamp"].startswith("FAKE"))
+    if seeded or fake:
+        if seeded and accept_seeded:
+            return True, "armed"
         return False, f"{path} is a seeded/fake fixture, not a measurement ({doc.get('stamp')})"
+    models = doc.get("models")
+    if (doc.get("seeded") is not False or doc.get("measurement") is not True
+            or doc.get("dataset_reviewed") is not True or not isinstance(models, dict)
+            or not models.get("embedding") or any("fake" in str(m).lower() for m in models.values() if m)):
+        raise GateError(f"baseline {path} is not a reviewed, non-fake measurement")
     return True, "armed"
 
 
@@ -440,16 +454,58 @@ def _metric_map(doc: dict[str, Any], metric: str) -> dict[str, float]:
 def compare(baseline: dict[str, Any], current: dict[str, Any], *, n_resamples: int = N_RESAMPLES) -> GateReport:
     rep = GateReport()
     pre_ok = True
-    for key, label in (("split", "split"), ("dataset_sha256", "dataset"), ("profile", "profile")):
-        if baseline.get(key) != current.get(key):
+    for key, label in (("split", "split"), ("dataset_sha256", "dataset"), ("profile", "profile"),
+                       ("profile_config_hash", "profile configuration"), ("models", "models"),
+                       ("tau", "tau"), ("tau_calibrated", "tau calibration")):
+        if key not in baseline or key not in current or baseline[key] is None or current[key] is None or baseline[key] != current[key]:
             pre_ok = False
             rep.add("P", f"same {label} as baseline", "fail",
                     f"baseline {str(baseline.get(key))[:16]!r} vs current {str(current.get(key))[:16]!r}: refresh the "
                     "baseline in this PR (scribe-eval gate --write-baseline) and have the diff reviewed")
+    for name, result in (("baseline", baseline), ("current", current)):
+        models = result.get("models")
+        if (not isinstance(result.get("profile_config_hash"), str) or not result["profile_config_hash"]
+                or not isinstance(models, dict) or not isinstance(models.get("embedding"), str)
+                or not models["embedding"] or "rerank" not in models
+                or (models["rerank"] is not None and (not isinstance(models["rerank"], str) or not models["rerank"]))
+                or type(result.get("tau")) not in (int, float)
+                or not math.isfinite(result["tau"])
+                or type(result.get("tau_calibrated")) is not bool):
+            pre_ok = False
+            rep.add("P", f"{name} configuration complete", "fail", "missing or invalid configuration metadata")
     if set(baseline["cases"]) != set(current["cases"]):
         pre_ok = False
         rep.add("P", "same case ids as baseline", "fail",
                 f"{len(set(baseline['cases']) ^ set(current['cases']))} case id(s) differ: refresh the baseline")
+    data_valid = True
+    for name, result in (("baseline", baseline), ("current", current)):
+        hits = result.get("cross_workspace_hits")
+        if type(hits) is not int or hits < 0:
+            rep.add("P", f"{name} cross-workspace hits", "fail", "missing or invalid hit count")
+            data_valid = False
+        for cid, case in result["cases"].items():
+            if not isinstance(case, dict) or type(case.get("answerable")) is not bool:
+                rep.add("P", f"{name} case data", "fail", f"{cid}: missing or invalid answerability")
+                data_valid = False
+                continue
+            if case["answerable"]:
+                metrics = case.get("metrics")
+                if not isinstance(metrics, dict) or any(
+                    type(metrics.get(metric)) not in (int, float) or not math.isfinite(metrics[metric])
+                    or not 0 <= metrics[metric] <= 1 for metric in GATED_METRICS
+                ):
+                    rep.add("P", f"{name} case data", "fail", f"{cid}: missing or invalid gated metric")
+                    data_valid = False
+            elif type(case.get("missed_abstention")) is not bool:
+                rep.add("P", f"{name} case data", "fail", f"{cid}: missing or invalid missed abstention")
+                data_valid = False
+    for cid in baseline["cases"].keys() & current["cases"].keys():
+        left, right = baseline["cases"][cid], current["cases"][cid]
+        if isinstance(left, dict) and isinstance(right, dict) and left.get("answerable") != right.get("answerable"):
+            rep.add("P", "same case answerability", "fail", f"{cid}: answerability changed")
+            data_valid = False
+    if not data_valid:
+        return rep
     new_failed = sorted(set(current.get("failed_docs", [])) - set(baseline.get("failed_docs", [])))
     if new_failed:
         pre_ok = False
@@ -474,7 +530,7 @@ def compare(baseline: dict[str, Any], current: dict[str, Any], *, n_resamples: i
         else:
             rep.add("R1", name, "pass", detail)
 
-    hits = int(current.get("cross_workspace_hits", 0))
+    hits = current["cross_workspace_hits"]
     rep.add("R2", "cross-workspace hits == 0", "pass" if hits == 0 else "fail",
             f"{hits} returned chunk(s) belong to another workspace")
 
@@ -525,7 +581,11 @@ def run_gate(args: Any, *, providers: Providers | None = None) -> int:
         print("ERROR: --refresh-cache and --write-baseline are separate steps.", file=sys.stderr)
         return 2
     if getattr(args, "status", False):
-        armed, reason = arming_status(baseline_path, args.accept_seeded_baseline)
+        try:
+            armed, reason = arming_status(baseline_path, args.accept_seeded_baseline)
+        except GateError as exc:
+            print(f"GATE FAILED: {exc}", file=sys.stderr)
+            return 1
         print(f"gate armed: {armed} ({reason})")
         if os.environ.get("GITHUB_OUTPUT"):
             with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
@@ -542,6 +602,13 @@ def run_gate(args: Any, *, providers: Providers | None = None) -> int:
                 print("=" * 78 + f"\n{msg}\n" + "=" * 78)
                 _annotate("warning", "GATE NOT ARMED", msg)
                 return 0
+        if write_baseline and not args.seeded:
+            from .review.require import refusal_message, unreviewed_ids
+
+            cases = _load_split(dataset_dir, args.split)
+            unreviewed = unreviewed_ids(cases)
+            if unreviewed:
+                raise GateError(refusal_message(unreviewed, len(cases), "write a baseline as a measurement"))
         if refresh:
             if providers is None:
                 if os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"):
@@ -565,6 +632,8 @@ def run_gate(args: Any, *, providers: Providers | None = None) -> int:
         out = asyncio.run(replay_retrieval(
             database_url=args.database_url, corpus_dir=Path(args.corpus), cases=cases, profile_name=args.profile,
             cache=cache, providers=providers, tau=args.tau))
+        if not math.isfinite(out.tau):
+            raise GateError("tau must be finite")
         result = build_result(out=out, cases=cases, dataset_dir=dataset_dir, split=args.split, profile=args.profile,
                               seeded=bool(args.seeded))
         print(f"scored {result['summary']['answerable']} answerable + {result['summary']['unanswerable']} unanswerable "

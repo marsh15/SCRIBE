@@ -17,6 +17,8 @@ uv run --project intelligence scribe-eval gate --refresh-cache --database-url "$
 
 ## Refresh the baseline (only when the new numbers are an intended, reviewed change)
 
+Review every case in the selected split first (`scribe-eval review`); `--write-baseline` refuses cases without `reviewed: true`. The baseline records this review check, profile configuration hash, model IDs and abstention settings. A mismatch or missing/nonfinite case metric fails comparison. Changing the acceptance bar still requires a reviewer to inspect the baseline/cache diff; CI does not grant that approval.
+
 ```bash
 unset GOOGLE_GENERATIVE_AI_API_KEY VOYAGE_API_KEY
 uv run --project intelligence scribe-eval gate --write-baseline --database-url "$DATABASE_URL_TEST"
@@ -24,6 +26,8 @@ git diff benchmarks/gate/baseline.json      # the reviewer reads this: it is the
 ```
 
 Refreshing the baseline in a PR is how a deliberate trade-off is recorded; the diff is the audit trail. Never edit the baseline by hand, and never write one from fake models (the command refuses). Seeded test fixtures live under `intelligence/tests/evaluation/` and are stamped `SEEDED FIXTURE - NOT A MEASUREMENT`.
+
+GitHub CI retains status, scoring results when available and error logs in its `retrieval-gate-<attempt>` artifact for 14 days. The missing real baseline still leaves the gate explicitly unarmed.
 
 ## Run the check yourself
 
