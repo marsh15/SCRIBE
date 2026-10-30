@@ -11,7 +11,7 @@ import { verificationFromParts, type VerificationData } from "@/lib/evidence/ver
 import { useParams, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { DefaultChatTransport } from "ai";
-import { messageUsesKnowledgeBase } from "@/lib/chat-tools";
+import { getMessageRagResults, messageUsesKnowledgeBase } from "@/lib/chat-tools";
 
 type StoredPart = {
   type?: string;
@@ -296,6 +296,7 @@ function ChatInterface({
                   <div className="prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-pre:bg-primary prose-pre:text-primary-foreground max-w-none prose-a:text-rag prose-a:no-underline hover:prose-a:underline">
                     <CitedMarkdown
                       inspectable={m.role === "assistant"}
+                      retrievalResults={m.role === "assistant" ? getMessageRagResults(m) : []}
                       evidence={collectEvidenceByLabel(m.parts)}
                       verification={m.role === "assistant" ? verificationFromParts(m.parts) ?? stored[m.id] : undefined}
                       streaming={m.role === "assistant" && status === "streaming" && m.id === messages[messages.length - 1]?.id}

@@ -1,4 +1,5 @@
 import type { UIMessage } from "@ai-sdk/react";
+import { extractRagToolResult, type RagToolResult } from "@/lib/rag-types";
 
 type ToolInvocationLike = {
   toolName?: string;
@@ -64,6 +65,16 @@ export function messageUsesKnowledgeBase(message: UIMessage) {
   return getToolInvocations(message).some(
     (invocation) => invocation.toolName === "searchKnowledgeBase",
   );
+}
+
+/** Completed searches belonging to one message, in invocation order. */
+export function getMessageRagResults(message: UIMessage): RagToolResult[] {
+  return getToolInvocations(message)
+    .filter((invocation) => invocation.toolName === "searchKnowledgeBase")
+    .flatMap((invocation) => {
+      const result = extractRagToolResult(invocation.result);
+      return result ? [result] : [];
+    });
 }
 
 export function countKnowledgeBaseInvocations(messages: UIMessage[]) {

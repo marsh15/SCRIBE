@@ -4,16 +4,20 @@ import { useState } from "react";
 import { CitationLink } from "@/components/evidence-viewer";
 import type { EvidenceByLabel } from "@/lib/evidence/citations";
 import { STATUS_META, type VerificationData } from "@/lib/evidence/verification";
+import type { RagToolResult } from "@/lib/rag-types";
+import { AnswerRetrievalDiagnostics } from "@/components/answer-retrieval-diagnostics";
 
 /** Evidence and claim results belong to this answer, not the latest search in the chat. */
 export function AnswerEvidenceInspector({
   evidence,
   verification,
   streaming,
+  retrievalResults,
 }: {
   evidence: EvidenceByLabel;
   verification?: VerificationData;
   streaming: boolean;
+  retrievalResults: RagToolResult[];
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -36,6 +40,7 @@ export function AnswerEvidenceInspector({
               </ul>
             ) : <p className="mt-1 text-muted-foreground">{streaming ? "Evidence is not yet available." : "No evidence is available for this answer."}</p>}
           </section>
+          <AnswerRetrievalDiagnostics results={retrievalResults} />
           <section>
             <h3 className="font-mono text-[10px] uppercase text-muted-foreground">Claim verification</h3>
             {!verification && <p className="mt-1 text-muted-foreground">{streaming ? "Waiting for verification." : "Verification is unavailable for this answer."}</p>}

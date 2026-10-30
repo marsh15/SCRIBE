@@ -10,7 +10,7 @@ import { verificationFromParts } from "@/lib/evidence/verification";
 import { createChat } from "@/app/chat/actions";
 import { useRouter } from "next/navigation";
 import { notifyChatCreated } from "@/lib/chat-events";
-import { messageUsesKnowledgeBase } from "@/lib/chat-tools";
+import { getMessageRagResults, messageUsesKnowledgeBase } from "@/lib/chat-tools";
 
 export default function Ragchatbot() {
   const router = useRouter();
@@ -163,6 +163,7 @@ export default function Ragchatbot() {
                     <div className="prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-pre:bg-primary prose-pre:text-primary-foreground max-w-none prose-a:text-rag prose-a:no-underline hover:prose-a:underline">
                     <CitedMarkdown
                       inspectable={m.role === "assistant"}
+                      retrievalResults={m.role === "assistant" ? getMessageRagResults(m) : []}
                       evidence={collectEvidenceByLabel(m.parts)}
                       verification={m.role === "assistant" ? verificationFromParts(m.parts) : undefined}
                       streaming={m.role === "assistant" && status === "streaming" && m.id === messages[messages.length - 1]?.id}
