@@ -12,7 +12,11 @@
 set -euo pipefail
 url="${1:?usage: CONFIRM_HOST=<host> $0 <direct postgres url> [--register-journal]}"
 mode="${2:-}"
-host="$(printf '%s' "$url" | sed -E 's#^[a-z]+://([^@]*@)?([^/:?]+).*#\2#')"
+host="$(node -e 'try {
+  const u = new URL(process.argv[1]);
+  if (!["postgres:", "postgresql:"].includes(u.protocol) || !u.hostname) throw new Error();
+  process.stdout.write(u.hostname.replace(/^\[|\]$/g, ""));
+} catch { console.error("refusing: invalid PostgreSQL URL"); process.exit(2); }' "$url")"
 [ "${CONFIRM_HOST:-}" = "$host" ] || { echo "refusing: set CONFIRM_HOST=$host to confirm this target" >&2; exit 2; }
 case "$host" in *-pooler.*) echo "refusing: use the direct (non -pooler) endpoint for migrations" >&2; exit 2 ;; esac
 # PROD_HOST (the production endpoint host, pooler or direct) makes production an explicit opt-in: ALLOW_PROD=1.
@@ -21,24 +25,44 @@ if [ -n "${PROD_HOST:-}" ] && [ "$host" = "${PROD_HOST/-pooler./.}" ] && [ "${AL
 fi
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
+# Capture the manifest before connecting: missing/unordered SQL or corrupt journal metadata must never partially apply.
+manifest="$(node "$root/scripts/neon-rehearsal/check-journal.mjs" "$root")"
+[ -n "$manifest" ] || { echo "refusing: migration manifest is empty" >&2; exit 1; }
 files=()
-for f in "$root"/drizzle/00[0-9][0-9]_*.sql; do
-  n="$(basename "$f")"; (( 10#${n:0:4} >= 8 )) && files+=("$f")
-done
+while IFS=$'\t' read -r tag when hash; do
+  files+=("$root/drizzle/$tag.sql")
+done <<< "$manifest"
 psql_q() { PGOPTIONS="-c client_min_messages=warning" psql "$url" -X -v ON_ERROR_STOP=1 -q "$@"; }
 
 if [ "$mode" = "--register-journal" ]; then
-  sql="CREATE SCHEMA IF NOT EXISTS drizzle;
-CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at bigint);"
-  for f in "${files[@]}"; do
-    tag="$(basename "$f" .sql)"
-    when="$(node -e 'const j=require(process.argv[1]);const e=j.entries.find(e=>e.tag===process.argv[2]);if(!e)process.exit(1);console.log(e.when)' "$root/drizzle/meta/_journal.json" "$tag")" \
-      || { echo "$tag is not in drizzle/meta/_journal.json" >&2; exit 1; }
-    hash="$(shasum -a 256 "$f" | cut -d' ' -f1)"
+  times=""
+  first_when=""
+  while IFS=$'\t' read -r tag when hash; do
+    first_when="${first_when:-$when}"
+    times+="${times:+,}$when"
+  done <<< "$manifest"
+  sql="SELECT pg_advisory_xact_lock(hashtext('scribe:drizzle:journal'));
+CREATE SCHEMA IF NOT EXISTS drizzle;
+CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at bigint);
+DO \$journal\$ BEGIN
+  IF EXISTS (SELECT 1 FROM drizzle.__drizzle_migrations
+             WHERE created_at IS NULL OR (created_at >= $first_when AND created_at NOT IN ($times))) THEN
+    RAISE EXCEPTION 'migration journal mismatch: unexpected timestamp; investigate before registering';
+  END IF;
+END \$journal\$;"
+  while IFS=$'\t' read -r tag when hash; do
     sql+="
+DO \$journal\$ BEGIN
+  IF EXISTS (SELECT 1 FROM drizzle.__drizzle_migrations
+             WHERE (created_at = $when AND hash IS DISTINCT FROM '$hash')
+                OR (hash = '$hash' AND created_at IS DISTINCT FROM $when))
+     OR (SELECT count(*) FROM drizzle.__drizzle_migrations WHERE created_at = $when) > 1 THEN
+    RAISE EXCEPTION 'migration journal mismatch for $tag; investigate before registering';
+  END IF;
+END \$journal\$;
 INSERT INTO drizzle.__drizzle_migrations (hash, created_at) SELECT '$hash', $when
   WHERE NOT EXISTS (SELECT 1 FROM drizzle.__drizzle_migrations WHERE created_at = $when);"
-  done
+  done <<< "$manifest"
   psql_q -1 -c "$sql"
   psql_q -c "SELECT id, hash, created_at FROM drizzle.__drizzle_migrations ORDER BY created_at"
   exit 0

@@ -11,7 +11,8 @@ Scripts: `scripts/neon-rehearsal/`
 | File | What it does |
 |---|---|
 | `precheck.sql` | Read-only facts the migrations depend on (PG version, role attributes, pgvector, drizzle journal, rows 0008/0009 touch). |
-| `apply.sh` | Applies every `drizzle/00NN_*.sql` with NN ≥ 08 (0008-0020, 13 files), one transaction per file, timed. Refuses unless `CONFIRM_HOST` equals the URL's host, and refuses a `-pooler` host. `--register-journal` records the files in `drizzle.__drizzle_migrations` instead. |
+| `apply.sh` | Validates the local journal, then applies migrations 0008 onward in journal order, one transaction per file, timed. Refuses unless `CONFIRM_HOST` equals the URL's host, and refuses a `-pooler` host. `--register-journal` records the files atomically after checking existing metadata for conflicts. |
+| `check-journal.mjs` | Offline validation of migration numbering, order, strictly increasing timestamps, missing/unjournaled SQL and exact file hashes. No database connection. |
 | `postcheck.sql` | Read-only checks after migration and after the backfill, each with its expected result. |
 | `fingerprint.sql` | Order-independent schema fingerprint for diffing the upgraded branch against a fresh 2.0 schema. |
 
@@ -90,6 +91,7 @@ The branch holds a full copy of production user data. Keep it private and delete
 ## Phase 2: precheck
 
 ```bash
+node scripts/neon-rehearsal/check-journal.mjs . > "$OUT/local-journal.tsv"
 psql "$BRANCH_URL" -X -f scripts/neon-rehearsal/precheck.sql | tee "$OUT/precheck.txt"
 ```
 
@@ -135,6 +137,8 @@ diff "$OUT/fp-ref.txt" "$OUT/fp-branch.txt" | tee "$OUT/fp.diff"
 Pass: sections 1-6 match their EXPECT lines (section 6b lists the three `*_legacy_default_workspace` triggers, all `O` = enabled), and `fp.diff` holds only the three known lines (above). Extra lines are columns, indexes or constraints production has (or lacks) compared with what the 1.0 code declares. Each one needs a decision, either a follow-up migration or "harmless, recorded".
 
 ## Phase 5: drizzle journal
+
+Registration is not proof that the schema was applied: finish the postchecks and schema comparison first. Registration takes a transaction-scoped lock and refuses conflicting hashes, duplicate or shifted timestamps, NULL timestamps and unknown timestamps at or after migration 0008. The entire registration rolls back on conflict, including earlier missing rows it would otherwise insert. Investigate any mismatch; do not overwrite it to make the command succeed. Earlier 0000–0007 history is preserved and remains part of the manual precheck.
 
 ```bash
 CONFIRM_HOST="$host" scripts/neon-rehearsal/apply.sh "$BRANCH_URL" --register-journal | tee "$OUT/journal.txt"
