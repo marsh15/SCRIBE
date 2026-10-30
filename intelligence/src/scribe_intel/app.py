@@ -9,6 +9,7 @@ from .evidence_routes import router as evidence_router
 from .ingest_routes import router as ingest_router
 from .retrieve_routes import router as retrieve_router
 from .verify_routes import router as verify_router
+from .trace_routes import router as trace_router
 
 router = APIRouter()
 
@@ -48,6 +49,8 @@ def create_app() -> FastAPI:
     app.include_router(compare_router, prefix="/api/py", include_in_schema=False)
     app.include_router(evidence_router)
     app.include_router(evidence_router, prefix="/api/py", include_in_schema=False)
+    app.include_router(trace_router)
+    app.include_router(trace_router, prefix="/api/py", include_in_schema=False)
     app.include_router(verify_router)
     app.include_router(verify_router, prefix="/api/py", include_in_schema=False)
     return app

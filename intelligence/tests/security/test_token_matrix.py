@@ -26,6 +26,7 @@ ROUTES = [
     ("POST", "/retrieve", "retrieve", True),
     ("POST", "/compare", "compare", True),
     ("POST", "/evidence/open", "evidence_read", True),
+    ("POST", "/retrieval/trace", "retrieval_trace_read", True),
     ("POST", "/verify", "verify", True),
     ("POST", "/verify/read", "verify", True),
 ]

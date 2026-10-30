@@ -19,6 +19,7 @@ export const ROUTE_TABLE: Record<string, { category: RouteCategory; note: string
   "app/api/evidence/[id]/route.ts": { category: "idor", note: "evidence item id; Python re-checks the workspace on every open (INV-8)" },
   "app/api/files/[id]/view/route.ts": { category: "idor", note: "source id and ?version=; scoped by workspace and user" },
   "app/api/rag/latest/route.ts": { category: "idor", note: "chatId / assistantMessageId; a foreign id yields the same empty trace as an unknown one" },
+  "app/api/retrieval-traces/[id]/route.ts": { category: "idor", note: "exact Python retrieval trace id; workspace authorization rechecked on every inspection" },
   "app/api/sources/[id]/versions/route.ts": { category: "idor", note: "source id; the reserve SQL function refuses a foreign source" },
   "app/api/sources/process-now/route.ts": { category: "idor", note: "sourceId in the body; a foreign id is a no-op identical to an unknown one" },
   "app/api/internal/ingest/run/route.ts": { category: "internal", note: "CRON_SECRET bearer" },

@@ -74,13 +74,15 @@ vi.mock("@/lib/workspace", () => ({
 }));
 vi.mock("@/lib/intelligence-client", () => ({ callIntelligence: S.callIntelligence, baseUrl: () => "https://scribe.example" }));
 
+vi.mock("@/lib/scoped", () => ({ scoped: () => ({ batch: async (queries: PromiseLike<unknown>[]) => Promise.all(queries) }) }));
+
 vi.mock("@/lib/db-config", () => ({
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => S.sql(strings.join("?"), values),
   db: {
     select: () => S.chain([]),
     insert: () => ({ values: async () => void S.mutations.push("insert") }),
     update: () => ({ set: () => ({ where: async () => void S.mutations.push("update") }) }),
-    delete: () => ({ where: async () => void S.mutations.push("delete") }),
+    delete: () => S.chain([]),
     query: {
       chats: { findFirst: S.findFirst },
       files: { findFirst: S.findFirst },
@@ -128,6 +130,7 @@ vi.mock("@/lib/db-compat", () => ({ ensureDocumentsChunkIndexSchema: vi.fn() }))
 import { GET as migrationGET, POST as migrationPOST } from "@/app/api/admin/migration/route";
 import { POST as chatPOST } from "@/app/api/chat/route";
 import { POST as comparePOST } from "@/app/api/compare/route";
+import { GET as retrievalTraceGET } from "@/app/api/retrieval-traces/[id]/route";
 import { GET as evidenceGET } from "@/app/api/evidence/[id]/route";
 import { GET as viewGET } from "@/app/api/files/[id]/view/route";
 import { GET as healthGET } from "@/app/api/health/route";
@@ -250,6 +253,18 @@ const ROUTE_HANDLERS: Record<string, () => Promise<void>> = {
     expect(path).toBe("/evidence/open");
     expect(token).toEqual({ sub: USER_A, wid: WS_A, scope: "evidence_read" }); // never the query/header value
     expect(JSON.parse(init.body)).toEqual({ item_id: FOREIGN_EVIDENCE });
+  },
+
+  "app/api/retrieval-traces/[id]/route.ts": async () => {
+    signedOut();
+    expect((await retrievalTraceGET(url(`/api/retrieval-traces/${FOREIGN_EVIDENCE}`), ctx(FOREIGN_EVIDENCE))).status).toBe(401);
+    signedIn();
+    const foreign = await retrievalTraceGET(url(`/api/retrieval-traces/${FOREIGN_EVIDENCE}?workspace_id=ws-B`), ctx(FOREIGN_EVIDENCE));
+    expect(foreign.status).toBe(404);
+    const [path, token, init] = S.callIntelligence.mock.calls[0];
+    expect(path).toBe("/retrieval/trace");
+    expect(token).toEqual({ sub: USER_A, wid: WS_A, scope: "retrieval_trace_read" });
+    expect(JSON.parse(init.body)).toEqual({ trace_id: FOREIGN_EVIDENCE });
   },
 
   "app/api/files/[id]/view/route.ts": async () => {
