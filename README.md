@@ -100,7 +100,7 @@ More detail, including the data model: [`docs/scribe2/ARCHITECTURE.md`](docs/scr
 | Citation viewer | `/files/[id]` source detail with Original, Structure, Chunks, Versions and History tabs; PDF highlight, text quote and CSV row highlight |
 | Retrieval lab | `/compare` runs 2 to 5 profiles on one query and shows rank movement |
 | Eval dashboard | `/eval` lists runs with failure categories; visible only to users who own or belong to an `eval` workspace |
-| Inspector | Expandable sources and claim verification on each answer, including restored messages; citations reopen the exact passage and source version with access rechecked. The right-hand pane retains timings and chunks for the latest retrieval. |
+| Inspector | Each answer has expandable sources, claim verification and per-search queries, ranks, timings and answerability. Python trace details load on demand with access rechecked, showing recorded cost and source versions; deleted/purged source identities are withheld. The right-hand pane retains the latest retrieval view. |
 | Billing | Razorpay checkout, webhook, plans and usage metering, all behind `FEATURE_BILLING_ENABLED` (off) |
 
 ## Tech stack
@@ -196,7 +196,7 @@ For a **test or throwaway** database, `scripts/apply-migrations.sh <url>` export
 
 For an **existing** database, follow the [migration rehearsal](docs/scribe2/neon-rehearsal.md) on a copy first (a Neon branch). The rehearsal script validates the local journal before connecting and rejects conflicting journal hashes, timestamps and unexpected future entries during registration. Never run `drizzle-kit push` against a database that has the RLS objects: Drizzle does not model them and could drop them.
 
-Personal workspace resolution uses the restricted-role bootstrap function from migration `0013`; apply it before running this app. Other TypeScript queries still need transaction-local workspace context before switching the entire runtime to `scribe_app`.
+Personal workspace resolution uses the restricted-role bootstrap function from migration `0013`; apply it before running this app. Chat CRUD, message persistence, legacy search and trace reads/writes use `scoped()` to set transaction-local workspace context in Neon HTTP batches. File, ingestion, eval and admin paths still need role-boundary work before switching the entire runtime to `scribe_app`.
 
 ## Commands
 
@@ -222,6 +222,7 @@ uv run --project intelligence scribe-perf --help     # run, render, drop
 # Other scripts
 scripts/apply-migrations.sh <url>
 scripts/test-migrations-nosuperuser.sh [admin-url]
+uv run --project intelligence python scripts/test-chat-rls.py <local-test-admin-url>
 npx tsx scripts/backfill-legacy-generations.ts --dry-run   # tsx is not a dependency; npx downloads it
 (cd intelligence && uv run python -m scribe_ingest.upgrade backfill|progress)
 uv run --project intelligence python scripts/demo-seed/demo_seed.py --help
@@ -230,9 +231,10 @@ python3 scripts/gen_architecture_diagram.py
 
 ## Testing
 
-- **TypeScript:** `npm test` runs vitest (Node environment, jsdom for `.tsx` files that opt in). A run on this branch passed 416 tests and skipped 7 that need a database. `__tests__/security/` holds the route-table guard, the IDOR sweep, proxy access rules, log-capture canaries and adversarial prompt-injection documents.
-- **Python:** `uv run pytest` collects 1,781 tests across `tests/ingestion`, `retrieval`, `integration`, `security`, `evaluation`, `perf` and `schema`. Database-backed tests are skipped unless `DATABASE_URL_TEST` points at a database whose name contains `test`. They were not re-run for this documentation pass; CI runs them against a pgvector service container.
-- **CI** (`.github/workflows/ci.yml`): `node` (`npm run check`), `python` (non-superuser migration check, schema replay, `pytest`) and `retrieval-gate` (replay of cached provider responses, no keys). The gate passes with a "GATE NOT ARMED" warning until a baseline is committed ([`release-rules.md`](docs/scribe2/release-rules.md)).
+- **TypeScript:** `npm test` runs vitest (Node environment, jsdom for `.tsx` files that opt in). `__tests__/security/` holds the route-table guard, IDOR sweep, proxy access rules, log-capture canaries and adversarial documents. Database-specific suites skip without their explicit test configuration.
+- **Non-owner chat isolation:** `uv run --project intelligence python scripts/test-chat-rls.py <local-test-admin-url>` creates a temporary database and restricted login, applies migrations, runs exported chat/search/trace functions, checks two tenants and same-connection context cleanup after commit/rollback, then removes the temporary database and login. It refuses remote URLs and requires a local superuser test connection. The SQL bridge preserves parameter binding; it is a local PostgreSQL adapter, not a test of Neon's HTTP transport.
+- **Python:** `uv run --project intelligence pytest` covers ingestion, retrieval, integration, security, evaluation, perf and schema. Database tests require `DATABASE_URL_TEST`; use a disposable local database whose name contains `test`. CI runs them against pgvector.
+- **CI** (`.github/workflows/ci.yml`): `node` (`npm run check`), `python` (migration checks, real-login chat isolation, bundle check and `pytest`) and `retrieval-gate` (cached replay, no keys). The gate remains explicitly unarmed until a real reviewed baseline/cache is committed ([`release-rules.md`](docs/scribe2/release-rules.md)).
 
 Passing tests show that code behaves as specified against fakes or recorded responses. They are not retrieval-quality measurements.
 
@@ -289,7 +291,7 @@ The full list (D1-D22, invariants INV-1 to INV-16) is in [`docs/scribe2/DESIGN.m
 - The answerability threshold `tau` is the placeholder 0.0 and rejects nothing. Profile choice and `tau` are not tuned (task T17 is partial).
 - In the preliminary run, lexical-only retrieval returned almost nothing for natural-language questions because `websearch_to_tsquery` ANDs every term; hybrid results therefore equal dense results. Not yet fixed.
 - The CI retrieval gate is not armed.
-- FORCE RLS is deferred, no TypeScript caller uses `scoped()`, and Neon's default owner role probably has `BYPASSRLS`. Real database-enforced isolation needs the app to connect as `scribe_app`.
+- FORCE RLS is deferred. Chat paths now use `scoped()`, but file, ingestion, eval and admin paths still need role-boundary work. The table-owner runtime connection bypasses RLS; do not switch it until the remaining callers are ready.
 - `/admin/analytics` (instance-wide counts) is restricted to users whose Clerk session token carries `metadata.role = "admin"`; everyone else gets a 404. Until that claim is configured in the Clerk dashboard (user public metadata `{"role": "admin"}` plus `{"metadata": "{{user.public_metadata}}"}` in the session token claims) nobody can open the page.
 - Source versions and claim verification require the Python engine; the legacy engine does neither.
 - The 100,000-chunk performance step was not measured. No rate limiting on `/api/py/*`; a single static internal secret ([`threat-model.md`](docs/scribe2/threat-model.md) section 6).
