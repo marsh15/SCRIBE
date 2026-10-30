@@ -16,11 +16,12 @@ export async function mintInternalToken(
   input: InternalTokenInput,
   secret: string = requireEnv("INTERNAL_SERVICE_SECRET"),
 ): Promise<string> {
+  const issuedAt = Math.floor(Date.now() / 1000);
   return new SignJWT({ wid: input.wid, scope: input.scope })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(input.sub)
     .setAudience(INTERNAL_TOKEN_AUDIENCE)
-    .setIssuedAt()
-    .setExpirationTime(`${INTERNAL_TOKEN_TTL_SECONDS}s`)
+    .setIssuedAt(issuedAt)
+    .setExpirationTime(issuedAt + INTERNAL_TOKEN_TTL_SECONDS)
     .sign(new TextEncoder().encode(secret));
 }

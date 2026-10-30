@@ -1,5 +1,5 @@
-import { jwtVerify } from "jose";
-import { describe, expect, it } from "vitest";
+import { decodeJwt, jwtVerify, SignJWT } from "jose";
+import { describe, expect, it, vi } from "vitest";
 
 import { mintInternalToken } from "@/lib/internal-token";
 
@@ -26,5 +26,23 @@ describe("mintInternalToken", () => {
     await expect(
       jwtVerify(token, new TextEncoder().encode("y".repeat(40)), { audience: "scribe-intel" }),
     ).rejects.toThrow();
+  });
+
+  it("keeps a 60-second lifetime when the clock advances while the claims are set", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-30T00:00:00Z"));
+    const original = SignJWT.prototype.setIssuedAt;
+    vi.spyOn(SignJWT.prototype, "setIssuedAt").mockImplementation(function (this: SignJWT, value?: Parameters<SignJWT["setIssuedAt"]>[0]) {
+      const token = original.call(this, value);
+      vi.advanceTimersByTime(1000);
+      return token;
+    });
+    try {
+      const claims = decodeJwt(await mintInternalToken({ sub: "u", wid: "w", scope: "health" }, secret));
+      expect(claims.exp! - claims.iat!).toBe(60);
+    } finally {
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    }
   });
 });
