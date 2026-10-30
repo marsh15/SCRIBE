@@ -34,7 +34,7 @@ export async function POST(req: Request) {
               blob: blobInfo,
             })
           : await completeSourceUpload({ payload, blob: blobInfo });
-        if (env.INGEST_ENGINE === "python" && completion.queued) {
+        if (env.INGEST_ENGINE === "python" && (completion.queued || completion.shouldKick)) {
           after(async () => void (await fireTick()));
         }
       },

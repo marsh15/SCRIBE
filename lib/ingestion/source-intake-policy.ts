@@ -210,14 +210,15 @@ export async function completeReservedSourceUpload(
   const source = await adapters.loadSource(input.sourceId, input.userId);
   if (!source) {
     await adapters.deleteBlob(input.blob.url);
-    return { queued: false, replayed: false, orphanDeleted: true };
+    return { queued: false, replayed: false, orphanDeleted: true, shouldKick: false };
   }
 
   validateCompletedSourceBlob(source, input.blob);
 
   if (source.status !== "uploading") {
     if (source.storageUrl === input.blob.url) {
-      return { queued: false, replayed: true, orphanDeleted: false };
+      await adapters.recordStorageUsage(source);
+      return { queued: false, replayed: true, orphanDeleted: false, shouldKick: source.status === "queued" };
     }
     throw new SourceIntakeError(
       `Source is in '${source.status}' state, expected 'uploading'`,
@@ -228,9 +229,17 @@ export async function completeReservedSourceUpload(
 
   const queued = await adapters.transitionToQueued(source, input.blob);
   if (!queued) {
-    return { queued: false, replayed: true, orphanDeleted: false };
+    const current = await adapters.loadSource(input.sourceId, input.userId);
+    if (!current) {
+      await adapters.deleteBlob(input.blob.url);
+      return { queued: false, replayed: false, orphanDeleted: true, shouldKick: false };
+    }
+    if (current && current.status !== "uploading" && current.storageUrl === input.blob.url) {
+      await adapters.recordStorageUsage(current);
+    }
+    return { queued: false, replayed: true, orphanDeleted: false, shouldKick: current?.status === "queued" && current.storageUrl === input.blob.url };
   }
 
   await adapters.recordStorageUsage(source);
-  return { queued: true, replayed: false, orphanDeleted: false };
+  return { queued: true, replayed: false, orphanDeleted: false, shouldKick: true };
 }

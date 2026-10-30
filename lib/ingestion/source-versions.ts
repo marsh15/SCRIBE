@@ -1,7 +1,7 @@
 import { generateClientTokenFromReadWriteToken } from "@vercel/blob/client";
 import { createHash } from "node:crypto";
 import { sql } from "@/lib/db-config";
-import { getUsageSummary, recordUsageEvent } from "@/lib/billing/usage";
+import { getUsageSummary, recordUsageEventStrict } from "@/lib/billing/usage";
 import { getUserMaxUploadBytes } from "@/lib/uploads/limits";
 import { deleteBlob, downloadBlobToBuffer } from "@/lib/storage/blob";
 import { requireEnv } from "@/lib/env";
@@ -143,7 +143,7 @@ export async function completeSourceVersionUpload(input: {
     {
       loadVersion: async (versionId): Promise<ReservedVersion | null> => {
         const rows = (await sql`
-          SELECT v."id", v."source_id", v."version_number", v."size_bytes", v."mime_type", v."upload_state"
+          SELECT v."id", v."source_id", v."version_number", v."size_bytes", v."mime_type", v."upload_state", v."storage_key", v."duplicate_of"
           FROM "source_versions" v
           INNER JOIN "files" f ON f."id" = v."source_id"
           WHERE v."id" = ${versionId}::uuid AND v."workspace_id" = ${workspaceId}::uuid
@@ -155,6 +155,8 @@ export async function completeSourceVersionUpload(input: {
           size_bytes: string | number | null;
           mime_type: string | null;
           upload_state: string;
+          storage_key: string | null;
+          duplicate_of: string | null;
         }>;
         const row = rows[0];
         if (!row) return null;
@@ -165,6 +167,8 @@ export async function completeSourceVersionUpload(input: {
           sizeBytes: row.size_bytes === null ? null : Number(row.size_bytes),
           mimeType: row.mime_type,
           uploadState: row.upload_state,
+          storageKey: row.storage_key,
+          duplicateOf: row.duplicate_of,
         };
       },
       hashBlob: sha256OfBlob,
@@ -186,7 +190,7 @@ export async function completeSourceVersionUpload(input: {
       },
       deleteBlob,
       recordStorageUsage: async (version) => {
-        await recordUsageEvent({
+        await recordUsageEventStrict({
           userId: input.payload.userId,
           metric: "storage_gb_day",
           quantity: Math.ceil(((version.sizeBytes ?? 0) / (1024 * 1024 * 1024)) * 1000),

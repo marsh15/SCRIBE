@@ -135,8 +135,24 @@ describe("POST /api/sources/upload-complete (version callbacks)", () => {
     expect(mocks.fireTick).toHaveBeenCalledTimes(1);
   });
 
-  it("does not tick for a duplicate or replayed callback", async () => {
+  it("does not tick for a duplicate callback", async () => {
     mocks.completeSourceVersionUpload.mockResolvedValue({ queued: false, duplicate: true });
+    await callback({ sourceId: 7, userId: "user_1", versionId: "vid" });
+    expect(mocks.afterCallbacks).toHaveLength(0);
+  });
+
+  it("restarts ingestion for verified same-blob replays of either upload kind", async () => {
+    for (const payload of [{ sourceId: 7, userId: "user_1", versionId: "vid" }, { sourceId: 7, userId: "user_1" }]) {
+      mocks.completeSourceVersionUpload.mockResolvedValue({ queued: false, replayed: true, shouldKick: true });
+      mocks.completeSourceUpload.mockResolvedValue({ queued: false, replayed: true, shouldKick: true });
+      await callback(payload);
+      for (const cb of mocks.afterCallbacks.splice(0)) await cb();
+    }
+    expect(mocks.fireTick).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not tick for a stale or deleted replay", async () => {
+    mocks.completeSourceVersionUpload.mockResolvedValue({ queued: false, replayed: true, shouldKick: false });
     await callback({ sourceId: 7, userId: "user_1", versionId: "vid" });
     expect(mocks.afterCallbacks).toHaveLength(0);
   });

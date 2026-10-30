@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   completeReservedSourceUpload,
   isRetryableSourceError,
@@ -105,7 +105,7 @@ describe("Source intake production policy", () => {
       storageUrl: null as string | null,
     };
     let transitionCount = 0;
-    let usageCount = 0;
+    const charges = new Set<number>();
     const adapters = {
       loadSource: async () => source,
       deleteBlob: async () => undefined,
@@ -116,7 +116,7 @@ describe("Source intake production policy", () => {
         return true;
       },
       recordStorageUsage: async () => {
-        usageCount += 1;
+        charges.add(source.id);
       },
     };
     const input = {
@@ -133,7 +133,39 @@ describe("Source intake production policy", () => {
     expect(await completeReservedSourceUpload(input, adapters)).toMatchObject({ queued: true });
     expect(await completeReservedSourceUpload(input, adapters)).toMatchObject({ replayed: true });
     expect(transitionCount).toBe(1);
-    expect(usageCount).toBe(1);
+    expect(charges.size).toBe(1);
+  });
+
+  it("recovers a failed accounting write on a same-blob replay", async () => {
+    const source = { id: 5, userId: "user_1", name: "a.pdf", size: 10, type: "application/pdf", status: "uploading", storageUrl: null as string | null };
+    const blob = { url: "https://blob.example/a", pathname: sourceUploadPath(source.userId, source.id, source.name), size: 10, contentType: source.type };
+    const charges = new Set<number>();
+    let fail = true;
+    const adapters = {
+      loadSource: async () => source,
+      deleteBlob: vi.fn(),
+      transitionToQueued: async () => { source.status = "queued"; source.storageUrl = blob.url; return true; },
+      recordStorageUsage: async () => { if (fail) { fail = false; throw new Error("usage unavailable"); } charges.add(source.id); },
+    };
+    const input = { sourceId: source.id, userId: source.userId, blob };
+    await expect(completeReservedSourceUpload(input, adapters)).rejects.toThrow("usage unavailable");
+    await completeReservedSourceUpload(input, adapters);
+    await completeReservedSourceUpload(input, adapters);
+    expect(charges.size).toBe(1);
+    await expect(completeReservedSourceUpload({ ...input, blob: { ...blob, url: "https://blob.example/other" } }, adapters)).rejects.toThrow();
+    expect(charges.size).toBe(1);
+  });
+
+  it("rechecks the stored blob after a concurrent completion", async () => {
+    const source = { id: 5, userId: "user_1", name: "a.pdf", size: 10, type: "application/pdf", status: "uploading", storageUrl: null as string | null };
+    const blob = { url: "https://blob.example/a", pathname: sourceUploadPath(source.userId, source.id, source.name), size: 10, contentType: source.type };
+    for (const storedUrl of [blob.url, "https://blob.example/other", null]) {
+      const recordStorageUsage = vi.fn();
+      const loadSource = vi.fn().mockResolvedValueOnce(source).mockResolvedValueOnce(storedUrl ? { ...source, status: "queued", storageUrl: storedUrl } : null);
+      const result = await completeReservedSourceUpload({ sourceId: source.id, userId: source.userId, blob }, { loadSource, deleteBlob: vi.fn(), transitionToQueued: async () => false, recordStorageUsage });
+      expect(result.shouldKick).toBe(storedUrl === blob.url);
+      expect(recordStorageUsage).toHaveBeenCalledTimes(storedUrl === blob.url ? 1 : 0);
+    }
   });
 
   it("deletes an uploaded orphan when its reservation no longer exists", async () => {

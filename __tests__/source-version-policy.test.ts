@@ -21,6 +21,8 @@ const version: ReservedVersion = {
   sizeBytes: 100,
   mimeType: "text/markdown",
   uploadState: "uploading",
+  storageKey: null,
+  duplicateOf: null,
 };
 const blob = {
   url: "https://blob.example/v2.md",
@@ -88,6 +90,53 @@ describe("completeReservedVersionUpload", () => {
     expect(result).toMatchObject({ queued: false, replayed: true });
     expect(a.recordStorageUsage).not.toHaveBeenCalled();
     expect(a.deleteBlob).not.toHaveBeenCalled();
+  });
+
+  it("recovers accounting after a queued completion and keeps repeated charges idempotent", async () => {
+    let stored: ReservedVersion = { ...version };
+    const charges = new Set<string>();
+    let fail = true;
+    const a = adapters({
+      loadVersion: vi.fn(async () => stored),
+      complete: vi.fn(async () => { stored = { ...version, uploadState: "stored", storageKey: blob.url }; return { outcome: "queued" as const, versionNumber: 2, duplicateOf: null }; }),
+      recordStorageUsage: vi.fn(async (v: ReservedVersion) => { if (fail) { fail = false; throw new Error("usage unavailable"); } charges.add(v.id); }),
+    });
+    await expect(completeReservedVersionUpload(input, a)).rejects.toThrow("usage unavailable");
+    await completeReservedVersionUpload(input, a);
+    await completeReservedVersionUpload(input, a);
+    expect(charges.size).toBe(1);
+  });
+
+  it("does not charge a stored duplicate, stale blob, or failed reservation", async () => {
+    for (const saved of [
+      { ...version, uploadState: "stored", storageKey: blob.url, duplicateOf: "dup" },
+      { ...version, uploadState: "stored", storageKey: "other", duplicateOf: null },
+      { ...version, uploadState: "failed", storageKey: blob.url, duplicateOf: null },
+    ]) {
+      const a = adapters({ loadVersion: vi.fn(async () => saved) });
+      const result = await completeReservedVersionUpload(input, a);
+      expect(result.shouldKick).toBe(false);
+      expect(a.recordStorageUsage).not.toHaveBeenCalled();
+      expect(a.deleteBlob).not.toHaveBeenCalled();
+    }
+  });
+
+  it("only charges a concurrent replay for the persisted matching, non-duplicate blob", async () => {
+    for (const persisted of [
+      { ...version, uploadState: "stored", storageKey: blob.url, duplicateOf: null, charge: true },
+      { ...version, uploadState: "stored", storageKey: "other", duplicateOf: null, charge: false },
+      { ...version, uploadState: "stored", storageKey: blob.url, duplicateOf: "dup", charge: false },
+      { ...version, uploadState: "failed", storageKey: blob.url, duplicateOf: null, charge: false },
+    ]) {
+      const a = adapters({ outcome: "replayed", loadVersion: vi.fn().mockResolvedValueOnce(version).mockResolvedValueOnce(persisted) });
+      const result = await completeReservedVersionUpload(input, a);
+      expect(result.shouldKick).toBe(persisted.charge);
+      expect(a.recordStorageUsage).toHaveBeenCalledTimes(persisted.charge ? 1 : 0);
+      expect(a.deleteBlob).not.toHaveBeenCalled();
+    }
+    const deleted = adapters({ outcome: "replayed", loadVersion: vi.fn().mockResolvedValueOnce(version).mockResolvedValueOnce(null) });
+    await completeReservedVersionUpload(input, deleted);
+    expect(deleted.recordStorageUsage).not.toHaveBeenCalled();
   });
 
   it("marks identical bytes as a duplicate, builds nothing and drops the redundant original", async () => {

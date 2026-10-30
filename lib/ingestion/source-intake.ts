@@ -2,7 +2,7 @@ import { generateClientTokenFromReadWriteToken } from "@vercel/blob/client";
 import { and, eq, isNull } from "drizzle-orm";
 import { db, sql } from "@/lib/db-config";
 import { documents, files, ingestionJobs, type SourceStatus } from "@/lib/db-schema";
-import { getUsageSummary, recordUsageEvent } from "@/lib/billing/usage";
+import { getUsageSummary, recordUsageEvent, recordUsageEventStrict } from "@/lib/billing/usage";
 import { getUserMaxUploadBytes } from "@/lib/uploads/limits";
 import { extractTextFromBuffer } from "@/lib/ingestion/extract";
 import { chunkContent } from "@/lib/chunking";
@@ -171,6 +171,7 @@ export async function completeSourceUpload(input: {
               AND "user_id" = ${source.userId}
               AND "workspace_id" = ${workspaceId}
               AND "status" = 'uploading'
+              AND "deleted_at" IS NULL
             RETURNING "id"
           )
           INSERT INTO "ingestion_jobs" ("file_id", "status", "attempts", "created_at", "updated_at")
@@ -181,7 +182,7 @@ export async function completeSourceUpload(input: {
         return transitioned.length > 0;
       },
       recordStorageUsage: async (source) => {
-        await recordUsageEvent({
+        await recordUsageEventStrict({
           userId: source.userId,
           metric: "storage_gb_day",
           quantity: Math.ceil((source.size / (1024 * 1024 * 1024)) * 1000),

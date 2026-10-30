@@ -12,7 +12,7 @@ export type UsageMetric =
   | "embedding_input_tokens"
   | "storage_gb_day";
 
-export async function recordUsageEvent(input: {
+export type UsageEventInput = {
   userId: string;
   metric: UsageMetric;
   quantity: number;
@@ -22,11 +22,11 @@ export async function recordUsageEvent(input: {
   isEstimated?: boolean;
   occurredAt?: Date;
   idempotencyKey?: string;
-}) {
-  if (!flags.billingEnabled) return;
+};
 
-  try {
-    await withDatabaseRetry("recordUsageEvent", () =>
+export async function recordUsageEventStrict(input: UsageEventInput) {
+  if (!flags.billingEnabled) return;
+  await withDatabaseRetry("recordUsageEvent", () =>
       db
         .insert(usageEvents)
         .values({
@@ -42,6 +42,11 @@ export async function recordUsageEvent(input: {
         })
         .onConflictDoNothing({ target: usageEvents.idempotencyKey })
     );
+}
+
+export async function recordUsageEvent(input: UsageEventInput) {
+  try {
+    await recordUsageEventStrict(input);
   } catch (error) {
     console.error("Failed to record usage event:", error);
   }

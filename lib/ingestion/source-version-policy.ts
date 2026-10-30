@@ -11,6 +11,8 @@ export interface ReservedVersion {
   sizeBytes: number | null;
   mimeType: string | null;
   uploadState: string;
+  storageKey: string | null;
+  duplicateOf: string | null;
 }
 
 export type CompleteOutcome = "queued" | "duplicate" | "replayed" | "source_deleted" | "not_found";
@@ -33,6 +35,7 @@ export interface VersionCompletion {
   replayed: boolean;
   duplicate: boolean;
   orphanDeleted: boolean;
+  shouldKick: boolean;
   versionNumber: number | null;
 }
 
@@ -41,6 +44,7 @@ const NONE: VersionCompletion = {
   replayed: false,
   duplicate: false,
   orphanDeleted: false,
+  shouldKick: false,
   versionNumber: null,
 };
 
@@ -89,7 +93,9 @@ export async function completeReservedVersionUpload(
   }
   validateCompletedVersionBlob(input.userId, version, input.blob);
   if (version.uploadState !== "uploading") {
-    return { ...NONE, replayed: true, versionNumber: version.versionNumber };
+    const sameStoredBlob = version.uploadState === "stored" && version.duplicateOf === null && version.storageKey === input.blob.url;
+    if (sameStoredBlob) await adapters.recordStorageUsage(version);
+    return { ...NONE, replayed: true, shouldKick: sameStoredBlob, versionNumber: version.versionNumber };
   }
 
   const sha256 = await adapters.hashBlob(input.blob.url);
@@ -103,13 +109,18 @@ export async function completeReservedVersionUpload(
   switch (result.outcome) {
     case "queued":
       await adapters.recordStorageUsage(version);
-      return { ...NONE, queued: true, versionNumber: result.versionNumber };
+      return { ...NONE, queued: true, shouldKick: true, versionNumber: result.versionNumber };
     case "duplicate":
       // identical bytes already live under another version: keep the row, drop the redundant original
       await discard(adapters, input.blob.url);
       return { ...NONE, duplicate: true, versionNumber: result.versionNumber };
-    case "replayed":
-      return { ...NONE, replayed: true, versionNumber: result.versionNumber };
+    case "replayed": {
+      const current = await adapters.loadVersion(input.versionId);
+      const sameStoredBlob = !!current && current.sourceId === input.sourceId && current.uploadState === "stored" &&
+        current.duplicateOf === null && current.storageKey === input.blob.url;
+      if (sameStoredBlob) await adapters.recordStorageUsage(current);
+      return { ...NONE, replayed: true, shouldKick: sameStoredBlob, versionNumber: result.versionNumber };
+    }
     default:
       await discard(adapters, input.blob.url);
       return { ...NONE, orphanDeleted: true };
