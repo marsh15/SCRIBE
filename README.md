@@ -41,6 +41,8 @@ Answers from a language model are only useful on private documents if the reader
 
 The full list of gaps is under [Known limitations](#known-limitations).
 
+The remaining work is ordered in the [completion plan](docs/scribe2/completion-plan.md), with local implementation separated from the evidence still required for production promotion.
+
 ## Architecture
 
 ![Scribe 2.0 architecture: browser, Next.js on Vercel, Python FastAPI service, Neon Postgres with pgvector, Vercel Blob, Gemini, Voyage rerank, Clerk, and the offline eval tooling](docs/assets/architecture.svg)
@@ -98,7 +100,7 @@ More detail, including the data model: [`docs/scribe2/ARCHITECTURE.md`](docs/scr
 | Citation viewer | `/files/[id]` source detail with Original, Structure, Chunks, Versions and History tabs; PDF highlight, text quote and CSV row highlight |
 | Retrieval lab | `/compare` runs 2 to 5 profiles on one query and shows rank movement |
 | Eval dashboard | `/eval` lists runs with failure categories; visible only to users who own or belong to an `eval` workspace |
-| Inspector | Right-hand pane showing per-stage timings and retrieved chunks for the last answer |
+| Inspector | Expandable sources and claim verification on each answer, including restored messages; citations reopen the exact passage and source version with access rechecked. The right-hand pane retains timings and chunks for the latest retrieval. |
 | Billing | Razorpay checkout, webhook, plans and usage metering, all behind `FEATURE_BILLING_ENABLED` (off) |
 
 ## Tech stack
@@ -192,7 +194,9 @@ TypeScript tests also read `TEST_DATABASE_URL` in two baseline-related suites, a
 
 For a **test or throwaway** database, `scripts/apply-migrations.sh <url>` exports the schema from `lib/db-schema.ts` with `drizzle-kit export` and replays `0010+`. `scripts/test-migrations-nosuperuser.sh` proves the migrations apply twice as a non-superuser that owns the database, as on a managed Postgres.
 
-For an **existing** database, use `npx drizzle-kit migrate` and rehearse it on a copy first (a Neon branch). Never run `drizzle-kit push` against a database that has the RLS objects: Drizzle does not model them and could drop them.
+For an **existing** database, follow the [migration rehearsal](docs/scribe2/neon-rehearsal.md) on a copy first (a Neon branch). The rehearsal script validates the local journal before connecting and rejects conflicting journal hashes, timestamps and unexpected future entries during registration. Never run `drizzle-kit push` against a database that has the RLS objects: Drizzle does not model them and could drop them.
+
+Personal workspace resolution uses the restricted-role bootstrap function from migration `0013`; apply it before running this app. Other TypeScript queries still need transaction-local workspace context before switching the entire runtime to `scribe_app`.
 
 ## Commands
 
@@ -249,6 +253,8 @@ uv run --project intelligence scribe-eval gate --status
 ```
 
 Metrics are Recall@k, Hit@k, MRR, nDCG@10 and P@5 with paired bootstrap confidence intervals. Reports and formats: [`docs/scribe2/benchmarks/`](docs/scribe2/benchmarks/).
+
+Gate baseline creation requires reviewed cases. Comparisons pin the profile configuration, model IDs and abstention settings, and reject missing or nonfinite metrics. CI retains its status, results and failure logs as a `retrieval-gate` artifact. A real reviewed baseline and provider cache are still required to arm it; the seeded regression tests prove the gate machinery, not retrieval quality.
 
 ## Deployment
 

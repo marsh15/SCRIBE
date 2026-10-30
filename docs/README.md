@@ -21,6 +21,7 @@ Start with the [project README](../README.md). The files below are grouped by wh
 
 | File | Contents |
 |---|---|
+| [`scribe2/completion-plan.md`](scribe2/completion-plan.md) | Remaining milestones, completed local changes and the evidence still needed to finish Scribe 2.0 |
 | [`scribe2/HANDOVER.md`](scribe2/HANDOVER.md) | Running status log: what was done per task, what needs a human, gotchas, the production incident and the migration rehearsal |
 | [`scribe2/T02-verification.md`](scribe2/T02-verification.md) | Vercel preview deploy checklist (not yet run) |
 | [`scribe2/demo-script.md`](scribe2/demo-script.md) | 15-scene demo plan and what must be verified live first |
