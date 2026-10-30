@@ -3,14 +3,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * These tests drive the real Drizzle query builder through a fake pg-proxy driver,
  * so we assert on the SQL and bound parameters that would be sent to Postgres.
- * Workspaces are held in an in-memory store that mimics the partial unique index
- * (one personal workspace per owner) and ON CONFLICT DO NOTHING.
+ * The fake function models one personal workspace per user; the real database
+ * function and its concurrency guarantees are covered by integration tests.
  */
 const h = vi.hoisted(() => ({
   queries: [] as Array<{ sql: string; params: unknown[] }>,
   workspaces: new Map<string, string>(), // owner -> workspace id
   members: new Set<string>(),
-  insertAttempts: 0,
+  failResolution: false,
+  databaseError: false,
   currentUser: "user_a",
 }));
 
@@ -40,27 +41,13 @@ vi.mock("@/lib/db-config", async () => {
         (p): p is string => typeof p === "string" && p.startsWith("user_")
       );
 
-      if (/^insert into "workspaces"/i.test(query)) {
-        h.insertAttempts += 1;
-        // Postgres serialises the unique-index check: first insert wins.
-        if (owner && !h.workspaces.has(owner)) {
-          h.workspaces.set(owner, `ws-${owner}`);
-        }
-        return { rows: [] };
-      }
-      if (/^insert into "workspace_members"/i.test(query)) {
-        const wsId = params[0] as string;
-        h.members.add(`${wsId}:${owner}`);
-        return { rows: [] };
-      }
-      if (/^select/i.test(query) && /from "workspaces"/i.test(query)) {
+      if (/app_ensure_personal_workspace/i.test(query)) {
+        if (h.databaseError) throw new Error("database unavailable");
+        if (h.failResolution) return { rows: [] };
+        if (owner && !h.workspaces.has(owner)) h.workspaces.set(owner, `ws-${owner}`);
         const id = owner ? h.workspaces.get(owner) : undefined;
-        if (!id) return { rows: [] };
-        // Fast path joins workspace_members; only return when membership exists.
-        if (/"workspace_members"/.test(query) && !h.members.has(`${id}:${owner}`)) {
-          return { rows: [] };
-        }
-        return { rows: [[id]] };
+        if (id) h.members.add(`${id}:${owner}`);
+        return { rows: id ? [[id]] : [] };
       }
       return { rows: [] };
     },
@@ -77,7 +64,7 @@ import { getLatestRagTraceView, recordRagTrace } from "@/lib/rag-observability";
 
 function nonWorkspaceQueries() {
   return h.queries.filter(
-    (q) => !/"workspaces"|"workspace_members"/.test(q.sql)
+    (q) => !/app_ensure_personal_workspace/.test(q.sql)
   );
 }
 
@@ -85,7 +72,8 @@ beforeEach(() => {
   h.queries.length = 0;
   h.workspaces.clear();
   h.members.clear();
-  h.insertAttempts = 0;
+  h.failResolution = false;
+  h.databaseError = false;
   h.currentUser = "user_a";
 });
 
@@ -97,19 +85,34 @@ describe("ensurePersonalWorkspace", () => {
 
     expect(new Set(ids).size).toBe(1);
     expect(h.workspaces.size).toBe(1);
-    expect(h.insertAttempts).toBeGreaterThan(1); // racers really did all try to insert
-    // Insert uses ON CONFLICT DO NOTHING so losing racers are no-ops.
-    const insert = h.queries.find((q) => /^insert into "workspaces"/i.test(q.sql));
-    expect(insert?.sql).toMatch(/on conflict do nothing/i);
+    expect(h.members.size).toBe(1);
+    expect(h.queries.every((q) => /app_ensure_personal_workspace\(\$1\)/i.test(q.sql))).toBe(true);
+    expect(h.queries.every((q) => q.params[0] === "user_a")).toBe(true);
   });
 
-  it("is idempotent and takes the read-only fast path once the workspace exists", async () => {
+  it("is idempotent when the workspace exists", async () => {
     const first = await ensurePersonalWorkspace("user_a");
     h.queries.length = 0;
     const second = await ensurePersonalWorkspace("user_a");
 
     expect(second).toBe(first);
-    expect(h.queries.every((q) => /^select/i.test(q.sql))).toBe(true);
+    expect(h.workspaces.size).toBe(1);
+  });
+
+  it("fails closed for missing user or missing database result", async () => {
+    await expect(ensurePersonalWorkspace("")).rejects.toThrow("requires a userId");
+    expect(h.queries).toHaveLength(0);
+    h.failResolution = true;
+    await expect(resolveWorkspace()).rejects.toThrow("Failed to resolve personal workspace");
+  });
+
+  it("binds the user ID and propagates database errors", async () => {
+    const user = "user_a' ; select 1; --";
+    await ensurePersonalWorkspace(user);
+    expect(h.queries[0].params).toEqual([user]);
+    expect(h.queries[0].sql).not.toContain(user);
+    h.databaseError = true;
+    await expect(ensurePersonalWorkspace(user)).rejects.toThrow("Failed query");
   });
 
   it("gives different users different workspaces", async () => {
