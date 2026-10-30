@@ -15,6 +15,8 @@ const h = vi.hoisted(() => ({
   currentUser: "user_a",
 }));
 
+vi.mock("@/lib/scoped", () => ({ scoped: () => ({ batch: async (queries: PromiseLike<unknown>[]) => Promise.all(queries) }) }));
+
 vi.mock("@/lib/auth", () => ({
   getUserId: async () => h.currentUser,
   isNotAuthenticatedError: () => false,
@@ -160,9 +162,9 @@ describe("workspace scoping of queries", () => {
     const insert = qs.find((q) => /^insert into "chats"/i.test(q.sql))!;
     expect(insert.sql).toContain('"workspace_id"');
     expect(insert.params).toContain("ws-user_a");
-    const select = qs.find((q) => /^select/i.test(q.sql))!;
-    expect(select.sql).toContain('"workspace_id" = $');
-    expect(select.params).toContain("ws-user_a");
+    const deletion = qs.find((q) => /^delete from "chats"/i.test(q.sql))!;
+    expect(deletion.sql).toContain('"workspace_id" = $');
+    expect(deletion.params).toContain("ws-user_a");
   });
 
   it("user B never gets user A's workspace id in bound params", async () => {

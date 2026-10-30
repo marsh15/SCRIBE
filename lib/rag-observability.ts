@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db-config";
+import { scoped } from "@/lib/scoped";
 import {
   ragEvaluations,
   ragTraceChunks,
@@ -125,7 +126,7 @@ export async function recordRagTrace(input: {
   const traceId = nanoid();
   const toolResult = buildRagToolResult(input.search, traceId);
 
-  await db.insert(ragTraces).values({
+  const traceInsert = db.insert(ragTraces).values({
     id: traceId,
     chatId: input.chatId,
     userId: input.userId,
@@ -142,7 +143,9 @@ export async function recordRagTrace(input: {
 
   const chunkRows = buildRagTraceChunkRows(traceId, toolResult.chunks);
   if (chunkRows.length > 0) {
-    await db.insert(ragTraceChunks).values(chunkRows);
+    await scoped(input.workspaceId).batch([traceInsert, db.insert(ragTraceChunks).values(chunkRows)]);
+  } else {
+    await scoped(input.workspaceId).batch([traceInsert]);
   }
 
   return toolResult;
@@ -150,12 +153,13 @@ export async function recordRagTrace(input: {
 
 export async function completeRagTrace(input: {
   traceId: string;
+  workspaceId: string;
   assistantMessageId: string;
   generationMs: number;
   totalMs: number;
   status?: string;
 }) {
-  await db
+  await scoped(input.workspaceId).batch([db
     .update(ragTraces)
     .set({
       assistantMessageId: input.assistantMessageId,
@@ -163,11 +167,11 @@ export async function completeRagTrace(input: {
       totalMs: input.totalMs,
       status: input.status ?? "completed",
     })
-    .where(eq(ragTraces.id, input.traceId));
+    .where(and(eq(ragTraces.id, input.traceId), eq(ragTraces.workspaceId, input.workspaceId)))]);
 }
 
-export async function recordRagEvaluation(input: InsertRagEvaluation) {
-  await db
+export async function recordRagEvaluation(input: InsertRagEvaluation, workspaceId: string) {
+  await scoped(workspaceId).batch([db
     .insert(ragEvaluations)
     .values(input)
     .onConflictDoUpdate({
@@ -183,7 +187,7 @@ export async function recordRagEvaluation(input: InsertRagEvaluation) {
         rationale: input.rationale,
         error: input.error,
       },
-    });
+    })]);
 }
 
 export async function getLatestRagTraceView(input: {
@@ -194,7 +198,7 @@ export async function getLatestRagTraceView(input: {
 }): Promise<RagTraceView | null> {
   if (!input.chatId && !input.assistantMessageId) return null;
 
-  const trace = await db.query.ragTraces.findFirst({
+  const [trace] = await scoped(input.workspaceId).batch([db.query.ragTraces.findFirst({
     where: input.assistantMessageId
       ? and(
           eq(ragTraces.userId, input.userId),
@@ -207,11 +211,11 @@ export async function getLatestRagTraceView(input: {
           eq(ragTraces.chatId, input.chatId!)
         ),
     orderBy: (table, { desc }) => [desc(table.createdAt)],
-  });
+  })]);
 
   if (!trace) return null;
 
-  const [chunks, evaluation] = await Promise.all([
+  const [chunks, evaluation] = await scoped(input.workspaceId).batch([
     db.query.ragTraceChunks.findMany({
       where: eq(ragTraceChunks.traceId, trace.id),
       orderBy: (table, { asc }) => [asc(table.rank)],

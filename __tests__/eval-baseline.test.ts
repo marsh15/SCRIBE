@@ -32,6 +32,7 @@ import { EMBEDDING_MODEL_ID } from "../lib/embedding-config";
 // Records the query lib/search.ts really builds: db-config's `db` is replaced by a connection-less drizzle
 // neon-http instance whose final `.limit()` result captures toSQL() instead of executing.
 const captured = vi.hoisted(() => ({ query: null as null | { sql: string; params: unknown[] } }));
+vi.mock("@/lib/scoped", () => ({ scoped: () => ({ batch: (queries: PromiseLike<unknown>[]) => Promise.all(queries) }) }));
 vi.mock("@/lib/db-config", async () => {
   const { drizzle } = await import("drizzle-orm/neon-http");
   const schema = await import("@/lib/db-schema");

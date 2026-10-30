@@ -12,6 +12,7 @@ import { withSupermemory } from "@supermemory/tools/ai-sdk";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { searchDocuments } from "@/lib/search";
+import { scoped } from "@/lib/scoped";
 import { resolveWorkspace } from "@/lib/workspace";
 import { isNotAuthenticatedError } from "@/lib/auth";
 import { getUsageSummary, recordUsageEvent } from "@/lib/billing/usage";
@@ -161,14 +162,14 @@ export async function POST(req: Request) {
       const { db: ownershipDb } = await import("@/lib/db-config");
       const { chats: chatsTable } = await import("@/lib/db-schema");
       const { and, eq } = await import("drizzle-orm");
-      const ownedChat = await ownershipDb.query.chats.findFirst({
+      const [ownedChat] = await scoped(workspaceId).batch([ownershipDb.query.chats.findFirst({
         where: and(
           eq(chatsTable.id, chatId),
           eq(chatsTable.userId, userId),
           eq(chatsTable.workspaceId, workspaceId)
         ),
         columns: { id: true },
-      });
+      })]);
       if (!ownedChat) {
         return new Response("Chat not found.", { status: 404 });
       }
@@ -189,13 +190,13 @@ export async function POST(req: Request) {
       const { db: dbInstance } = await import("@/lib/db-config");
       const { chatMessages: chatMessagesTable } = await import("@/lib/db-schema");
       try {
-        await dbInstance.insert(chatMessagesTable).values({
+        await scoped(workspaceId).batch([dbInstance.insert(chatMessagesTable).values({
           id: userMessageId,
           chatId,
           role: lastUserMessage.role,
           content: extractTextFromMessage(lastUserMessage),
           parts: (lastUserMessage.parts ?? []) as never,
-        });
+        })]);
       } catch (e) {
         // Non-fatal: message may already exist (idempotent retry)
         console.error("[Chat] Failed to pre-save user message:", e);
@@ -346,13 +347,13 @@ export async function POST(req: Request) {
           }
 
           const assistantMessageId = nanoid();
-          await db.insert(chatMessages).values({
+          await scoped(workspaceId).batch([db.insert(chatMessages).values({
             id: assistantMessageId,
             chatId,
             role: "assistant",
             content: finalText,
             parts: assistantParts as never,
-          });
+          })]);
           turn.messageId = assistantMessageId;
 
           const totalRequestMs = Math.max(0, Date.now() - requestStart);
@@ -367,6 +368,7 @@ export async function POST(req: Request) {
               );
               await completeRagTrace({
                 traceId: ragResult.traceId,
+                workspaceId,
                 assistantMessageId,
                 generationMs,
                 totalMs: totalRequestMs,
@@ -378,7 +380,7 @@ export async function POST(req: Request) {
                 answer: finalText,
                 chunks: ragResult.chunks,
               });
-              await recordRagEvaluation(evaluation);
+              await recordRagEvaluation(evaluation, workspaceId);
             } catch (traceError) {
               console.error("[RAG] Failed to complete trace or evaluation:", traceError);
             }

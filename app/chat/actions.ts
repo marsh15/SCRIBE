@@ -1,6 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db-config";
+import { scoped } from "@/lib/scoped";
 import { chats, chatMessages } from "@/lib/db-schema";
 import { desc, eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -11,7 +12,8 @@ import { readStoredVerifications, type VerificationData } from "@/lib/evidence/v
 export async function getChats() {
     try {
         const { userId, workspaceId } = await resolveWorkspace();
-        return await db.select().from(chats).where(and(eq(chats.userId, userId), eq(chats.workspaceId, workspaceId))).orderBy(desc(chats.createdAt));
+        const [rows] = await scoped(workspaceId).batch([db.select().from(chats).where(and(eq(chats.userId, userId), eq(chats.workspaceId, workspaceId))).orderBy(desc(chats.createdAt))]);
+        return rows;
     } catch (err) {
         console.error("Failed to fetch chats:", err);
         return [];
@@ -21,7 +23,7 @@ export async function getChats() {
 export async function getChatMessages(chatId: string) {
     try {
         const { userId, workspaceId } = await resolveWorkspace();
-        return await db
+        const [rows] = await scoped(workspaceId).batch([db
             .select({
                 id: chatMessages.id,
                 chatId: chatMessages.chatId,
@@ -33,7 +35,8 @@ export async function getChatMessages(chatId: string) {
             .from(chatMessages)
             .innerJoin(chats, eq(chatMessages.chatId, chats.id))
             .where(and(eq(chatMessages.chatId, chatId), eq(chats.userId, userId), eq(chats.workspaceId, workspaceId)))
-            .orderBy(chatMessages.createdAt);
+            .orderBy(chatMessages.createdAt)]);
+        return rows;
     } catch (err) {
         console.error("Failed to fetch chat messages:", err);
         return [];
@@ -44,7 +47,7 @@ export async function createChat(title: string) {
     try {
         const { userId, workspaceId } = await resolveWorkspace();
         const newChatId = nanoid();
-        const newChat = await db
+        const [newChat] = await scoped(workspaceId).batch([db
             .insert(chats)
             .values({
                 id: newChatId,
@@ -52,7 +55,7 @@ export async function createChat(title: string) {
                 userId,
                 workspaceId,
             })
-            .returning();
+            .returning()]);
 
         revalidatePath("/");
         revalidatePath("/chat");
@@ -66,17 +69,10 @@ export async function createChat(title: string) {
 export async function deleteChat(id: string) {
     try {
         const { userId, workspaceId } = await resolveWorkspace();
-        const chat = await db.query.chats.findFirst({
-            where: and(eq(chats.id, id), eq(chats.userId, userId), eq(chats.workspaceId, workspaceId)),
-            columns: { id: true },
-        });
-
-        if (!chat) {
-            return false;
-        }
-
-        await db.delete(chatMessages).where(eq(chatMessages.chatId, id));
-        await db.delete(chats).where(and(eq(chats.id, id), eq(chats.userId, userId), eq(chats.workspaceId, workspaceId)));
+        const [deleted] = await scoped(workspaceId).batch([
+            db.delete(chats).where(and(eq(chats.id, id), eq(chats.userId, userId), eq(chats.workspaceId, workspaceId))).returning({ id: chats.id }),
+        ]);
+        if (!deleted.length) return false;
         revalidatePath("/");
         revalidatePath("/chat");
         return true;

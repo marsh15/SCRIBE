@@ -1,4 +1,5 @@
 import { sql as rawSql } from "drizzle-orm";
+import type { BatchItem, BatchResponse } from "drizzle-orm/batch";
 import { db } from "@/lib/db-config";
 
 /**
@@ -13,12 +14,11 @@ import { db } from "@/lib/db-config";
  */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-type BatchItem = Parameters<typeof db.batch>[0][number];
 
 export interface ScopedDb {
   readonly workspaceId: string;
   /** Run the queries atomically with `app.workspace_id` set. Returns the results of `queries` only. */
-  batch<T extends BatchItem[]>(queries: [...T]): Promise<unknown[]>;
+  batch<T extends [BatchItem<"pg">, ...BatchItem<"pg">[]]>(queries: T): Promise<BatchResponse<T>>;
 }
 
 function contextStatement(workspaceId: string) {
@@ -30,9 +30,9 @@ export function scoped(workspaceId: string): ScopedDb {
   const ctx = workspaceId;
   return {
     workspaceId: ctx,
-    async batch(queries) {
-      const results = await db.batch([contextStatement(ctx), ...queries] as unknown as [BatchItem, ...BatchItem[]]);
-      return (results as unknown[]).slice(1);
+    async batch<T extends [BatchItem<"pg">, ...BatchItem<"pg">[]]>(queries: T): Promise<BatchResponse<T>> {
+      const results = await db.batch([contextStatement(ctx), ...queries] as unknown as [BatchItem<"pg">, ...BatchItem<"pg">[]]);
+      return (results as unknown[]).slice(1) as BatchResponse<T>;
     },
   };
 }
