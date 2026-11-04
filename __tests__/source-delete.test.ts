@@ -7,10 +7,27 @@ const mocks = vi.hoisted(() => ({
   env: { INGEST_ENGINE: "python", INTERNAL_SERVICE_SECRET: "secret" } as Record<string, string | undefined>,
 }));
 
-vi.mock("@/lib/db-config", () => ({
-  sql: (strings: TemplateStringsArray, ...values: unknown[]) => mocks.sql(strings.join("?"), values),
-  db: { delete: mocks.dbDelete, query: { files: { findFirst: vi.fn() } } },
-}));
+vi.mock("@/lib/db-config", async () => {
+  const { PgDialect } = await import("drizzle-orm/pg-core");
+  const dialect = new PgDialect();
+  return {
+    sql: (strings: TemplateStringsArray, ...values: unknown[]) => mocks.sql(strings.join("?"), values),
+    db: {
+      delete: mocks.dbDelete,
+      query: { files: { findFirst: vi.fn() } },
+      execute: (q: unknown) => ({ q }),
+      // The migrated hardDeleteSource runs each statement in one scoped() batch: replay it through the same sql mock.
+      batch: async (items: Array<{ q: unknown }>) => {
+        const out: unknown[] = [];
+        for (const { q } of items) {
+          const { sql: text, params } = dialect.sqlToQuery(q as never);
+          out.push({ rows: text.includes("set_config") ? [] : await mocks.sql(text.replace(/\$\d+/g, "?"), params) });
+        }
+        return out;
+      },
+    },
+  };
+});
 vi.mock("@/lib/env", () => ({ env: mocks.env, requireEnv: () => "blob-token" }));
 vi.mock("@/lib/storage/blob", () => ({ deleteBlob: mocks.deleteBlob, downloadBlobToBuffer: vi.fn() }));
 vi.mock("@/lib/workspace", () => ({
@@ -118,7 +135,7 @@ describe("deleteSource, legacy engine or no internal secret (P0-3 hard delete)",
 describe("purgeSoftDeletedSources (cleanup of rows left by the interim soft delete)", () => {
   it("hard-purges soft-deleted rows only, in a bounded batch, and is idempotent", async () => {
     mocks.sql
-      .mockResolvedValueOnce([{ id: 7, workspace_id: "w1" }, { id: 8, workspace_id: "w2" }])
+      .mockResolvedValueOnce([{ id: 7, workspace_id: "11111111-1111-4111-8111-111111111111" }, { id: 8, workspace_id: "22222222-2222-4222-8222-222222222222" }])
       .mockResolvedValueOnce([{ storage_url: null, storage_key: "k7", version_keys: null }])
       .mockResolvedValueOnce([{ id: 7 }])
       .mockResolvedValueOnce([]); // second row vanished concurrently: "missing", not an error

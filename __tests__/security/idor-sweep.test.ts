@@ -74,7 +74,17 @@ vi.mock("@/lib/workspace", () => ({
 }));
 vi.mock("@/lib/intelligence-client", () => ({ callIntelligence: S.callIntelligence, baseUrl: () => "https://scribe.example" }));
 
-vi.mock("@/lib/scoped", () => ({ scoped: () => ({ batch: async (queries: PromiseLike<unknown>[]) => Promise.all(queries) }) }));
+vi.mock("@/lib/scoped", async () => {
+  const { PgDialect } = await import("drizzle-orm/pg-core");
+  const dialect = new PgDialect();
+  // Raw statements (db.execute, marked below) run through the same sql mock as before: same text and values.
+  const runRaw = async (q: unknown) => {
+    const { sql: text, params } = dialect.sqlToQuery(q as never);
+    return { rows: text.includes("set_config") ? [] : await S.sql(text.replace(/\$\d+/g, "?"), params) };
+  };
+  const isRaw = (q: unknown): q is { __raw: unknown } => typeof q === "object" && q !== null && "__raw" in q;
+  return { scoped: () => ({ batch: async (queries: unknown[]) => Promise.all(queries.map((q) => (isRaw(q) ? runRaw(q.__raw) : q))) }) };
+});
 
 vi.mock("@/lib/db-config", () => ({
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => S.sql(strings.join("?"), values),
@@ -90,7 +100,7 @@ vi.mock("@/lib/db-config", () => ({
       ragTraceChunks: { findMany: async () => [] },
       ragEvaluations: { findFirst: S.findFirst },
     },
-    execute: vi.fn(async () => []),
+    execute: (q: unknown) => ({ __raw: q }),
   },
 }));
 vi.mock("@/lib/storage/blob", () => ({ downloadBlobToBuffer: S.downloadBlob, getBlobMetadata: vi.fn(), deleteBlob: vi.fn() }));

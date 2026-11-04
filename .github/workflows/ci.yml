@@ -64,7 +64,7 @@ jobs:
         run: scripts/apply-migrations.sh
       - run: uv sync
         working-directory: intelligence
-      - name: Chat isolation through a real non-owner database login
+      - name: Chat and Source RLS through a real non-owner database login
         run: uv run --project intelligence python scripts/test-chat-rls.py "$DATABASE_URL_TEST"
       - name: Check Vercel Python bundle size
         run: scripts/check-py-bundle.sh

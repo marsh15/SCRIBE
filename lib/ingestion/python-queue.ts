@@ -1,8 +1,10 @@
-import { sql } from "@/lib/db-config";
+import { db, sql } from "@/lib/db-config";
+import { scoped } from "@/lib/scoped";
+import * as orm from "drizzle-orm";
 
 /** Make a queued/retrying Source's job due now ("Process now"). Returns true when a job was found. */
 export async function markSourceDue(workspaceId: string, sourceId: number): Promise<boolean> {
-  const rows = await sql`
+  const [result] = await scoped(workspaceId).batch([db.execute(orm.sql`
     UPDATE "ingestion_jobs" AS job
     SET "next_retry_at" = NULL, "updated_at" = now()
     FROM "files" AS source
@@ -12,8 +14,8 @@ export async function markSourceDue(workspaceId: string, sourceId: number): Prom
       AND source."deleted_at" IS NULL
       AND job."status" IN ('queued', 'retrying')
     RETURNING job."id"
-  `;
-  return rows.length > 0;
+  `)]);
+  return result.rows.length > 0;
 }
 
 /**
