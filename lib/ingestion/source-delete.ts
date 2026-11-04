@@ -1,6 +1,9 @@
-import { sql } from "@/lib/db-config";
+import { db, sql } from "@/lib/db-config";
 import { env } from "@/lib/env";
+import { scoped } from "@/lib/scoped";
 import { deleteBlob } from "@/lib/storage/blob";
+// Namespace import: the drizzle tag is written as orm.sql (same convention as source-detail.ts), so tests that read this file keep finding each template.
+import * as orm from "drizzle-orm";
 
 /**
  * Deleting a Source has two modes (P0-3):
@@ -65,7 +68,7 @@ export async function hardDeleteSource(input: {
 }): Promise<HardDeleteOutcome> {
   const { workspaceId, userId, sourceId } = input;
   const onlySoftDeleted = input.onlySoftDeleted === true;
-  const found = (await sql`
+  const [foundResult] = await scoped(workspaceId).batch([db.execute(orm.sql`
     SELECT f."storage_url", f."storage_key",
            ARRAY(SELECT v."storage_key" FROM "source_versions" v
                   WHERE v."source_id" = f."id" AND v."workspace_id" = f."workspace_id") AS version_keys
@@ -73,7 +76,8 @@ export async function hardDeleteSource(input: {
      WHERE f."id" = ${sourceId}::int AND f."workspace_id" = ${workspaceId}::uuid
        AND (${userId}::text IS NULL OR f."user_id" = ${userId})
        AND (NOT ${onlySoftDeleted}::boolean OR f."deleted_at" IS NOT NULL)
-  `) as unknown as SourceRefs[];
+  `)]);
+  const found = foundResult.rows as unknown as SourceRefs[];
   const row = found[0];
   if (!row) return "missing";
 
@@ -87,19 +91,19 @@ export async function hardDeleteSource(input: {
         error: error instanceof Error ? error.name : "unknown",
       });
       // Back off like the Python purge (purge_* columns, migration 0016) so a stuck blob cannot starve the batch.
-      await sql`
+      await scoped(workspaceId).batch([db.execute(orm.sql`
         UPDATE "files"
            SET "purge_attempts" = "purge_attempts" + 1, "purge_error_code" = 'BLOB_DELETE_FAILED',
                "purge_last_error" = 'blob delete failed', "updated_at" = now(),
                "purge_next_retry_at" = now() + make_interval(mins => LEAST(1440, power(2, LEAST("purge_attempts" + 1, 11)))::int)
          WHERE "id" = ${sourceId}::int AND "workspace_id" = ${workspaceId}::uuid
-      `;
+      `)]);
       return "blob_failed";
     }
   }
 
   // ONE statement (data-modifying CTEs commit or roll back together); the files delete cascades to the rest.
-  const removed = (await sql`
+  const [removedResult] = await scoped(workspaceId).batch([db.execute(orm.sql`
     WITH src AS (
       SELECT "id" FROM "files"
        WHERE "id" = ${sourceId}::int AND "workspace_id" = ${workspaceId}::uuid
@@ -119,7 +123,8 @@ export async function hardDeleteSource(input: {
       RETURNING "id"
     )
     DELETE FROM "files" WHERE "id" IN (SELECT "id" FROM src) RETURNING "id"
-  `) as unknown as Array<{ id: number }>;
+  `)]);
+  const removed = removedResult.rows as unknown as Array<{ id: number }>;
   return removed.length > 0 ? "deleted" : "missing";
 }
 

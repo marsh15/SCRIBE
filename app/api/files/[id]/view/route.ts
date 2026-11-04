@@ -1,4 +1,5 @@
 import { db } from "@/lib/db-config";
+import { scoped } from "@/lib/scoped";
 import { files } from "@/lib/db-schema";
 import { eq, and, isNull } from "drizzle-orm";
 import { resolveWorkspace } from "@/lib/workspace";
@@ -36,7 +37,7 @@ export async function GET(
             });
         }
 
-        const file = await db.query.files.findFirst({
+        const [file] = await scoped(workspaceId).batch([db.query.files.findFirst({
             where: and(eq(files.id, fileId), eq(files.userId, userId), eq(files.workspaceId, workspaceId), isNull(files.deletedAt)),
             columns: {
                 fileData: true,
@@ -44,7 +45,7 @@ export async function GET(
                 type: true,
                 name: true,
             },
-        });
+        })]);
 
         if (!file) {
             return new Response("File not found", { status: 404 });

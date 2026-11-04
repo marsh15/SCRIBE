@@ -1,6 +1,8 @@
 import { generateClientTokenFromReadWriteToken } from "@vercel/blob/client";
 import { createHash } from "node:crypto";
-import { sql } from "@/lib/db-config";
+import { db, sql } from "@/lib/db-config";
+import { scoped } from "@/lib/scoped";
+import * as orm from "drizzle-orm";
 import { getUsageSummary, recordUsageEventStrict } from "@/lib/billing/usage";
 import { getUserMaxUploadBytes } from "@/lib/uploads/limits";
 import { deleteBlob, downloadBlobToBuffer } from "@/lib/storage/blob";
@@ -142,13 +144,14 @@ export async function completeSourceVersionUpload(input: {
     },
     {
       loadVersion: async (versionId): Promise<ReservedVersion | null> => {
-        const rows = (await sql`
+        const [result] = await scoped(workspaceId).batch([db.execute(orm.sql`
           SELECT v."id", v."source_id", v."version_number", v."size_bytes", v."mime_type", v."upload_state", v."storage_key", v."duplicate_of"
           FROM "source_versions" v
           INNER JOIN "files" f ON f."id" = v."source_id"
           WHERE v."id" = ${versionId}::uuid AND v."workspace_id" = ${workspaceId}::uuid
             AND f."user_id" = ${input.payload.userId} AND f."deleted_at" IS NULL
-        `) as Array<{
+        `)]);
+        const rows = result.rows as Array<{
           id: string;
           source_id: number;
           version_number: number;

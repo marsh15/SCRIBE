@@ -1,6 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db-config";
+import { scoped } from "@/lib/scoped";
 import { files, ingestionJobs, indexGenerations } from "@/lib/db-schema";
 import { and, eq, desc, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -16,13 +17,14 @@ import { listSourceVersions } from "@/lib/ingestion/source-versions";
 export async function getFiles() {
     try {
         const { userId, workspaceId } = await resolveWorkspace();
-        const allFiles = await db.query.files.findMany({
+        const scope = scoped(workspaceId);
+        const [allFiles] = await scope.batch([db.query.files.findMany({
             where: and(eq(files.userId, userId), eq(files.workspaceId, workspaceId), isNull(files.deletedAt)),
             orderBy: [desc(files.createdAt)],
-        });
+        })]);
         if (allFiles.length === 0) return allFiles;
         // T18: show stage / attempts / last error code next to each Source.
-        const jobs = await db
+        const [jobs] = await scope.batch([db
             .select({
                 fileId: ingestionJobs.fileId,
                 sourceVersionId: ingestionJobs.sourceVersionId,
@@ -37,7 +39,7 @@ export async function getFiles() {
             .from(ingestionJobs)
             .leftJoin(indexGenerations, eq(ingestionJobs.generationId, indexGenerations.id))
             .where(inArray(ingestionJobs.fileId, allFiles.map((f) => f.id)))
-            .orderBy(desc(ingestionJobs.updatedAt));
+            .orderBy(desc(ingestionJobs.updatedAt))]);
         const latest = new Map<number, (typeof jobs)[number]>();
         for (const job of jobs) if (!latest.has(job.fileId)) latest.set(job.fileId, job);
         return allFiles.map((file) => {

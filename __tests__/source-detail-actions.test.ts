@@ -1,10 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ sql: vi.fn(), resolveWorkspace: vi.fn() }));
-vi.mock("@/lib/db-config", () => ({
-  sql: (strings: TemplateStringsArray, ...values: unknown[]) => mocks.sql(strings.join("?"), values),
-  db: {},
-}));
+vi.mock("@/lib/db-config", async () => {
+  const { PgDialect } = await import("drizzle-orm/pg-core");
+  const dialect = new PgDialect();
+  return {
+    sql: (strings: TemplateStringsArray, ...values: unknown[]) => mocks.sql(strings.join("?"), values),
+    db: {
+      execute: (q: unknown) => ({ q }),
+      // The migrated sites run one raw statement per scoped() batch: replay it through the same mock (same text, values).
+      batch: async (items: Array<{ q: unknown }>) => {
+        const out: unknown[] = [];
+        for (const { q } of items) {
+          const { sql: text, params } = dialect.sqlToQuery(q as never);
+          out.push({ rows: text.includes("set_config") ? [] : await mocks.sql(text.replace(/\$\d+/g, "?"), params) });
+        }
+        return out;
+      },
+    },
+  };
+});
 vi.mock("@/lib/workspace", () => ({ resolveWorkspace: mocks.resolveWorkspace }));
 vi.mock("@/lib/db-compat", () => ({ ensureDocumentsChunkIndexSchema: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ isNotAuthenticatedError: (e: unknown) => e instanceof Error && e.message === "NOT_AUTH" }));
