@@ -76,7 +76,7 @@ from chunk_embeddings_1536 e
   join chunks c on c.id = e.chunk_id
   {SCOPE_JOINS}
   where e.workspace_id = %(w)s and {where}
-  order by {dist} + 0, c.id
+  order by {dist} + 0, f.name collate "C", c.content_hash, c.id
   limit %(k)s"""
     # ann: the eligibility filter is an uncorrelated `= ANY (ARRAY(subquery))` qual on the embeddings scan itself
     # (an InitPlan, so the planner cannot turn it into a join), so
@@ -94,7 +94,7 @@ from ann
   join chunks c on c.id = ann.chunk_id
   {SCOPE_JOINS}
   where {where}
-  order by ann.dist, c.id"""
+  order by ann.dist, f.name collate "C", c.content_hash, c.id"""
 
 
 async def dense_search(

@@ -96,7 +96,7 @@ describe("retrieveViaPython", () => {
     expect(url).toBe("http://py.test/api/py/retrieve");
     expect(init.method).toBe("POST");
     const body = JSON.parse(init.body as string);
-    expect(body).toEqual({ query: "leave?", profile: "hybrid-rrf-rerank", limit: 10, next_label: 1 });
+    expect(body).toEqual({ query: "leave?", profile: "hybrid-rrf-rerank-v2", limit: 10, next_label: 1 });
     expect(body.workspace_id).toBeUndefined();
     const auth = new Headers(init.headers).get("authorization")!;
     const claims = decodeJwt(auth.replace("Bearer ", ""));

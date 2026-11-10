@@ -26,7 +26,7 @@ Two modes, selected by the profile's ``lexical_mode`` and threaded through ``lex
     rank, and is a hit even if the English OR query misses it. The boost is larger than any
     ``ts_rank_cd`` value with normalization 1, so identifier chunks lead, ordered by their own rank.
   * A chunk is a hit if it matches the OR query or an identifier. A stopword-only query with no
-    identifier returns nothing. Ties break on chunk id.
+    identifier returns nothing. Ties break on (document name, content hash), then chunk id: identity that survives a re-ingest, unlike the random id.
   ``IDENT_BOOST`` and ``OR_RANK_NORMALIZATION`` are module constants: changing them changes retrieval
   behaviour, so a later tuning pass must create NEW profile names (profiles are immutable) that ship with
   the changed constants; they are not part of ``ProfileConfig``.
@@ -158,7 +158,7 @@ from chunks c
   cross join q
   where {scope_where([0] if source_filter else None)}
     and (c.fts_en @@ q.qor or (q.qid is not null and c.fts_simple @@ q.qid))
-  order by score desc, c.id
+  order by score desc, f.name collate "C", c.content_hash, c.id
   limit %(k)s"""
 
 
