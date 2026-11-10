@@ -142,6 +142,7 @@ import { POST as processNowPOST } from "@/app/api/sources/process-now/route";
 import { POST as reservePOST } from "@/app/api/sources/reserve/route";
 import { POST as uploadCompletePOST } from "@/app/api/sources/upload-complete/route";
 import { POST as versionsPOST } from "@/app/api/sources/[id]/versions/route";
+import { DELETE as sourceDELETE } from "@/app/api/sources/[id]/route";
 import { POST as razorpayPOST } from "@/app/api/webhooks/razorpay/route";
 import { POST as billingCheckoutPOST } from "@/app/api/billing/checkout/route";
 import { POST as billingPortalPOST } from "@/app/api/billing/portal/route";
@@ -296,6 +297,17 @@ const ROUTE_HANDLERS: Record<string, () => Promise<void>> = {
       expect(rendered().every((r) => !r.params.includes("ws-B") && !r.params.includes("other"))).toBe(true);
     }
     expect((await ragLatestGET(url("/api/rag/latest"))).status).toBe(400);
+  },
+
+  "app/api/sources/[id]/route.ts": async () => {
+    const del = (id: string) => sourceDELETE(url(`/api/sources/${id}`, { method: "DELETE" }), ctx(id));
+    signedOut();
+    expect((await del(String(FOREIGN_SOURCE))).status).toBe(401);
+    expect(S.deleteSource).not.toHaveBeenCalled();
+    signedIn();
+    S.deleteSource.mockResolvedValue(false);
+    expect((await del(String(FOREIGN_SOURCE))).status).toBe(404);
+    expect(S.deleteSource).toHaveBeenCalledWith(USER_A, FOREIGN_SOURCE); // the user comes from the session, never the request
   },
 
   "app/api/sources/[id]/versions/route.ts": async () => {

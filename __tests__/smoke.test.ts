@@ -189,4 +189,128 @@ describe("local smoke steps", () => {
     expect(steps[3].ok).toBe(true);
     expect(steps[4]).toMatchObject({ ok: false, detail: "failed" });
   });
+
+  describe("lifecycle steps (update and delete)", () => {
+    const evidenceV2 = "5d3c1f10-7b7a-4c6e-9a0f-3f6a9d2e7b22";
+    const sse = (text: string, id: string, source = sourceId) => [
+      { type: "text-delta", id: "t", delta: text },
+      { type: "tool-output-available", toolCallId: "c", output: { type: "rag_search_result", evidence: { items: [
+        { id, label: "E1", source_id: source, source_name: "scribe-smoke.txt" },
+      ] } } },
+    ].map((event) => `data: ${JSON.stringify(event)}\n\n`).join("") + "data: [DONE]\n";
+
+    function app(opts: { engine409?: boolean; deletedStillCited?: boolean; deletedQuoteLeak?: boolean } = {}) {
+      const state = { version2: false, deleted: false, requests: [] as string[] };
+      const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = input instanceof Request ? input.url : input.toString();
+        state.requests.push(`${init?.method ?? "GET"} ${new URL(url).pathname}`);
+        if (url.endsWith("/api/health")) return response({ ok: true });
+        if (url.endsWith("/api/py/health")) return response({}, 401);
+        if (url.endsWith("/api/sources/reserve")) return response({ source: { id: sourceId }, uploadPath: "sources/u/15/scribe-smoke.txt", clientToken: "t1" });
+        if (url.endsWith("/api/sources/process-now")) return response({ ok: true });
+        if (url.endsWith(`/api/sources/${sourceId}/versions`)) {
+          if (opts.engine409) return response({ code: "engine_unsupported" }, 409);
+          state.version2 = true;
+          return response({ ok: true, version: { id: "v2", versionNumber: 2 }, uploadPath: "sources/u/15/v2/scribe-smoke.txt", clientToken: "t2" });
+        }
+        if (url.endsWith(`/api/sources/${sourceId}`) && init?.method === "DELETE") {
+          state.deleted = true;
+          return response({ ok: true });
+        }
+        if (url.endsWith("/api/chat")) {
+          if (state.deleted) return response(opts.deletedStillCited ? sse("17 days [E1]", evidenceId) : "data: [DONE]\n");
+          return state.version2 ? response(sse("It allows 21 days [E1].", evidenceV2)) : response(sse("It allows 17 days [E1].", evidenceId));
+        }
+        if (url.endsWith(`/api/evidence/${evidenceId}`)) {
+          if (state.deleted) return opts.deletedQuoteLeak
+            ? response({ itemId: evidenceId, sourceDeleted: true, quote: "leaked" })
+            : response({ itemId: evidenceId, sourceDeleted: true, notice: "deleted" });
+          return response({ itemId: evidenceId, sourceDeleted: false, sourceId, quote: "The policy allows 17 days of annual leave." });
+        }
+        if (url.endsWith(`/api/evidence/${evidenceV2}`)) {
+          return state.deleted ? response({ error: { code: "NOT_FOUND" } }, 404)
+            : response({ itemId: evidenceV2, sourceDeleted: false, sourceId, versionNumber: 2, quote: "The policy allows 21 days of annual leave." });
+        }
+        return response({}, 404);
+      });
+      return { fetcher, state };
+    }
+    const run = (fetcher: Fetcher, extra: Record<string, unknown> = {}) => runSmoke({
+      baseUrl: "http://localhost:3000", sessionToken: "session", fetcher, uploader: async () => undefined, wait: async () => undefined,
+      lifecycle: true, ...extra,
+    });
+    type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+
+    it("adds update and delete steps in order, and every one passes against a well-behaved deployment", async () => {
+      const { fetcher, state } = app();
+      const steps = await run(fetcher);
+      expect(steps.map((s) => s.name).slice(5)).toEqual([
+        "update: upload version 2", "update: answer reflects version 2", "update: citation opens at version 2",
+        "delete: remove the Source", "delete: citation withheld", "delete: answers no longer cite it",
+      ]);
+      expect(steps.map((s) => s.ok)).toEqual(Array(11).fill(true));
+      expect(state.requests).toContain(`DELETE /api/sources/${sourceId}`);
+      expect(JSON.stringify(steps)).not.toContain("session");
+    });
+
+    it("is off unless requested, so the local run stays five steps", async () => {
+      const { fetcher } = app();
+      const steps = await runSmoke({ baseUrl: "http://localhost:3000", sessionToken: "session", fetcher, uploader: async () => undefined, wait: async () => undefined });
+      expect(steps).toHaveLength(5);
+    });
+
+    it("marks update as SKIPPED (not passed) when the deployment is not on the Python engine, and still tests delete", async () => {
+      const { fetcher } = app({ engine409: true });
+      const steps = await run(fetcher);
+      const update = steps.filter((s) => s.name.startsWith("update"));
+      expect(update).toHaveLength(3);
+      expect(update.every((s) => s.skipped === true && s.ok === false && s.detail.startsWith("SKIPPED"))).toBe(true);
+      expect(steps.filter((s) => s.name.startsWith("delete")).every((s) => s.ok)).toBe(true);
+    });
+
+    it("treats a 409 that is not the engine flag as a failure, not a skip", async () => {
+      const { fetcher } = app();
+      const conflicting = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = input instanceof Request ? input.url : input.toString();
+        if (url.endsWith(`/api/sources/${sourceId}/versions`)) return response({ code: "no_active_version" }, 409);
+        return fetcher(input, init);
+      });
+      const steps = await run(conflicting as never);
+      const upload = steps.find((s) => s.name === "update: upload version 2")!;
+      expect(upload).toMatchObject({ ok: false, detail: "failed" });
+      expect(upload.skipped).toBeUndefined();
+    });
+
+    it("does not call a delete proven when the citation never opened before it", async () => {
+      const { fetcher } = app();
+      const neverOpens = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = input instanceof Request ? input.url : input.toString();
+        if (url.includes("/api/evidence/") && init?.method === undefined && url.includes(evidenceV2)) return response({ error: { code: "NOT_FOUND" } }, 404);
+        return fetcher(input, init);
+      });
+      const steps = await run(neverOpens as never);
+      expect(steps.find((s) => s.name === "delete: remove the Source")).toMatchObject({ ok: false });
+    });
+
+    it("fails when a deleted Source still exposes its quote or is still cited in answers", async () => {
+      const leak = await run(app({ deletedQuoteLeak: true }).fetcher);
+      // after update the reopened citation is the v2 id, which 404s; the leak is checked on the v1 id when no v2 exists
+      const leakNoUpdate = await run(app({ engine409: true, deletedQuoteLeak: true }).fetcher);
+      expect(leakNoUpdate.find((s) => s.name === "delete: citation withheld")?.ok).toBe(false);
+      expect(leak.find((s) => s.name === "delete: remove the Source")?.ok).toBe(true);
+      const cited = await run(app({ deletedStillCited: true }).fetcher);
+      expect(cited.find((s) => s.name === "delete: answers no longer cite it")?.ok).toBe(false);
+    });
+
+    it("rejects an update whose answer still states the old value", async () => {
+      const { fetcher } = app();
+      const stale = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = input instanceof Request ? input.url : input.toString();
+        if (url.endsWith("/api/chat")) return response(sse("It allows 17 days and 21 days [E1].", evidenceId));
+        return fetcher(input, init);
+      });
+      const steps = await run(stale as never, { attempts: 2 });
+      expect(steps.find((s) => s.name === "update: answer reflects version 2")?.ok).toBe(false);
+    });
+  });
 });
