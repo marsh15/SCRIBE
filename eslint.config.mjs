@@ -31,6 +31,7 @@ const eslintConfig = defineConfig([
     ".claude/**",
     "out/**",
     "build/**",
+    "brag-output/**",
     "next-env.d.ts",
     "public/pdf.worker.min.mjs",
   ]),
