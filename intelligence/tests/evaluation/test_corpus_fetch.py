@@ -17,6 +17,13 @@ SCANNED = (FIXTURES / "facility-safety-notice-scanned.pdf").read_bytes()
 TEXT = (FIXTURES / "expense-policy.pdf").read_bytes()
 
 
+@pytest.fixture(autouse=True)
+def plenty_of_disk(monkeypatch):
+    """These tests are about fetching and measuring, not about the machine: the tool refuses to run with under 2 GiB free,
+    which made the suite fail on a nearly full laptop disk. The guard itself is tested below with an explicit value."""
+    monkeypatch.setattr(cf, "_free_bytes", lambda path: 100 * 1024**3)
+
+
 def make_pdf(*, text: str | None = None, invisible: bool = False, image: bool = False, table: bool = False) -> bytes:
     """One-page PDF: optional text (optionally render mode 3, i.e. a hidden OCR layer), image, ruled 2x2 table."""
     ops = []
@@ -376,3 +383,14 @@ def test_stats_file_has_one_line_per_page(tmp_path: Path) -> None:
     assert text.count('"chars"') == 10 and all(l.count("chars") == 1 for l in text.splitlines() if "chars" in l)
     totals = json.loads(text)["totals"]
     assert totals["pages"] == 10 and totals["scanned_pages"] == 5 and totals["table_heavy_pages"] == 5
+
+
+def test_the_two_gib_disk_guard_stops_the_run_and_the_rasterizer(tmp_path: Path, monkeypatch) -> None:
+    d = doc("old-scan", scan_with_ocr_layer="unknown")
+    manifest = write_manifest(tmp_path, [d])
+    server = Server({d["url"]: (200, OCR_LAYER_PDF)})
+    monkeypatch.setattr(cf, "_free_bytes", lambda path: cf.MIN_FREE_BYTES - 1)
+    messages: list[str] = []
+    rc = cf.run_fetch(manifest, tmp_path / "out", pin=True, rasterize=True, client=server.client(), echo=messages.append)
+    assert rc == 1 and any("2 GiB" in m for m in messages)
+    assert server.total == 0  # nothing was downloaded
