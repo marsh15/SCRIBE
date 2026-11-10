@@ -31,13 +31,13 @@ Answers from a language model are only useful on private documents if the reader
 
 | Area | State |
 |---|---|
-| Code | Scribe 2.0 is merged to `main` (PRs #10 and #11). |
+| Code | Scribe 2.0 is merged to `main` (PRs #10 and #11, then follow-ups through #26). Remaining work is tracked in [`FINISH_PLAN.md`](docs/scribe2/FINISH_PLAN.md); what only a person can do is in [`HUMAN_TODO.md`](docs/scribe2/HUMAN_TODO.md). |
 | Production | Not promoted. Merging PR #10 auto-deployed to Vercel on 2026-10-12 and broke production, because migrations `0008` and later had never run on Neon. Production was rolled back to the pre-merge build and Vercel production auto-assign was paused. The live site at [scribe-marsh.vercel.app](https://scribe-marsh.vercel.app) is that older build. Do not promote a `main` deployment before the migration rehearsal in [`HANDOVER.md`](docs/scribe2/HANDOVER.md) section 11. |
 | Engine flags | `INGEST_ENGINE` and `RETRIEVAL_ENGINE` both default to `legacy` (the original TypeScript pipeline). The Python pipeline described below is opt-in. |
 | Providers | Gemini has been used for the Scribe 1.0 baseline and a preliminary run of three retrieval profiles on a local database. Voyage rerank has never been called (no key). Neon has never been used with the 2.0 schema. |
 | Evaluation | The 200-case golden set is not human-reviewed (80 cases are machine-drafted). Results in [`m1-prelim.md`](docs/scribe2/benchmarks/m1-prelim.md) are labelled preliminary and are not quoted here. The final milestone report is a placeholder. |
 | CI | The `node`, `python` and `retrieval-gate` jobs pass on GitHub. The gate is not armed (no baseline is committed), so it checks nothing yet. |
-| Row-level security | Policies exist and are enabled, but not forced. The table-owner connection used today bypasses them, so isolation currently rests on application-level workspace filters plus tests. |
+| Row-level security | Policies exist and are enabled, but not forced. The runtime connection is still the table owner, which bypasses them, so isolation in production rests on application-level workspace filters. The TypeScript chat, file, ingestion and version code and the Python endpoints are tested against a real non-owner database login locally (`scripts/test-chat-rls.py`, `scripts/test-python-rls.py`); that has not been run on Neon. |
 
 The full list of gaps is under [Known limitations](#known-limitations).
 
@@ -91,11 +91,11 @@ More detail, including the data model: [`docs/scribe2/ARCHITECTURE.md`](docs/scr
 
 | Area | What exists |
 |---|---|
-| Sources | Private upload (PDF, DOCX, CSV, Markdown, TXT), per-user plan and size limits, status states (uploading, queued, processing, retrying, ready, failed), retry, soft delete with background purge |
+| Sources | Private upload (PDF, DOCX, CSV, Markdown, TXT), per-user plan and size limits, status states (uploading, queued, processing, retrying, ready, failed), retry, delete (soft delete with background purge when the Python engine is configured; with the default legacy engine blobs and rows are deleted at once) |
 | Versions | Upload a new version of a source while the old one stays searchable; identical bytes are recorded as `duplicate_of`; Python engine only |
 | Parsing | pdfplumber, python-docx, CSV with delimiter and BOM handling. Limits: 300 pages, 50 OCR pages, 5,000 CSV rows per source. Scanned pages are rendered with pypdfium2 and transcribed by Gemini 2.5 Flash |
 | Chunking | Child chunks up to 384 tokens inside section parents, with source spans back to the original blocks. Token counts use tiktoken `o200k_base` as a recorded proxy |
-| Retrieval | Dense (exact scan or HNSW), Postgres FTS (`fts_en`, `fts_simple`), RRF, rerank adapter, dedup, parent expansion, packing; five seeded profiles from dense-only to hybrid with rerank |
+| Retrieval | Dense (exact scan or HNSW), Postgres FTS (`fts_en`, `fts_simple`), RRF, rerank adapter, dedup, parent expansion, packing; seeded profiles from dense-only to hybrid with rerank, including `*-v2` profiles whose lexical channel is OR-ranked (chat and the regression gate use `hybrid-rrf-rerank-v2`; its ranking quality is not measured) |
 | Evidence | Labels `[E#]` unique per turn, stored quotes and spans, an answerability gate (threshold uncalibrated, see limitations), post-stream claim verification with six statuses |
 | Citation viewer | `/files/[id]` source detail with Original, Structure, Chunks, Versions and History tabs; PDF highlight, text quote and CSV row highlight |
 | Retrieval lab | `/compare` runs 2 to 5 profiles on one query and shows rank movement |
@@ -181,7 +181,7 @@ Values are never committed. `.env.example` lists the web app's names; Python-onl
 | `INGEST_TIME_BUDGET_S` (270), `INGEST_STEP_BUDGET_S` (240), `PURGE_GRACE_SECONDS` (86400), `PURGE_BUDGET_S` (45) | Time budgets; defaults in parentheses |
 | `DATABASE_URL_TEST` | Throwaway database for Python tests; its name must contain `test` |
 
-TypeScript tests also read `TEST_DATABASE_URL` in two baseline-related suites, and `scripts/eval-baseline.ts` reads `BASELINE_NODE_DIR`.
+TypeScript tests read `TEST_DATABASE_URL` in a few baseline and migration suites and `BASELINE_NODE_DIR` in `__tests__/eval-baseline.test.ts`. `NEON_ADMIN_DATABASE_URL` (optional) is the owner connection used only by the allow-listed admin modules; it falls back to `NEON_DATABASE_URL`, so setting it is how the runtime and owner credentials are split later (see `docs/scribe2/HUMAN_TODO.md` step 12).
 
 ## Database and migrations
 
@@ -216,13 +216,17 @@ DATABASE_URL_TEST=postgresql://scribe:scribe@localhost:54329/<name containing te
 # Evaluation and performance (from the repo root)
 uv run --project intelligence scribe-eval --help     # validate, assign-splits, score, answer, judge-sheet,
                                                      # judge-agreement, compare, publish-run, gate,
-                                                     # ingest-corpus, run-profile
+                                                     # ingest-corpus, run-profile, review, report,
+                                                     # fetch-corpus, parse-compare
 uv run --project intelligence scribe-perf --help     # run, render, drop
 
 # Other scripts
 scripts/apply-migrations.sh <url>
 scripts/test-migrations-nosuperuser.sh [admin-url]
 uv run --project intelligence python scripts/test-chat-rls.py <local-test-admin-url>
+uv run --project intelligence python scripts/test-python-rls.py <local-test-admin-url>
+scripts/arm-gate.sh --check        # preflight for arming the retrieval gate; spends nothing
+npx tsx scripts/smoke.ts --base-url <url> --lifecycle   # deployment smoke: ingest, ask, cite, update, delete
 npx tsx scripts/backfill-legacy-generations.ts --dry-run   # tsx is not a dependency; npx downloads it
 (cd intelligence && uv run python -m scribe_ingest.upgrade backfill|progress)
 uv run --project intelligence python scripts/demo-seed/demo_seed.py --help
@@ -232,9 +236,9 @@ python3 scripts/gen_architecture_diagram.py
 ## Testing
 
 - **TypeScript:** `npm test` runs vitest (Node environment, jsdom for `.tsx` files that opt in). `__tests__/security/` holds the route-table guard, IDOR sweep, proxy access rules, log-capture canaries and adversarial documents. Database-specific suites skip without their explicit test configuration.
-- **Non-owner chat isolation:** `uv run --project intelligence python scripts/test-chat-rls.py <local-test-admin-url>` creates a temporary database and restricted login, applies migrations, runs exported chat/search/trace functions, checks two tenants and same-connection context cleanup after commit/rollback, then removes the temporary database and login. It refuses remote URLs and requires a local superuser test connection. The SQL bridge preserves parameter binding; it is a local PostgreSQL adapter, not a test of Neon's HTTP transport.
+- **Non-owner isolation:** `uv run --project intelligence python scripts/test-chat-rls.py <local-test-admin-url>` creates a temporary database and restricted login, applies migrations, runs the exported chat, search, trace, file, ingestion, version and queue functions, checks two tenants, guessed ids from another workspace, revoked privileges and same-connection context cleanup after commit/rollback, then removes the temporary database and login. `scripts/test-python-rls.py` does the same for the Python service: eight endpoint suites run with the service connected as a real `scribe_app` member. `__tests__/security/db-boundary.test.ts` fails if any module other than the documented allow-list uses the owner connection. It refuses remote URLs and requires a local superuser test connection. The SQL bridge preserves parameter binding; it is a local PostgreSQL adapter, not a test of Neon's HTTP transport.
 - **Python:** `uv run --project intelligence pytest` covers ingestion, retrieval, integration, security, evaluation, perf and schema. Database tests require `DATABASE_URL_TEST`; use a disposable local database whose name contains `test`. CI runs them against pgvector.
-- **CI** (`.github/workflows/ci.yml`): `node` (`npm run check`), `python` (migration checks, real-login chat isolation, bundle check and `pytest`) and `retrieval-gate` (cached replay, no keys). The gate remains explicitly unarmed until a real reviewed baseline/cache is committed ([`release-rules.md`](docs/scribe2/release-rules.md)).
+- **CI** (`.github/workflows/ci.yml`): `node` (`npm run check`), `python` (migration checks, real-login isolation for the TypeScript and Python code, bundle check and `pytest`) and `retrieval-gate` (cached replay, no keys). The gate remains explicitly unarmed until a real reviewed baseline/cache is committed ([`release-rules.md`](docs/scribe2/release-rules.md)).
 
 Passing tests show that code behaves as specified against fakes or recorded responses. They are not retrieval-quality measurements.
 
@@ -261,6 +265,8 @@ Gate baseline creation requires reviewed cases. Comparisons pin the profile conf
 ## Deployment
 
 The intended target is one Vercel Hobby project with Neon and Vercel Blob. [`vercel.json`](vercel.json) defines the `/api/py/*` rewrite, the Python function (`maxDuration` 300, bundles `intelligence/src/**`) and two daily crons (`/api/internal/ingest/run` at 00:00 and `/api/internal/ingest/sweep` at 01:00). Python dependencies on Vercel come from the root `requirements.txt`, which must be kept in sync by hand with `intelligence/pyproject.toml`.
+
+> **Warning: Preview and Production share `NEON_DATABASE_URL` today** (as reported by the owner; it cannot be read from this repository). A Vercel preview, including a pull-request preview, therefore runs on the production database. Give Preview its own database before testing 2.0 anywhere: [`runbook-promote-rollback.md`](docs/scribe2/runbook-promote-rollback.md) step 1.
 
 Hobby limits drive the design: functions run at most 300 seconds and cron runs once a day, so ingestion is leased, resumable steps that re-trigger themselves. Hobby is non-commercial, so `FEATURE_BILLING_ENABLED` stays off.
 
@@ -289,9 +295,9 @@ The full list (D1-D22, invariants INV-1 to INV-16) is in [`docs/scribe2/DESIGN.m
 - Nothing in 2.0 has run on Neon, on Vercel, or against live Voyage. Provider behaviour is covered by fakes and mock transports, apart from the local Gemini runs noted under [Status](#status).
 - The golden set is unreviewed, so no retrieval-quality figure is publishable. There is no measured claim about 2.0 versus 1.0.
 - The answerability threshold `tau` is the placeholder 0.0 and rejects nothing. Profile choice and `tau` are not tuned (task T17 is partial).
-- In the preliminary run, lexical-only retrieval returned almost nothing for natural-language questions because `websearch_to_tsquery` ANDs every term; hybrid results therefore equal dense results. Not yet fixed.
+- In the preliminary run, lexical-only retrieval returned almost nothing for natural-language questions because `websearch_to_tsquery` ANDs every term, so "hybrid" equalled dense search. Chat and the gate now use the OR-ranked profile `hybrid-rrf-rerank-v2`, and a test shows it has lexical candidates where the AND version does not. Whether it ranks better is **not measured** (needs the reviewed golden set and your keys).
 - The CI retrieval gate is not armed.
-- FORCE RLS is deferred. Chat paths now use `scoped()`, but file, ingestion, eval and admin paths still need role-boundary work. The table-owner runtime connection bypasses RLS; do not switch it until the remaining callers are ready.
+- FORCE RLS is deferred and the runtime still connects as the table owner, which bypasses RLS. Chat, file, ingestion, version and queue code use `scoped()` and pass real-login tests locally; the global admin queries use a separate owner connection. Switching the runtime to `scribe_app` on Neon, and the Python worker's behaviour there, is a deployment check (`docs/scribe2/HUMAN_TODO.md` step 12). A preview deployment currently shares the production database URL; see the warning in `docs/scribe2/runbook-promote-rollback.md`.
 - `/admin/analytics` (instance-wide counts) is restricted to users whose Clerk session token carries `metadata.role = "admin"`; everyone else gets a 404. Until that claim is configured in the Clerk dashboard (user public metadata `{"role": "admin"}` plus `{"metadata": "{{user.public_metadata}}"}` in the session token claims) nobody can open the page.
 - Source versions and claim verification require the Python engine; the legacy engine does neither.
 - The 100,000-chunk performance step was not measured. No rate limiting on `/api/py/*`; a single static internal secret ([`threat-model.md`](docs/scribe2/threat-model.md) section 6).

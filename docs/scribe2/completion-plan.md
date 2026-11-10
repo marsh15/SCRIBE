@@ -1,6 +1,6 @@
 # Scribe 2.0 completion plan
 
-Updated 2026-10-30. Scribe is an evidence-first workspace for private documents: find an answer, open its exact source passage and version, and see which claims the evidence supports. Keep the existing Next.js, Python, Postgres/pgvector, Clerk and Blob architecture.
+Updated 2026-11-10 (reconciled with the code; the per-item mapping to files, tests and commands is in [FINISH_PLAN.md](FINISH_PLAN.md), the list of things only a person can do in [HUMAN_TODO.md](HUMAN_TODO.md)). Scribe is an evidence-first workspace for private documents: find an answer, open its exact source passage and version, and see which claims the evidence supports. Keep the existing Next.js, Python, Postgres/pgvector, Clerk and Blob architecture.
 
 The rough plan largely describes mechanisms already implemented. Completion means proving their behavior and closing specific gaps, rather than adding another retrieval engine or provider. Repository tests and a successful build do not establish production readiness.
 
@@ -18,6 +18,12 @@ The rough plan largely describes mechanisms already implemented. Completion mean
 | Chat RLS context | Chat CRUD, message persistence, legacy search and trace operations execute with transaction-local workspace context. Chat deletion uses the existing FK cascade atomically. | A reproducible local test runner creates a real restricted login and isolated database, checks exported functions, foreign IDs, rollback and same-connection context cleanup, and removes its resources. The runner is included in CI. |
 | Internal-token lifetime | Issuance and expiry share one timestamp so crossing a clock second does not extend the configured 60-second lifetime. | A boundary-time regression test and an in-memory relative-expiry mutation check distinguish the fixed behavior from the previous behavior. |
 
+| Isolation of files, ingestion, versions, queue, purge and eval | TypeScript code runs through `scoped()`; the cross-workspace owner connection is import-restricted to an allow-list; the Python endpoints run as a real `scribe_app` login in local tests, which found and fixed an indexer read without workspace context | `scripts/test-chat-rls.py` (14 tests incl. guessed ids, revoked privileges, context reset), `scripts/test-python-rls.py` (154 tests), `__tests__/security/db-boundary.test.ts`. Not run on Neon. |
+| Lexical channel | Chat and the gate serve the OR-ranked `hybrid-rrf-rerank-v2`; candidate order no longer depends on random chunk UUIDs (found while preparing the gate) | `tests/retrieval/test_lexical_default_wiring.py`, `test_rrf.py`. Ranking quality NOT MEASURED. |
+| Lifecycle recovery gaps | Provider timeouts bounded and diagnosable; retry authorization | `tests/integration/test_lifecycle_recovery.py`, `__tests__/source-retry-authz.test.ts` |
+| Gate arming procedure | One preflighted script that never commits | `scripts/arm-gate.sh`, `tests/deployment/test_arm_gate_script.py`. Not run: needs keys and the validation review. |
+| Deployment smoke | Update and delete steps added | `scripts/smoke.ts --lifecycle`, `DELETE /api/sources/[id]`. Not run against any deployment. |
+
 ## Remaining milestones, in order
 
 ### 1. Rehearse and promote safely
@@ -28,7 +34,7 @@ Use [neon-rehearsal.md](neon-rehearsal.md). Record the actual deployed SHA, flag
 
 ### 2. Finish database-enforced isolation
 
-Workspace bootstrap and the chat lifecycle now work with a restricted role. The remaining file, ingestion and eval reads/writes need transaction-local context; global admin queries, runtime schema repair and queue/purge boundaries need explicit role treatment. Separate migration and runtime credentials only after these callers have been migrated. The local PostgreSQL bridge tests actual role enforcement and generated SQL, while live Neon HTTP behavior remains a deployment check.
+Code status 2026-11-10: bootstrap, chat, file, ingestion, version, queue and purge code use transaction-local context and pass the real-login suites locally; global admin queries, runtime schema repair and the legacy queue worker use an explicit owner connection (`NEON_ADMIN_DATABASE_URL`). What remains is operational: split the credentials on a rehearsal branch, run the lifecycle smoke with the Python worker as `scribe_app` on Neon HTTP, then `drizzle/deferred/force_rls.sql` (HUMAN_TODO step 12). The local PostgreSQL bridge tests actual role enforcement and generated SQL, while live Neon HTTP behavior remains a deployment check.
 
 **Completion evidence:** run every API and database cross-workspace test using real non-owner login credentials, verify pooled context resets, revoke access and retry guessed source/evidence IDs, then repeat on the isolated deployment. Existing application predicates remain necessary.
 

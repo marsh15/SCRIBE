@@ -1,13 +1,13 @@
 # Resume and summary bullets: measured or literal facts only
 
-Every bullet below is one of three things: (a) a count taken from a command run on 2026-10-12 on branch `scribe2/m0-foundation`, (b) a literal fact visible in the repository, or (c) a figure copied from a committed result file, with its limits. Anything about quality, accuracy, latency against real providers, cost, or "improvement over Scribe 1.0" is **pending measurement** and has no number here. Do not add one until the matching command in `docs/scribe2/benchmarks/final.md` has been run on a reviewed golden set.
+Every bullet below is one of three things: (a) a count taken from a command run on 2026-11-10 on the combined working tree described in `FINISH_PLAN.md`, (b) a literal fact visible in the repository, or (c) a figure copied from a committed result file, with its limits. Anything about quality, accuracy, latency against real providers, cost, or "improvement over Scribe 1.0" is **pending measurement** and has no number here. Do not add one until the matching command in `docs/scribe2/benchmarks/final.md` has been run on a reviewed golden set.
 
 ## Safe to use now
 
 Counts (re-run to confirm before quoting; the commands are in the README):
-- (Counts below were taken at T33 and are older than the code; re-run before quoting.) 1,740 Python tests pass with 0 skipped against a local pgvector Postgres (`uv run pytest -q`, 60 test files).
-- 403 TypeScript tests pass (vitest, 47 files; 3 skipped because they need a database); `tsc --noEmit` and `eslint` report no errors.
-- 39 commits on `scribe2/m0-foundation` since upstream `main` (`git rev-list --count 0edddb1..HEAD`; includes merge commits).
+- 2,282 Python tests pass, 1 skipped, 1 expected failure, twice in a row, against a local pgvector Postgres (`uv run pytest -q`, 2026-11-10; 88 test files).
+- 508 TypeScript tests pass (vitest, 60 files run; 17 tests skip in a plain `npm test` because they need a database; the database-backed suites pass when run: `scripts/test-chat-rls.py` (14 tests) and `__tests__/scoped.db.test.ts` (4 tests, with `DATABASE_URL_TEST` set)); `tsc --noEmit` and `eslint` report no errors.
+- 98 commits between the pre-2.0 build `0edddb1` and the `main` commit this work started from (`git rev-list --count 0edddb1..655e157`; includes merge commits).
 
 Built (literal repo facts):
 - Python FastAPI retrieval and ingestion service with 10 endpoints, authenticated by audience-bound HS256 tokens that Next.js mints with a 60-second lifetime.
@@ -15,7 +15,7 @@ Built (literal repo facts):
 - Versioned sources with index generations and a single-transaction activation; leased, resumable ingestion steps with a retry taxonomy; soft delete that removes a source from search in the same transaction.
 - Parsers for PDF, Markdown, TXT, DOCX and CSV with exact page, bounding box and row provenance; OCR path for scanned pages; parent/child chunker with source spans.
 - Evidence labels `[E#]`, an answerability gate (threshold uncalibrated), and claim verification after the stream, with six statuses. "Verified" requires both deterministic checks and a verifier verdict.
-- Postgres row-level-security policies, a NOBYPASSRLS application role and SECURITY DEFINER queue functions. The policies are not yet forced.
+- Postgres row-level-security policies, a NOBYPASSRLS application role and SECURITY DEFINER queue functions. The policies are not forced and the deployed runtime still connects as the table owner. The TypeScript chat, file, ingestion and version code and the Python endpoints pass cross-workspace tests as a real non-owner login locally (`scripts/test-chat-rls.py`, `scripts/test-python-rls.py`); not run on Neon.
 - Evaluation toolkit: 24-document synthetic corpus, 200-case golden set across 10 categories (80 cases machine-drafted and unreviewed), metrics with paired bootstrap confidence intervals, answer-level scoring, run dashboard, 2-5 profile compare lab, CI regression gate (not armed), scaling harness.
 - Security work: an adversarial-document suite, an IDOR sweep over every route and server action, a token-rejection matrix of about 550 parametrised cases, log-canary tests, and a written threat model with 15 documented residual risks. This was an engineering review with tests, not a penetration test.
 - 12 architecture decision records, 21 SQL migrations (`0000`-`0020`), a documented 14-week milestone plan.

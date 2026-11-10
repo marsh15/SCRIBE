@@ -4,6 +4,10 @@ Production (`scribe-marsh.vercel.app`) still serves the pre-2.0 build `scribe-9w
 
 Nothing here writes to the production database. Phases 1-11 only touch a throwaway Neon branch; phase 12 (cutover) is a separate decision.
 
+> **LOUD WARNING: Preview and Production share `NEON_DATABASE_URL` today.** Until Preview has its own database (runbook-promote-rollback.md step 1), a Vercel preview, including the preview of any pull request, runs on the **production database**. Do not open or test a preview of 2.0 code before that change. Phases 1-9 below never use a preview for this reason.
+
+The step-by-step promotion and rollback sequence, with a "stop here and verify" point after every step, is in [runbook-promote-rollback.md](runbook-promote-rollback.md). This file holds the detail and the expected output of each rehearsal phase.
+
 Migration 0020 is a compatibility shim: a trigger on `files`, `chats` and `rag_traces` that fills in the user's personal `workspace_id` when the Scribe 1.0 build inserts a row without one. Without it the 1.0 build breaks the moment 0008 commits, and rolling back means restoring the database. With it, promoting a 1.0 build is a valid rollback (with limits, see phase 12, step 5), and phase 9 rehearses exactly that: the 1.0.1 build running against the migrated branch. The rollback build is 1.0.1, branch `rollback/1.0-compat` (commit `baa1634`) = `0edddb1` + a one-line change to the upload-completion SQL (see phase 9). The unpatched 1.0 build cannot accept uploads once 0008-0020 are applied.
 
 Scripts: `scripts/neon-rehearsal/`
