@@ -18,7 +18,7 @@ from scribe_eval.review.kinds import ADAPTERS, ChangeItem, FieldItem
 from scribe_eval.review.require import refusal_message, unreviewed_ids
 from scribe_eval.review.server import check_host, serve
 from scribe_eval.review.source import Corpus, locate
-from scribe_eval.review.store import ids_from_markdown, ids_from_order_file
+from scribe_eval.review.store import ids_from_markdown, ids_from_order_file, split_first_order
 
 REPO = Path(__file__).resolve().parents[3]
 GOLDEN = REPO / "benchmarks" / "datasets" / "golden-v1"
@@ -231,6 +231,33 @@ def test_default_order_for_golden_v1_is_review_first_then_t28_then_the_rest():
     named = [i for i in seq if i in t28]
     pos = [seq.index(i) for i in named]
     assert pos == sorted(pos)
+
+
+def test_split_first_order_puts_the_requested_splits_first_and_keeps_the_concern_order_inside_them():
+    cases = {c.id: c.split for c in load_cases(GOLDEN / "cases.jsonl")}
+    base = ["ua-10", "ua-11", "tb-13", "cd-04"]
+    order = split_first_order(GOLDEN / "cases.jsonl", ["validation"], base)
+    validation = [i for i, sp in cases.items() if sp == "validation"]
+    assert set(order) == set(validation) and len(order) == len(validation) == 40  # only that split is listed
+    named = [i for i in base if cases[i] == "validation"]
+    assert order[: len(named)] == named  # the concern order from the base list leads
+    two = split_first_order(GOLDEN / "cases.jsonl", ["validation", "dev"], base)
+    assert two[:40] == order and {cases[i] for i in two[40:]} == {"dev"} and len(two) == 120
+    assert "test" not in {cases[i] for i in two}
+    with pytest.raises(ValueError):
+        split_first_order(GOLDEN / "cases.jsonl", ["bogus"], base)
+
+
+def test_review_command_split_option_reaches_the_order(tmp_path, monkeypatch):
+    seen = {}
+
+    def fake_create_app(items, kind, corpus, reviewer, order):
+        seen["order"] = list(order)
+        raise ValueError("stop here")
+
+    monkeypatch.setattr("scribe_eval.review.app.create_app", fake_create_app)
+    assert main(["review", "--items", str(GOLDEN / "cases.jsonl"), "--corpus", str(CORPUS), "--split", "validation"]) == 2
+    assert len(seen["order"]) == 40
 
 
 def test_markdown_and_order_file_parsing(tmp_path):

@@ -39,7 +39,7 @@ EXPECTED_OPTIONS = {
     "ingest-corpus": {"--cache-path", "--corpus", "--database-url", "--dataset", "--embedder", "--help", "--ledger", "--manifest", "--profile", "--reset", "--spend-cap", "-h"},
     "fetch-corpus": {"--help", "--manifest", "--out", "--pin", "--rasterize-ocr-layer", "--stats", "-h"},
     "run-profile": {"--cache-path", "--corpus", "--database-url", "--dataset", "--help", "--ledger", "--limit", "--milestone-id", "--milestone-report", "--out", "--profile", "--profiles", "--runs-dir", "--spend-cap", "--split", "-h"},
-    "review": {"--corpus", "--help", "--items", "--kind", "--order", "--port", "--reviewer", "-h"},
+    "review": {"--corpus", "--help", "--items", "--kind", "--order", "--port", "--reviewer", "--split", "-h"},
     "report": {"--dataset", "--help", "--out", "-h"},
     "parse-compare": {"--cache-path", "--corpus", "--dry-run", "--engines", "--fields", "--help", "--ledger", "--out", "--spend-cap", "-h"},
 }

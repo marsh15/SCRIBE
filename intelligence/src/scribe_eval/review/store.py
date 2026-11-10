@@ -13,7 +13,7 @@ import re
 import stat
 import tempfile
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -24,6 +24,7 @@ from .source import Corpus
 _ID_RE = re.compile(r"\b[a-z]{2,}-\d+\b")
 _RANGE_RE = re.compile(r"\b([a-z]{2,})-(\d+)\.\.(?:([a-z]{2,})-)?(\d+)\b")
 DEFAULT_ORDER_FILES = ("REVIEW_FIRST.md", "UNREVIEWED_T28.md")
+SPLITS = ("dev", "validation", "test")
 
 
 class ReviewError(Exception):
@@ -100,6 +101,26 @@ def default_order(items_path: Path) -> list[str]:
         if p.is_file():
             ids += ids_from_markdown(p)
     return ids
+
+
+def split_first_order(items_path: Path, splits: Sequence[str], base_order: Sequence[str] = ()) -> list[str]:
+    """Ids of the given splits, split by split in the order named; inside a split the ids of ``base_order`` (the cases
+    the author was least sure of) come first, then the file order. Review the splits the gate needs before the rest."""
+    unknown = [s for s in splits if s not in SPLITS]
+    if unknown:
+        raise ValueError(f"unknown split {unknown[0]!r}; expected one of {', '.join(SPLITS)}")
+    rows: list[tuple[str, str]] = []
+    for line in Path(items_path).read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        raw = json.loads(line)
+        rows.append((str(raw.get("id")), str(raw.get("split"))))
+    rank = {i: n for n, i in enumerate(base_order)}
+    out: list[str] = []
+    for split in splits:
+        ids = [i for i, sp in rows if sp == split]
+        out += sorted(ids, key=lambda i: rank.get(i, len(rank)))  # sorted() is stable: file order within a rank
+    return out
 
 
 def ids_from_order_file(path: Path) -> list[str]:

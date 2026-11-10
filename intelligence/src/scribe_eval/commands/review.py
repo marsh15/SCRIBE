@@ -24,6 +24,10 @@ def _review(args: argparse.Namespace) -> int:
         return 2
     try:
         order = build_order(items, args.order)
+        if args.split:
+            from ..review.store import split_first_order
+
+            order = split_first_order(items, [x.strip() for x in args.split.split(",") if x.strip()], order)
         reviewer = args.reviewer or getpass.getuser()
         app = create_app(items, args.kind, args.corpus, reviewer, order)
     except (OSError, ValueError) as exc:
@@ -55,4 +59,6 @@ def register(sub: argparse._SubParsersAction) -> None:
     r.add_argument("--reviewer", default=None, help="name recorded as reviewed_by / dropped_by (default: OS user)")
     r.add_argument("--order", default=None, help="file of item ids to review first (default for golden-v1: "
                    "REVIEW_FIRST.md then UNREVIEWED_T28.md next to the items file)")
+    r.add_argument("--split", default=None, help="comma-separated splits to review first, in this order, e.g. "
+                   "'validation,dev' (the retrieval gate needs 'validation' reviewed; 'test' is reviewed last)")
     r.set_defaults(func=_review)
