@@ -319,6 +319,9 @@ def c_baseline(env):
 
 @needs_db
 def test_hybrid_rrf_unchanged_passes_and_reversed_rrf_fails_the_gate(env, c_baseline, capsys, monkeypatch):
+    """GATE TEST, NOT AN ACCURACY MEASUREMENT. A deliberately worsened retrieval (fusion order reversed, on the seeded
+    synthetic fixture) must be rejected by rules R1a and R1b, and the unchanged one must pass. This runs in the CI python
+    job (`uv run pytest`), so the rejection path is exercised on every PR even while the real gate is not armed."""
     from scribe_intel.retrieval import pipeline
 
     assert check(env, "--profile", "hybrid-rrf", baseline=c_baseline) == 0
