@@ -1,4 +1,4 @@
-import { sql } from "@/lib/db-config";
+import { adminSql as sql } from "@/lib/db-config";
 import {
   normalizeResult,
   normalizeRun,
@@ -17,6 +17,9 @@ import {
  * kind 'eval' (`workspaces.owner_user_id`) or hold a `workspace_members` row in one. Everyone else gets a 404 (the page
  * and the nav link behave as if the feature did not exist). Only rows whose stored `meta.workspace_kind` is 'eval' are
  * ever returned, so rows written by anything else into the same tables stay invisible.
+ *
+ * ROLE: these read global tables and look across workspaces for the viewer's eval membership, so they use the owner
+ * connection (`adminSql`), one of the allow-listed callers in __tests__/security/db-boundary.test.ts.
  *
  * The SQL in each function is also executed by intelligence/tests/integration/test_eval_dashboard.py, which extracts the
  * first sql`...` after the function name: keep placeholders as plain `${name}` identifiers.

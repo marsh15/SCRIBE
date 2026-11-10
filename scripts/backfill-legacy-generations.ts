@@ -10,7 +10,7 @@
  *   scan from a file id (not required for correctness).
  * - `documents` is only ever read. Nothing is deleted or updated there.
  * - Connection: NEON_DATABASE_URL (from .env.local or the environment, same as
- *   lib/db-config.ts). Neon URLs run over the neon HTTP driver, one transaction
+ *   @neondatabase/serverless). Neon URLs run over the neon HTTP driver, one transaction
  *   per batch. localhost URLs (or --psql) run through the `psql` binary with
  *   `--single-transaction`, which is how the vitest suite exercises the same SQL.
  * - Needs migrations 0010 and 0011 (tables + `legacy-v1` profile) applied first.
@@ -260,9 +260,11 @@ export function psqlExecutor(url: string): BackfillExecutor {
   };
 }
 
-export async function neonExecutor(): Promise<BackfillExecutor> {
-  // Reuse the project's db config (loads .env.local, reads NEON_DATABASE_URL).
-  const { sql } = await import("../lib/db-config");
+export async function neonExecutor(url: string): Promise<BackfillExecutor> {
+  // Owner-run migration tool: it connects to EXACTLY the URL it announced (NEON_DATABASE_URL after .env.local is loaded),
+  // never to the app's separate owner connection (NEON_ADMIN_DATABASE_URL), so the printed target is the written target.
+  const { neon } = await import("@neondatabase/serverless");
+  const sql = neon(url);
   return {
     async scalars(text) {
       const rows = (await sql.query(text, [], { arrayMode: true })) as unknown[][];
@@ -296,7 +298,7 @@ async function main() {
   const url = process.env.NEON_DATABASE_URL;
   if (!url) throw new Error("NEON_DATABASE_URL is not set (point it at the target database or Neon branch)");
   const local = /@(localhost|127\.0\.0\.1|\[::1\])(:|\/)/.test(url);
-  const exec = args.psql || local ? psqlExecutor(url) : await neonExecutor();
+  const exec = args.psql || local ? psqlExecutor(url) : await neonExecutor(url);
   const report = await runBackfill(exec, {
     batchSize: args.batchSize,
     afterId: args.afterId,

@@ -121,6 +121,7 @@ async def test_cleanup_listing_skips_rows_in_purge_backoff(env):
     b = await new_file(conn, wid)
     await conn.execute("update files set deleted_at=now() where id in (%s,%s)", (a, b))
     await conn.execute("update files set purge_next_retry_at=now()+interval '1 hour' where id=%s", (b,))
-    sql = ts_sql('ORDER BY "deleted_at" ASC').replace("%(l)s", "100")
-    ids = {r[0] for r in await (await conn.execute(sql)).fetchall()}
+    # the cleanup lists across workspaces through the SECURITY DEFINER function (grace period 0: legacy deletes at once)
+    assert "app_list_purgeable_sources(0," in TS
+    ids = {r[0] for r in await (await conn.execute("select source_id from app_list_purgeable_sources(0, 100)")).fetchall()}
     assert a in ids and b not in ids

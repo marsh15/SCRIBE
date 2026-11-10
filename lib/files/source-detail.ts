@@ -1,4 +1,4 @@
-import { sql } from "@/lib/db-config";
+import { scoped } from "@/lib/scoped";
 import {
   isValidSourceId,
   toPage,
@@ -41,7 +41,7 @@ export interface SourceHeader {
 
 export async function getSourceHeader(workspaceId: string, userId: string, sourceId: number): Promise<SourceHeader | null> {
   if (!isValidSourceId(sourceId)) return null;
-  const rows = (await sql`
+  const rows = (await scoped(workspaceId).sql`
     SELECT f."id", f."name", f."type", f."size", f."status", f."processing_error", f."created_at",
            f."reupload_required_at", f."reupload_reason", f."active_version_id",
            av."version_number" AS active_version_number
@@ -80,7 +80,7 @@ export async function listStructure(
   if (!header) return null;
   const fetchLimit = window.limit + 1;
   const offset = window.offset;
-  const rows = (await sql`
+  const rows = (await scoped(workspaceId).sql`
     SELECT b."id", b."block_index", b."type", b."heading_path", b."page", b."ocr", b."row_number",
            b."char_start", b."char_end", left(b."text", 240) AS preview, length(b."text") AS text_length
     FROM "files" f
@@ -138,7 +138,7 @@ export async function listChunks(
   const kind: ChunkKind = request?.kind === "parent" || request?.kind === "child" ? request.kind : "all";
   const fetchLimit = window.limit + 1;
   const offset = window.offset;
-  const rows = (await sql`
+  const rows = (await scoped(workspaceId).sql`
     SELECT c."id", c."parent_id", c."chunk_index", (c."parent_id" IS NULL) AS is_parent, c."token_count",
            c."heading_text", left(c."content", 400) AS excerpt, length(c."content") AS content_length,
            CASE WHEN c."parent_id" IS NULL
@@ -213,7 +213,7 @@ export async function listIngestionHistory(
   if (!header) return null;
   const fetchLimit = window.limit + 1;
   const offset = window.offset;
-  const rows = (await sql`
+  const rows = (await scoped(workspaceId).sql`
     SELECT j."id", j."source_version_id", v."version_number", j."status", j."stage", j."attempts", j."error_code",
            j."last_error", j."next_retry_at", j."started_at", j."finished_at", j."created_at", j."updated_at"
     FROM "files" f
@@ -252,7 +252,7 @@ export interface OcrSummary {
 
 export async function getOcrSummary(workspaceId: string, userId: string, sourceId: number): Promise<OcrSummary | null> {
   if (!isValidSourceId(sourceId)) return null;
-  const rows = (await sql`
+  const rows = (await scoped(workspaceId).sql`
     SELECT
       (SELECT count(*) FROM "source_version_ocr_pages" o
         WHERE o."source_version_id" = f."active_version_id" AND o."workspace_id" = f."workspace_id") AS ocr_pages_done,
@@ -291,7 +291,7 @@ export async function resolveVersionBlob(
 ): Promise<ResolvedBlob | null> {
   if (!isValidSourceId(sourceId)) return null;
   if (versionNumber !== null && !isValidSourceId(versionNumber)) return null;
-  const rows = (await sql`
+  const rows = (await scoped(workspaceId).sql`
     SELECT f."name", f."type", f."storage_url", v."version_number", v."mime_type", v."upload_state",
            b."storage_key" AS blob_key, b."version_number" AS blob_version_number
     FROM "files" f

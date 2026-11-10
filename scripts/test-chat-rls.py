@@ -1,4 +1,5 @@
-"""Run exported chat/search functions using a temporary local database and a real non-owner login."""
+"""Run the exported chat, search, file and ingestion functions (the *-rls-login.db.test.ts suites) using a temporary
+local database and a real non-owner login."""
 from __future__ import annotations
 
 import os
@@ -38,7 +39,7 @@ def main() -> int:
             try:
                 admin.execute(sql.SQL("grant scribe_app to {}").format(sql.Identifier(role)))
                 env = {**os.environ, "CHAT_RLS_DATABASE_URL": app_target, "CHAT_RLS_ADMIN_URL": admin_target}
-                return subprocess.run(["npx", "vitest", "run", "__tests__/chat-rls-login.db.test.ts"], cwd=root, env=env).returncode
+                return subprocess.run(["npx", "vitest", "run", "--no-file-parallelism", "__tests__/chat-rls-login.db.test.ts", "__tests__/files-ingestion-rls-login.db.test.ts"], cwd=root, env=env).returncode
             finally:
                 admin.execute(sql.SQL("drop database {} with (force)").format(sql.Identifier(database)))
                 admin.execute(sql.SQL("drop role {}").format(sql.Identifier(role)))

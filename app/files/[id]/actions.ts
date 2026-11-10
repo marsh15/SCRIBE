@@ -1,6 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db-config";
+import { scoped } from "@/lib/scoped";
 import { files, documents } from "@/lib/db-schema";
 import { eq, and, sql, isNull } from "drizzle-orm";
 import { isNotAuthenticatedError } from "@/lib/auth";
@@ -30,7 +31,8 @@ export async function getFileWithChunks(fileId: number) {
         const { userId, workspaceId } = await resolveWorkspace();
 
         // Lightweight query: get file metadata + check if fileData exists (without loading it)
-        const fileRows = await db
+        const ws = scoped(workspaceId);
+        const [fileRows] = await ws.batch([db
             .select({
                 id: files.id,
                 name: files.name,
@@ -45,7 +47,7 @@ export async function getFileWithChunks(fileId: number) {
             })
             .from(files)
             .where(and(eq(files.id, fileId), eq(files.userId, userId), eq(files.workspaceId, workspaceId), isNull(files.deletedAt)))
-            .limit(1);
+            .limit(1)]);
 
         const file = fileRows[0];
         if (!file) return null;
@@ -72,7 +74,7 @@ export async function getFileWithChunks(fileId: number) {
 
         await ensureDocumentsChunkIndexSchema();
 
-        const chunks = await db
+        const [chunks] = await ws.batch([db
             .select({
                 id: documents.id,
                 chunkIndex: documents.chunkIndex,
@@ -82,7 +84,7 @@ export async function getFileWithChunks(fileId: number) {
             .from(documents)
             .where(eq(documents.fileId, fileId))
             .orderBy(documents.chunkIndex)
-            .limit(MAX_LEGACY_CHUNKS);
+            .limit(MAX_LEGACY_CHUNKS)]);
 
         return {
             file: filePayload,

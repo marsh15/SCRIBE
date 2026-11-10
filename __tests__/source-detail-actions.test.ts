@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ sql: vi.fn(), resolveWorkspace: vi.fn() }));
+vi.mock("@/lib/scoped", async () => (await import("./support/scoped-mock")).scopedFake((text, values) => mocks.sql(text, values)));
 vi.mock("@/lib/db-config", () => ({
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => mocks.sql(strings.join("?"), values),
   db: {},

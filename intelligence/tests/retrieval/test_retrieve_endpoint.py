@@ -8,7 +8,7 @@ import jwt
 import pytest
 from _t13 import MD, conn_for, corpus_workspace, seed_sync  # noqa: F401  (sets sys.path for _db)
 from _db import GOLDEN
-from conftest import DATABASE_URL_TEST, SECRET, needs_db
+from conftest import DATABASE_URL_TEST, SECRET, needs_db, APP_DATABASE_URL_TEST
 from scribe_ingest.embedding import EmbeddingError, FakeEmbedder
 
 pytestmark = needs_db
@@ -40,7 +40,7 @@ async def client(monkeypatch):
     from scribe_intel.app import create_app
     from scribe_intel.config import get_settings
 
-    monkeypatch.setenv("DATABASE_URL", DATABASE_URL_TEST)
+    monkeypatch.setenv("DATABASE_URL", APP_DATABASE_URL_TEST)
     monkeypatch.setenv("SCRIBE_EMBEDDER", "fake")
     monkeypatch.setenv("SCRIBE_ALLOW_FAKE_EMBEDDINGS", "1")
     get_settings.cache_clear()

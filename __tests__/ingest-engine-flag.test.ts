@@ -45,10 +45,11 @@ vi.mock("@/lib/db-config", () => {
     node.where = () => node;
     return node;
   };
-  const sql = vi.fn(async () => {
+  // The scope-less run is the cron worker: its four statements go through the owner connection.
+  const adminSql = vi.fn(async () => {
     mocks.sqlCalls += 1;
     // 1 stale uploads, 2 abandoned legacy, 3 recovered, 4 claimed
-    return mocks.sqlCalls === 4 ? [{ id: 1, file_id: 7, attempts: 1 }] : [];
+    return mocks.sqlCalls === 4 ? [{ id: 1, file_id: 7, workspace_id: "22222222-2222-4222-8222-222222222222", attempts: 1 }] : [];
   });
   const db = {
     query: { files: { findFirst: vi.fn(async () => mocks.source) } },
@@ -57,7 +58,19 @@ vi.mock("@/lib/db-config", () => {
     insert: vi.fn(() => chain("insert")),
     batch: vi.fn(async (q: unknown[]) => void mocks.batches.push(q)),
   };
-  return { db, sql };
+  return { db, adminSql };
+});
+vi.mock("@/lib/scoped", async () => {
+  const { db } = await import("@/lib/db-config");
+  return {
+    scoped: () => ({
+      // batches of write builders are recorded by db.batch; a read batch just resolves its queries
+      batch: async (queries: Array<{ tag?: string }>) => {
+        if (queries.some((q) => q?.tag)) await db.batch(queries as never);
+        return Promise.all(queries);
+      },
+    }),
+  };
 });
 
 import { runQueuedSourceIntake } from "@/lib/ingestion/source-intake";
@@ -156,9 +169,9 @@ describe("INGEST_ENGINE=python", () => {
   it("gives up after the maximum attempts", async () => {
     mocks.sqlCalls = 0;
     const sqlMod = await import("@/lib/db-config");
-    (sqlMod.sql as unknown as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+    (sqlMod.adminSql as unknown as ReturnType<typeof vi.fn>).mockImplementation(async () => {
       mocks.sqlCalls += 1;
-      return mocks.sqlCalls === 4 ? [{ id: 1, file_id: 7, attempts: 5 }] : [];
+      return mocks.sqlCalls === 4 ? [{ id: 1, file_id: 7, workspace_id: "22222222-2222-4222-8222-222222222222", attempts: 5 }] : [];
     });
     vi.stubGlobal("fetch", vi.fn(async () => ok({ detail: "boom" }, 500)));
     expect((await runQueuedSourceIntake(1)).failed).toBe(1);

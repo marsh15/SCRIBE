@@ -11,7 +11,7 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("@clerk/nextjs/server", () => ({ auth: async () => h.claims }));
-vi.mock("@/lib/db-config", () => ({ sql: { query: h.query } }));
+vi.mock("@/lib/db-config", () => ({ adminSql: { query: h.query } }));
 vi.mock("@/lib/ingestion/python-queue", () => ({ requeueFailedBackfillJob: h.retry }));
 vi.mock("@/lib/ingestion/tick", () => ({ fireTick: h.fireTick }));
 vi.mock("@/lib/env", () => ({ env: h.env }));

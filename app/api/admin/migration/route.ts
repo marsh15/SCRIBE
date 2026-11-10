@@ -1,6 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { isAdmin } from "@/lib/auth";
-import { sql } from "@/lib/db-config";
+import { adminSql as sql } from "@/lib/db-config";
 import { env } from "@/lib/env";
 import { fireTick } from "@/lib/ingestion/tick";
 import { requeueFailedBackfillJob } from "@/lib/ingestion/python-queue";

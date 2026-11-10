@@ -74,10 +74,11 @@ vi.mock("@/lib/workspace", () => ({
 }));
 vi.mock("@/lib/intelligence-client", () => ({ callIntelligence: S.callIntelligence, baseUrl: () => "https://scribe.example" }));
 
-vi.mock("@/lib/scoped", () => ({ scoped: () => ({ batch: async (queries: PromiseLike<unknown>[]) => Promise.all(queries) }) }));
+vi.mock("@/lib/scoped", async () => (await import("../support/scoped-mock")).scopedFake((text, values) => S.sql(text, values)));
 
 vi.mock("@/lib/db-config", () => ({
-  sql: (strings: TemplateStringsArray, ...values: unknown[]) => S.sql(strings.join("?"), values),
+  adminSql: Object.assign((strings: TemplateStringsArray, ...values: unknown[]) => S.sql(strings.join("?"), values), { query: async () => [] }),
+  adminDb: {},
   db: {
     select: () => S.chain([]),
     insert: () => ({ values: async () => void S.mutations.push("insert") }),

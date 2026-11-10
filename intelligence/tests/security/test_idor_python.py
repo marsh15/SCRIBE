@@ -9,7 +9,7 @@ import httpx
 import psycopg
 import pytest
 from _adv import HYBRID, auth, seed_sync
-from conftest import DATABASE_URL_TEST, needs_db
+from conftest import DATABASE_URL_TEST, needs_db, APP_DATABASE_URL_TEST
 from test_verify import FakeVerifier, use_verifier
 
 pytestmark = needs_db
@@ -27,7 +27,7 @@ async def client(monkeypatch):
     from scribe_intel.app import create_app
     from scribe_intel.config import get_settings
 
-    for k, v in dict(DATABASE_URL=DATABASE_URL_TEST, SCRIBE_EMBEDDER="fake", SCRIBE_ALLOW_FAKE_EMBEDDINGS="1",
+    for k, v in dict(DATABASE_URL=APP_DATABASE_URL_TEST, SCRIBE_EMBEDDER="fake", SCRIBE_ALLOW_FAKE_EMBEDDINGS="1",
                      SCRIBE_RERANKER="fake", SCRIBE_ALLOW_FAKE_RERANKER="1").items():
         monkeypatch.setenv(k, v)
     monkeypatch.delenv("VOYAGE_API_KEY", raising=False)
@@ -60,6 +60,21 @@ async def tenant_b_evidence(client, seeded, monkeypatch):
         {"index": 0, "text": f"The codename is secret [{ev['items'][0]['label']}]."}]}, headers=auth(wb, "verify"))
     assert v.status_code == 200, v.text
     return {"item_id": ev["items"][0]["id"], "bundle": bundle, "message": msg, "source_id": fid}
+
+
+async def test_app_connection_role_matches_the_configured_login(client):
+    """When scripts/test-python-rls.py runs this suite, the service under test must really be a non-owner, NOBYPASSRLS
+    login (otherwise the IDOR tests below prove only the application-level predicates). With the default superuser URL the
+    test just records which mode ran."""
+    from scribe_intel import db
+
+    pool = await db.get_pool()
+    async with pool.connection() as conn:
+        user, superuser, bypass = await (await conn.execute(
+            "select current_user, r.rolsuper, r.rolbypassrls from pg_roles r where r.rolname = current_user")).fetchone()
+    if APP_DATABASE_URL_TEST != DATABASE_URL_TEST:
+        assert (superuser, bypass) == (False, False), f"{user} can bypass row-level security"
+        assert user.startswith("scribe_py_login_")
 
 
 async def test_evidence_open_foreign_item_is_indistinguishable_from_unknown(client, seeded, monkeypatch):

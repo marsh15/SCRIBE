@@ -19,7 +19,7 @@ vi.mock("@/lib/db-config", () => {
     };
     return q;
   };
-  return { db: { select: chain } };
+  return { adminDb: { select: chain } };
 });
 
 vi.mock("next/navigation", () => ({

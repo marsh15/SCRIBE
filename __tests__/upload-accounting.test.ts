@@ -8,6 +8,7 @@ const h = vi.hoisted(() => ({
 }));
 vi.mock("pdf-parse", () => ({ default: vi.fn() }));
 vi.mock("@/lib/flags", () => ({ flags: { get billingEnabled() { return h.billingEnabled; } } }));
+vi.mock("@/lib/scoped", async () => (await import("./support/scoped-mock")).scopedFake((text, values) => h.sql(text, values)));
 vi.mock("@/lib/db-config", () => ({
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => h.sql(strings.join("?"), values),
   db: {

@@ -7,7 +7,7 @@ import httpx
 import jwt
 import pytest
 from _db import aconnect, new_file, new_workspace, skip_or_fail_if_foreign_jobs
-from conftest import DATABASE_URL_TEST, SECRET, needs_db
+from conftest import DATABASE_URL_TEST, SECRET, needs_db, APP_DATABASE_URL_TEST
 from test_source_delete_purge import build_live_source, soft_delete
 
 pytestmark = needs_db
@@ -27,7 +27,7 @@ async def client(monkeypatch):
     from scribe_intel.app import create_app
     from scribe_intel.config import get_settings
 
-    monkeypatch.setenv("DATABASE_URL", DATABASE_URL_TEST)
+    monkeypatch.setenv("DATABASE_URL", APP_DATABASE_URL_TEST)
     get_settings.cache_clear()
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app()), base_url="http://t") as c:
         yield c

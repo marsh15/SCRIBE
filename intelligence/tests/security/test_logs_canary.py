@@ -11,7 +11,7 @@ import httpx
 import pytest
 from _adv import CANARY, HYBRID, auth, read, seed_sync
 from _db import aconnect, new_file, new_workspace, skip_or_fail_if_foreign_jobs
-from conftest import DATABASE_URL_TEST, needs_db
+from conftest import DATABASE_URL_TEST, needs_db, APP_DATABASE_URL_TEST
 from test_source_delete_purge import URL, dl, make_job, soft_delete
 from test_verify import FakeVerifier, use_verifier
 
@@ -35,7 +35,7 @@ async def client(monkeypatch):
     from scribe_intel.app import create_app
     from scribe_intel.config import get_settings
 
-    for k, v in dict(DATABASE_URL=DATABASE_URL_TEST, SCRIBE_EMBEDDER="fake", SCRIBE_ALLOW_FAKE_EMBEDDINGS="1",
+    for k, v in dict(DATABASE_URL=APP_DATABASE_URL_TEST, SCRIBE_EMBEDDER="fake", SCRIBE_ALLOW_FAKE_EMBEDDINGS="1",
                      SCRIBE_RERANKER="fake", SCRIBE_ALLOW_FAKE_RERANKER="1").items():
         monkeypatch.setenv(k, v)
     monkeypatch.delenv("VOYAGE_API_KEY", raising=False)
