@@ -16,8 +16,8 @@ export const SEARCH_UNAVAILABLE_MESSAGE =
 
 const REQUEST_TIMEOUT_MS = 25_000;
 
-/** The profile that packs a context and stores an evidence bundle (T25): hybrid RRF + rerank + parent expansion. */
-export const EVIDENCE_PROFILE = "hybrid-rrf-rerank";
+/** The profile that packs a context and stores an evidence bundle (T25): hybrid RRF + rerank + parent expansion, with the OR-ranked lexical channel (the "and" mode left most questions with no lexical candidates). */
+export const EVIDENCE_PROFILE = "hybrid-rrf-rerank-v2";
 
 export const NO_SOURCES_MESSAGE =
   "No sources: this workspace has no indexed sources yet, so there is nothing to answer from. Upload documents first.";

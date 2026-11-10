@@ -10,7 +10,7 @@ one list (ties) are ordered by str(chunk_id) before being used, so the input ord
 never matters. If a chunk appears twice in one list only its best rank counts.
 
 Ordering of the fused list: higher score first; ties -> more lists containing the chunk, then
-the best single rank, then str(chunk_id). Scores are compared as exact Fractions so float
+the best single rank, then (document name, content hash), then str(chunk_id). Scores are compared as exact Fractions so float
 summation order can never create or break a tie.
 
 BOTH-LISTS PROPERTY (tested): let X appear in lists L1 and L2 and Y appear only in L1. If
@@ -32,6 +32,14 @@ DEFAULT_K = 60
 _NATIVE = {"dense", "lexical"}
 
 
+def stable_key(c: Candidate) -> tuple[str, str]:
+    """What identifies a chunk independently of the random UUID a particular ingest gave it. Final tie-break everywhere
+    a ranking can tie, so the same corpus yields the same order in every database (the regression gate replays cached
+    reranker inputs keyed by that order). The SQL retrievers use the same key (document name in the "C" collation, so byte
+    order equals Python's); profiles A-E keep their byte-pinned `and`-mode lexical SQL, which still ends in the chunk id."""
+    return (c.doc_name, c.content_hash)
+
+
 def rrf_fuse(lists: dict[str, list[Candidate]], k: int = DEFAULT_K) -> list[RankedCandidate]:
     if k < 0:
         raise ValueError("k must be >= 0")
@@ -45,7 +53,7 @@ def rrf_fuse(lists: dict[str, list[Candidate]], k: int = DEFAULT_K) -> list[Rank
             if name not in slot:  # best rank wins within one list
                 slot[name] = (cand.rank, cand)
 
-    rows: list[tuple[Fraction, int, int, str, RankedCandidate]] = []
+    rows: list[tuple[Fraction, int, int, tuple[str, str], str, RankedCandidate]] = []
     for chunk_id, per in seen.items():
         exact = sum((Fraction(1, k + r) for r, _ in per.values()), Fraction(0))
         best_rank = min(r for r, _ in per.values())
@@ -58,11 +66,11 @@ def rrf_fuse(lists: dict[str, list[Candidate]], k: int = DEFAULT_K) -> list[Rank
             elif name == "lexical":
                 rc.lexical_rank, rc.lexical_score = r, c.score
         rc.fusion_score = float(exact)
-        rows.append((exact, len(per), best_rank, str(chunk_id), rc))
+        rows.append((exact, len(per), best_rank, stable_key(rc.candidate), str(chunk_id), rc))
 
-    rows.sort(key=lambda t: (-t[0], -t[1], t[2], t[3]))
+    rows.sort(key=lambda t: (-t[0], -t[1], t[2], t[3], t[4]))
     out = []
-    for i, (_, _, _, _, rc) in enumerate(rows, start=1):
+    for i, (_, _, _, _, _, rc) in enumerate(rows, start=1):
         rc.fusion_rank = i
         out.append(rc)
     return out

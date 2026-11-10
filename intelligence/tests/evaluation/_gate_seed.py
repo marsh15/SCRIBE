@@ -104,18 +104,26 @@ def seeded_providers():
         reranker=lambda model: _Rerank(model), mode="record")
 
 
+def default_profile() -> str:
+    """The profile the gate guards by default (the seeded fixtures must follow it, or the CLI default would not match)."""
+    from scribe_eval.gate import DEFAULT_PROFILE
+
+    return DEFAULT_PROFILE
+
+
 def args(**kw):
     base = dict(split="validation", baseline="unused.json", cache="unused.jsonl.gz", dataset="", corpus="",
-                database_url=None, profile="hybrid-rrf-rerank", tau=0.5, out=None, refresh_cache=False,
+                database_url=None, profile=default_profile(), tau=0.5, out=None, refresh_cache=False,
                 write_baseline=False, seeded=True, accept_seeded_baseline=False)
     base.update(kw)
     return argparse.Namespace(**base)
 
 
-def record_cache(work: Path, database_url: str, profile: str = "hybrid-rrf-rerank") -> dict:
+def record_cache(work: Path, database_url: str, profile: str | None = None) -> dict:
     """Record the seeded cache + write a seeded result. Returns paths."""
     from scribe_eval import gate
 
+    profile = profile or default_profile()
     corpus, dataset = build_corpus(work / "corpus"), build_dataset(work / "dataset")
     cache_path = work / "cache.jsonl.gz"
     rc = gate.run_gate(args(dataset=str(dataset), corpus=str(corpus), cache=str(cache_path),
@@ -125,9 +133,10 @@ def record_cache(work: Path, database_url: str, profile: str = "hybrid-rrf-reran
     return {"corpus": corpus, "dataset": dataset, "cache": cache_path}
 
 
-def write_baseline(work: Path, paths: dict, database_url: str, out: Path, profile="hybrid-rrf-rerank") -> Path:
+def write_baseline(work: Path, paths: dict, database_url: str, out: Path, profile: str | None = None) -> Path:
     from scribe_eval import gate
 
+    profile = profile or default_profile()
     rc = gate.run_gate(args(dataset=str(paths["dataset"]), corpus=str(paths["corpus"]), cache=str(paths["cache"]),
                             database_url=database_url, profile=profile, baseline=str(out), write_baseline=True))
     assert rc == 0

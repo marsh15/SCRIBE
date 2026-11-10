@@ -45,7 +45,7 @@ def test_and_mode_sql_is_unchanged():
 def test_or_rank_sql_shape_and_named_constants():
     sql = lexical_sql(True, "or_rank")
     assert "plainto_tsquery('english', %(q)s)" in sql and "' | '" in sql
-    assert "ts_rank_cd(c.fts_en, q.qor, 1)" in sql and "order by score desc, c.id" in sql
+    assert "ts_rank_cd(c.fts_en, q.qor, 1)" in sql and 'order by score desc, f.name collate "C", c.content_hash, c.id' in sql
     assert "websearch_to_tsquery('simple', v)" in sql and "%(idents)s::text[]" in sql
     assert sql.index("g.status = 'ACTIVE'") < sql.index("limit") and "deleted_at is null" in sql
     assert L.IDENT_BOOST == 1.0 and L.OR_RANK_NORMALIZATION == 1
@@ -233,12 +233,14 @@ async def test_or_rank_empty_and_stopword_only_return_nothing(conn, seeded, q):
 
 
 @needs_db
-async def test_or_rank_is_deterministic_and_ties_break_on_chunk_id(conn, seeded):
+async def test_or_rank_is_deterministic_and_ties_break_on_chunk_identity(conn, seeded):
     a = await orr(conn, seeded, "error codes tickets routine notes", k=40)
     b = await orr(conn, seeded, "error codes tickets routine notes", k=40)
     assert [c.chunk_id for c in a] == [c.chunk_id for c in b] and len(a) >= 3
     ties = [(x, y) for x, y in zip(a, a[1:]) if x.score == y.score]
-    assert ties and all(str(x.chunk_id) < str(y.chunk_id) for x, y in ties)
+    # equal scores order by (document name, content hash), which survives a re-ingest; the random chunk id is the last resort
+    ident = lambda c: (c.doc_name, c.content_hash)  # noqa: E731
+    assert ties and all((ident(x), str(x.chunk_id)) <= (ident(y), str(y.chunk_id)) for x, y in ties)
     assert len(await orr(conn, seeded, "error codes tickets", k=2)) == 2
 
 

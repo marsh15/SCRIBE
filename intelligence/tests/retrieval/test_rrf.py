@@ -25,13 +25,25 @@ def test_hand_computed_example():
     assert out[3].lexical_rank is None and out[3].dense_rank == 3
 
 
-def test_tie_break_lists_then_best_rank_then_id():
-    # X: dense 1 only -> 1/61. Y: lexical 1 only -> 1/61. Equal score, equal lists, equal best rank -> chunk id.
-    out = rrf_fuse({"dense": [cand(9, 1)], "lexical": [cand(3, 1, "lexical")]})
-    assert [r.chunk_id for r in out] == [cid(3), cid(9)]
+def test_tie_break_lists_then_best_rank_then_content():
+    # X: dense 1 only -> 1/61. Y: lexical 1 only -> 1/61. Equal score, equal lists, equal best rank -> the chunk's own
+    # content identity (document name, content hash), never its random id.
+    x, y = cand(9, 1, content="alpha text"), cand(3, 1, "lexical", content="beta text")
+    first = [r.candidate.content for r in rrf_fuse({"dense": [x], "lexical": [y]})]
+    # same chunks, other ids (a re-ingest generates new UUIDs): the order must not change
+    x2, y2 = cand(1000, 1, content="alpha text"), cand(2000, 1, "lexical", content="beta text")
+    assert [r.candidate.content for r in rrf_fuse({"dense": [x2], "lexical": [y2]})] == first
+    x3, y3 = cand(2000, 1, content="alpha text"), cand(1000, 1, "lexical", content="beta text")
+    assert [r.candidate.content for r in rrf_fuse({"dense": [x3], "lexical": [y3]})] == first
     # Z in both at 3 and 3: 2/63=0.03175 beats W at rank 1 only (1/61)
     out = rrf_fuse({"dense": [cand(1, 1), cand(2, 2), cand(5, 3)], "lexical": [cand(6, 1, "lexical"), cand(7, 2, "lexical"), cand(5, 3, "lexical")]})
     assert out[0].chunk_id == cid(5)
+
+
+def test_tie_break_orders_by_document_name_before_content():
+    a = cand(1, 1, content="same words", doc="a.pdf")
+    z = cand(2, 1, "lexical", content="same words", doc="z.pdf")
+    assert [r.candidate.doc_name for r in rrf_fuse({"dense": [z], "lexical": [a]})] == ["a.pdf", "z.pdf"]
 
 
 def test_k_param():

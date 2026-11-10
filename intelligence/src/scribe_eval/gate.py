@@ -54,7 +54,7 @@ from .runs import git_commit
 from .scoring import dataset_version
 
 FORMAT = 1
-DEFAULT_PROFILE = "hybrid-rrf-rerank"
+DEFAULT_PROFILE = "hybrid-rrf-rerank-v2"  # hybrid with the OR-ranked lexical channel; the same profile the app serves (lib/python-retrieval.ts)
 DEFAULT_SPLIT = "validation"
 DEFAULT_DATASET = "benchmarks/datasets/golden-v1"
 DEFAULT_CORPUS = "fixtures/corpus"
