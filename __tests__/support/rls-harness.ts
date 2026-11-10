@@ -15,9 +15,9 @@ export interface Harness {
   lastColumns: string[][];
 }
 
-export function bridgeEnabled() {
-  const appUrl = process.env.CHAT_RLS_DATABASE_URL;
-  const adminUrl = process.env.CHAT_RLS_ADMIN_URL;
+export function bridgeEnabled(prefix = "CHAT_RLS") {
+  const appUrl = process.env[`${prefix}_DATABASE_URL`];
+  const adminUrl = process.env[`${prefix}_ADMIN_URL`];
   const local = (url: string) => ["localhost", "127.0.0.1", "[::1]"].includes(new URL(url).hostname) && new URL(url).pathname.endsWith("_test");
   return !!appUrl && !!adminUrl && local(appUrl) && local(adminUrl) && new URL(appUrl).pathname === new URL(adminUrl).pathname;
 }

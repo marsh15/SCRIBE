@@ -7,14 +7,14 @@ import { bridgeEnabled, runBatch, type Harness } from "./support/rls-harness";
  * function that touches files runs as workspace A and must neither see nor change B's rows. After each call the same
  * physical connection is asked for its context, which must be empty (transaction-local context, no leak into the pool).
  */
-const enabled = bridgeEnabled();
+const enabled = bridgeEnabled("INGEST_RLS");
 const WA = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const WB = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const h = vi.hoisted(() => ({
   user: "user_a",
   workspace: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-  appUrl: process.env.CHAT_RLS_DATABASE_URL ?? "",
-  adminUrl: process.env.CHAT_RLS_ADMIN_URL ?? "",
+  appUrl: process.env.INGEST_RLS_DATABASE_URL ?? "",
+  adminUrl: process.env.INGEST_RLS_ADMIN_URL ?? "",
   contextAfter: "",
   queued: null as Harness["queued"],
   lastColumns: [] as string[][],
