@@ -1,10 +1,9 @@
-import { db, sql } from "@/lib/db-config";
+import { adminSql } from "@/lib/db-config";
 import { scoped } from "@/lib/scoped";
-import * as orm from "drizzle-orm";
 
 /** Make a queued/retrying Source's job due now ("Process now"). Returns true when a job was found. */
 export async function markSourceDue(workspaceId: string, sourceId: number): Promise<boolean> {
-  const [result] = await scoped(workspaceId).batch([db.execute(orm.sql`
+  const rows = await scoped(workspaceId).sql`
     UPDATE "ingestion_jobs" AS job
     SET "next_retry_at" = NULL, "updated_at" = now()
     FROM "files" AS source
@@ -14,8 +13,8 @@ export async function markSourceDue(workspaceId: string, sourceId: number): Prom
       AND source."deleted_at" IS NULL
       AND job."status" IN ('queued', 'retrying')
     RETURNING job."id"
-  `)]);
-  return result.rows.length > 0;
+  `;
+  return rows.length > 0;
 }
 
 /**
@@ -23,7 +22,7 @@ export async function markSourceDue(workspaceId: string, sourceId: number): Prom
  * (stage NULL); chunks and embeddings that already exist are reused by the indexer, not duplicated.
  */
 export async function requeueFailedSource(workspaceId: string, sourceId: number): Promise<boolean> {
-  const requeued = await sql`
+  const requeued = await scoped(workspaceId).sql<{ n: string | number }>`
     WITH source AS (
       UPDATE "files"
       SET "status" = 'queued', "processing_error" = NULL, "updated_at" = now()
@@ -45,13 +44,16 @@ export async function requeueFailedSource(workspaceId: string, sourceId: number)
       RETURNING "id"
     )
     SELECT (SELECT count(*) FROM source) AS n
-  ` as Array<{ n: string | number }>;
+  `;
   return Number(requeued[0]?.n ?? 0) > 0;
 }
 
-/** Retry one failed structural backfill generation without changing the Source's searchable file status. */
+/**
+ * Retry one failed structural backfill generation without changing the Source's searchable file status. Admin-only and
+ * cross-workspace by nature (the migration dashboard lists every user's Sources), so it runs on the owner connection.
+ */
 export async function requeueFailedBackfillJob(sourceId: number): Promise<boolean> {
-  const rows = await sql`
+  const rows = await adminSql`
     UPDATE "ingestion_jobs" AS job
     SET "status" = 'queued', "attempts" = 0, "stage" = NULL, "error_code" = NULL, "last_error" = NULL,
         "next_retry_at" = NULL, "finished_at" = NULL, "lease_token" = NULL, "lease_expires_at" = NULL,

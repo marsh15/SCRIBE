@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/env", () => ({ env: { INGEST_ENGINE: "python" }, requireEnv: () => "blob-token" }));
+vi.mock("@/lib/scoped", async () => (await import("./support/scoped-mock")).scopedFake((text, values) => mocks.sql(text, values)));
 vi.mock("@/lib/db-config", () => ({
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => mocks.sql(strings.join("?"), values),
   db: {},

@@ -12,6 +12,10 @@ os.environ.pop("DATABASE_URL", None)
 os.environ.pop("VOYAGE_API_KEY", None)  # no test may ever reach Voyage live
 
 DATABASE_URL_TEST = os.environ.get("DATABASE_URL_TEST")
+# The Python app under test normally connects with the same superuser URL as the fixtures. scripts/test-python-rls.py sets
+# APP_DATABASE_URL_TEST to a real non-owner login (scribe_app membership, NOBYPASSRLS) so the SAME tests exercise the
+# service under the database's row-level security; fixtures keep seeding and checking with DATABASE_URL_TEST.
+APP_DATABASE_URL_TEST = os.environ.get("APP_DATABASE_URL_TEST") or DATABASE_URL_TEST
 needs_db = pytest.mark.skipif(
     not DATABASE_URL_TEST,
     reason="DATABASE_URL_TEST not set (run `docker compose up -d db` and export "

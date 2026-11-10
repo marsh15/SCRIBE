@@ -1,9 +1,8 @@
-import { db, sql } from "@/lib/db-config";
-import { env } from "@/lib/env";
+import { sql as rawSql } from "drizzle-orm";
+import { db } from "@/lib/db-config";
 import { scoped } from "@/lib/scoped";
+import { env } from "@/lib/env";
 import { deleteBlob } from "@/lib/storage/blob";
-// Namespace import: the drizzle tag is written as orm.sql (same convention as source-detail.ts), so tests that read this file keep finding each template.
-import * as orm from "drizzle-orm";
 
 /**
  * Deleting a Source has two modes (P0-3):
@@ -68,7 +67,7 @@ export async function hardDeleteSource(input: {
 }): Promise<HardDeleteOutcome> {
   const { workspaceId, userId, sourceId } = input;
   const onlySoftDeleted = input.onlySoftDeleted === true;
-  const [foundResult] = await scoped(workspaceId).batch([db.execute(orm.sql`
+  const found = (await scoped(workspaceId).sql`
     SELECT f."storage_url", f."storage_key",
            ARRAY(SELECT v."storage_key" FROM "source_versions" v
                   WHERE v."source_id" = f."id" AND v."workspace_id" = f."workspace_id") AS version_keys
@@ -76,8 +75,7 @@ export async function hardDeleteSource(input: {
      WHERE f."id" = ${sourceId}::int AND f."workspace_id" = ${workspaceId}::uuid
        AND (${userId}::text IS NULL OR f."user_id" = ${userId})
        AND (NOT ${onlySoftDeleted}::boolean OR f."deleted_at" IS NOT NULL)
-  `)]);
-  const found = foundResult.rows as unknown as SourceRefs[];
+  `) as unknown as SourceRefs[];
   const row = found[0];
   if (!row) return "missing";
 
@@ -91,19 +89,19 @@ export async function hardDeleteSource(input: {
         error: error instanceof Error ? error.name : "unknown",
       });
       // Back off like the Python purge (purge_* columns, migration 0016) so a stuck blob cannot starve the batch.
-      await scoped(workspaceId).batch([db.execute(orm.sql`
+      await scoped(workspaceId).sql`
         UPDATE "files"
            SET "purge_attempts" = "purge_attempts" + 1, "purge_error_code" = 'BLOB_DELETE_FAILED',
                "purge_last_error" = 'blob delete failed', "updated_at" = now(),
                "purge_next_retry_at" = now() + make_interval(mins => LEAST(1440, power(2, LEAST("purge_attempts" + 1, 11)))::int)
          WHERE "id" = ${sourceId}::int AND "workspace_id" = ${workspaceId}::uuid
-      `)]);
+      `;
       return "blob_failed";
     }
   }
 
   // ONE statement (data-modifying CTEs commit or roll back together); the files delete cascades to the rest.
-  const [removedResult] = await scoped(workspaceId).batch([db.execute(orm.sql`
+  const removed = (await scoped(workspaceId).sql`
     WITH src AS (
       SELECT "id" FROM "files"
        WHERE "id" = ${sourceId}::int AND "workspace_id" = ${workspaceId}::uuid
@@ -123,8 +121,7 @@ export async function hardDeleteSource(input: {
       RETURNING "id"
     )
     DELETE FROM "files" WHERE "id" IN (SELECT "id" FROM src) RETURNING "id"
-  `)]);
-  const removed = removedResult.rows as unknown as Array<{ id: number }>;
+  `) as unknown as Array<{ id: number }>;
   return removed.length > 0 ? "deleted" : "missing";
 }
 
@@ -141,12 +138,10 @@ export interface LegacyPurgeSummary {
  */
 export async function purgeSoftDeletedSources(limit = LEGACY_PURGE_BATCH): Promise<LegacyPurgeSummary> {
   const batch = Math.max(1, Math.min(limit, 100));
-  const rows = (await sql`
-    SELECT "id", "workspace_id" FROM "files"
-     WHERE "deleted_at" IS NOT NULL AND ("purge_next_retry_at" IS NULL OR "purge_next_retry_at" <= now())
-     ORDER BY "deleted_at" ASC
-     LIMIT ${batch}
-  `) as unknown as Array<{ id: number; workspace_id: string }>;
+  // Listing crosses workspaces, so it goes through the SECURITY DEFINER function (ids only, honours the purge backoff);
+  // every row is then deleted inside its own workspace context.
+  const listed = await db.execute(rawSql`SELECT source_id AS id, workspace_id FROM app_list_purgeable_sources(0, ${batch}::int)`);
+  const rows = listed.rows as Array<{ id: number; workspace_id: string }>;
   let purged = 0;
   let blobFailed = 0;
   for (const row of rows) {

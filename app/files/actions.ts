@@ -17,14 +17,16 @@ import { listSourceVersions } from "@/lib/ingestion/source-versions";
 export async function getFiles() {
     try {
         const { userId, workspaceId } = await resolveWorkspace();
-        const scope = scoped(workspaceId);
-        const [allFiles] = await scope.batch([db.query.files.findMany({
-            where: and(eq(files.userId, userId), eq(files.workspaceId, workspaceId), isNull(files.deletedAt)),
-            orderBy: [desc(files.createdAt)],
-        })]);
+        const ws = scoped(workspaceId);
+        const [allFiles] = await ws.batch([
+            db.query.files.findMany({
+                where: and(eq(files.userId, userId), eq(files.workspaceId, workspaceId), isNull(files.deletedAt)),
+                orderBy: [desc(files.createdAt)],
+            }),
+        ]);
         if (allFiles.length === 0) return allFiles;
         // T18: show stage / attempts / last error code next to each Source.
-        const [jobs] = await scope.batch([db
+        const [jobs] = await ws.batch([db
             .select({
                 fileId: ingestionJobs.fileId,
                 sourceVersionId: ingestionJobs.sourceVersionId,

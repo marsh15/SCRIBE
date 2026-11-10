@@ -8,27 +8,14 @@ const h = vi.hoisted(() => ({
 }));
 vi.mock("pdf-parse", () => ({ default: vi.fn() }));
 vi.mock("@/lib/flags", () => ({ flags: { get billingEnabled() { return h.billingEnabled; } } }));
-vi.mock("@/lib/db-config", async () => {
-  const { PgDialect } = await import("drizzle-orm/pg-core");
-  const dialect = new PgDialect();
-  return {
-    sql: (strings: TemplateStringsArray, ...values: unknown[]) => h.sql(strings.join("?"), values),
-    db: {
-      query: { files: { findFirst: h.findFile } },
-      insert: () => ({ values: (value: unknown) => ({ onConflictDoNothing: () => h.insertUsage(value) }) }),
-      execute: (q: unknown) => ({ q }),
-      // loadVersion runs its SELECT through scoped(): replay the raw statement through the same sql mock.
-      batch: async (items: Array<{ q: unknown }>) => {
-        const out: unknown[] = [];
-        for (const { q } of items) {
-          const { sql: text, params } = dialect.sqlToQuery(q as never);
-          out.push({ rows: text.includes("set_config") ? [] : await h.sql(text.replace(/\$\d+/g, "?"), params) });
-        }
-        return out;
-      },
-    },
-  };
-});
+vi.mock("@/lib/scoped", async () => (await import("./support/scoped-mock")).scopedFake((text, values) => h.sql(text, values)));
+vi.mock("@/lib/db-config", () => ({
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) => h.sql(strings.join("?"), values),
+  db: {
+    query: { files: { findFirst: h.findFile } },
+    insert: () => ({ values: (value: unknown) => ({ onConflictDoNothing: () => h.insertUsage(value) }) }),
+  },
+}));
 vi.mock("@/lib/workspace", () => ({ ensurePersonalWorkspace: async () => "22222222-2222-4222-8222-222222222222" }));
 vi.mock("@/lib/storage/blob", () => ({ deleteBlob: vi.fn(), downloadBlobToBuffer: async () => new Uint8Array([1, 2, 3]) }));
 

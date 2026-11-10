@@ -1,5 +1,6 @@
 """Test-only parameterized PostgreSQL transaction bridge for Drizzle's pg-proxy."""
 import json
+import os
 import re
 import sys
 
@@ -9,6 +10,7 @@ payload = json.load(sys.stdin)
 try:
     with psycopg.connect(payload["dsn"], autocommit=True) as conn:
         results = []
+        columns = []
         error = None
         try:
             with conn.transaction():
@@ -21,11 +23,12 @@ try:
                     with conn.cursor() as cursor:
                         cursor.execute(statement, ordered)
                         results.append(cursor.fetchall() if cursor.description else [])
-        except psycopg.Error:
-            error = "test transaction rejected"
+                        columns.append([d.name for d in cursor.description] if cursor.description else [])
+        except psycopg.Error as exc:
+            error = f"test transaction rejected: {exc}" if os.environ.get("RLS_BRIDGE_DEBUG") else "test transaction rejected"
         # Reuse the same physical connection after commit/rollback: a session-scoped context would leak here.
         context_after = conn.execute("select coalesce(current_setting('app.workspace_id', true), '')").fetchone()[0]
-    print(json.dumps({"results": results, "error": error, "context_after": context_after}, default=str))
+    print(json.dumps({"results": results, "columns": columns, "error": error, "context_after": context_after}, default=str))
 except Exception as exc:
     print(json.dumps({"error": str(exc)}))
     sys.exit(1)

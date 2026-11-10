@@ -1,8 +1,6 @@
 import { generateClientTokenFromReadWriteToken } from "@vercel/blob/client";
 import { createHash } from "node:crypto";
-import { db, sql } from "@/lib/db-config";
-import { scoped } from "@/lib/scoped";
-import * as orm from "drizzle-orm";
+import { dbErrorText, scoped } from "@/lib/scoped";
 import { getUsageSummary, recordUsageEventStrict } from "@/lib/billing/usage";
 import { getUserMaxUploadBytes } from "@/lib/uploads/limits";
 import { deleteBlob, downloadBlobToBuffer } from "@/lib/storage/blob";
@@ -38,7 +36,7 @@ export interface VersionReservation {
 
 /** Postgres raises the codes below from scribe_reserve_source_version (drizzle/0015). */
 function mapReservationError(error: unknown): never {
-  const message = error instanceof Error ? error.message : "";
+  const message = dbErrorText(error);
   if (message.includes("SOURCE_NOT_FOUND")) {
     throw new SourceIntakeError("Source not found", 404, "source_not_found");
   }
@@ -83,7 +81,7 @@ export async function reserveSourceVersion(input: {
 
   let reserved: Array<{ out_version_id: string; out_version_number: number }>;
   try {
-    reserved = (await sql`
+    reserved = (await scoped(workspaceId).sql`
       SELECT * FROM scribe_reserve_source_version(
         ${workspaceId}::uuid, ${input.sourceId}::int, ${input.userId}, ${metadata.type}, ${metadata.size}::bigint)
     `) as typeof reserved;
@@ -116,7 +114,7 @@ export async function reserveSourceVersion(input: {
     return { source: { id: input.sourceId }, version: { id: versionId, versionNumber }, uploadPath, clientToken };
   } catch (error) {
     // the reservation never reached the browser: close it so the history does not show a phantom upload
-    await sql`
+    await scoped(workspaceId).sql`
       UPDATE "source_versions" SET "upload_state" = 'failed'
       WHERE "id" = ${versionId}::uuid AND "workspace_id" = ${workspaceId}::uuid AND "upload_state" = 'uploading'
     `;
@@ -144,14 +142,13 @@ export async function completeSourceVersionUpload(input: {
     },
     {
       loadVersion: async (versionId): Promise<ReservedVersion | null> => {
-        const [result] = await scoped(workspaceId).batch([db.execute(orm.sql`
+        const rows = (await scoped(workspaceId).sql`
           SELECT v."id", v."source_id", v."version_number", v."size_bytes", v."mime_type", v."upload_state", v."storage_key", v."duplicate_of"
           FROM "source_versions" v
           INNER JOIN "files" f ON f."id" = v."source_id"
           WHERE v."id" = ${versionId}::uuid AND v."workspace_id" = ${workspaceId}::uuid
             AND f."user_id" = ${input.payload.userId} AND f."deleted_at" IS NULL
-        `)]);
-        const rows = result.rows as Array<{
+        `) as Array<{
           id: string;
           source_id: number;
           version_number: number;
@@ -176,7 +173,7 @@ export async function completeSourceVersionUpload(input: {
       },
       hashBlob: sha256OfBlob,
       complete: async ({ versionId, url, sha256, size }) => {
-        const rows = (await sql`
+        const rows = (await scoped(workspaceId).sql`
           SELECT * FROM scribe_complete_source_version(
             ${workspaceId}::uuid, ${versionId}::uuid, ${url}, ${sha256}, ${size}::bigint)
         `) as Array<{
@@ -219,7 +216,7 @@ export async function listSourceVersions(
   const window = toWindow(request);
   const fetchLimit = window.limit + 1;
   const offset = window.offset;
-  const rows = (await sql`
+  const rows = (await scoped(workspaceId).sql`
     SELECT v."id", v."version_number", v."size_bytes", v."created_at", v."upload_state", v."duplicate_of",
            d."version_number" AS duplicate_of_number,
            (f."active_version_id" = v."id") AS is_active, (f."desired_version_id" = v."id") AS is_desired,

@@ -37,15 +37,17 @@ export async function GET(
             });
         }
 
-        const [file] = await scoped(workspaceId).batch([db.query.files.findFirst({
-            where: and(eq(files.id, fileId), eq(files.userId, userId), eq(files.workspaceId, workspaceId), isNull(files.deletedAt)),
-            columns: {
-                fileData: true,
-                storageUrl: true,
-                type: true,
-                name: true,
-            },
-        })]);
+        const [file] = await scoped(workspaceId).batch([
+            db.query.files.findFirst({
+                where: and(eq(files.id, fileId), eq(files.userId, userId), eq(files.workspaceId, workspaceId), isNull(files.deletedAt)),
+                columns: {
+                    fileData: true,
+                    storageUrl: true,
+                    type: true,
+                    name: true,
+                },
+            }),
+        ]);
 
         if (!file) {
             return new Response("File not found", { status: 404 });

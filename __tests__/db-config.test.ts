@@ -10,7 +10,7 @@ describe("database configuration", () => {
     vi.stubEnv("NEON_DATABASE_URL", "");
     vi.resetModules();
 
-    const { db, sql } = await import("@/lib/db-config");
+    const { db, adminSql: sql } = await import("@/lib/db-config");
 
     expect(() => db.query).toThrow(/NEON_DATABASE_URL is not configured/);
     expect(() => sql`SELECT 1`).toThrow(/NEON_DATABASE_URL is not configured/);

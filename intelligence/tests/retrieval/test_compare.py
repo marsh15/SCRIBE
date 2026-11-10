@@ -11,7 +11,7 @@ import jwt
 import pytest
 from _db import new_workspace
 from _t13 import API, HR, STEM, conn_for, ingest, seed_sync
-from conftest import DATABASE_URL_TEST, SECRET, needs_db
+from conftest import DATABASE_URL_TEST, SECRET, needs_db, APP_DATABASE_URL_TEST
 from scribe_ingest.embedding import FakeEmbedder
 from scribe_intel import compare_routes
 from scribe_intel.retrieval import compare as cmp
@@ -98,7 +98,7 @@ async def client(monkeypatch):
     from scribe_intel.app import create_app
     from scribe_intel.config import get_settings
 
-    for k, v in dict(DATABASE_URL=DATABASE_URL_TEST or "", SCRIBE_EMBEDDER="fake", SCRIBE_ALLOW_FAKE_EMBEDDINGS="1",
+    for k, v in dict(DATABASE_URL=APP_DATABASE_URL_TEST or "", SCRIBE_EMBEDDER="fake", SCRIBE_ALLOW_FAKE_EMBEDDINGS="1",
                      SCRIBE_RERANKER="fake", SCRIBE_ALLOW_FAKE_RERANKER="1").items():
         monkeypatch.setenv(k, v)
     monkeypatch.delenv("VOYAGE_API_KEY", raising=False)

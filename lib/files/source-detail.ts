@@ -1,8 +1,4 @@
-import { db } from "@/lib/db-config";
 import { scoped } from "@/lib/scoped";
-// Namespace import: the Python integration test extracts the first `sql\`` template after each function name, so the
-// drizzle tag must be written as `orm.sql` (it still contains `sql\``).
-import * as orm from "drizzle-orm";
 import {
   isValidSourceId,
   toPage,
@@ -45,7 +41,7 @@ export interface SourceHeader {
 
 export async function getSourceHeader(workspaceId: string, userId: string, sourceId: number): Promise<SourceHeader | null> {
   if (!isValidSourceId(sourceId)) return null;
-  const [result] = await scoped(workspaceId).batch([db.execute(orm.sql`
+  const rows = (await scoped(workspaceId).sql`
     SELECT f."id", f."name", f."type", f."size", f."status", f."processing_error", f."created_at",
            f."reupload_required_at", f."reupload_reason", f."active_version_id",
            av."version_number" AS active_version_number
@@ -53,8 +49,7 @@ export async function getSourceHeader(workspaceId: string, userId: string, sourc
     LEFT JOIN "source_versions" av ON av."id" = f."active_version_id" AND av."workspace_id" = f."workspace_id"
     WHERE f."id" = ${sourceId}::int AND f."workspace_id" = ${workspaceId}::uuid
       AND f."user_id" = ${userId} AND f."deleted_at" IS NULL
-  `)]);
-  const rows = result.rows as Row[];
+  `) as Row[];
   const r = rows[0];
   if (!r) return null;
   return {
@@ -85,7 +80,7 @@ export async function listStructure(
   if (!header) return null;
   const fetchLimit = window.limit + 1;
   const offset = window.offset;
-  const [result] = await scoped(workspaceId).batch([db.execute(orm.sql`
+  const rows = (await scoped(workspaceId).sql`
     SELECT b."id", b."block_index", b."type", b."heading_path", b."page", b."ocr", b."row_number",
            b."char_start", b."char_end", left(b."text", 240) AS preview, length(b."text") AS text_length
     FROM "files" f
@@ -95,8 +90,7 @@ export async function listStructure(
       AND f."user_id" = ${userId} AND f."deleted_at" IS NULL
     ORDER BY b."block_index"
     LIMIT ${fetchLimit}::int OFFSET ${offset}::int
-  `)]);
-  const rows = result.rows as Row[];
+  `) as Row[];
   return toPage(
     rows.map((r) => ({
       id: String(r.id),
@@ -144,7 +138,7 @@ export async function listChunks(
   const kind: ChunkKind = request?.kind === "parent" || request?.kind === "child" ? request.kind : "all";
   const fetchLimit = window.limit + 1;
   const offset = window.offset;
-  const [result] = await scoped(workspaceId).batch([db.execute(orm.sql`
+  const rows = (await scoped(workspaceId).sql`
     SELECT c."id", c."parent_id", c."chunk_index", (c."parent_id" IS NULL) AS is_parent, c."token_count",
            c."heading_text", left(c."content", 400) AS excerpt, length(c."content") AS content_length,
            CASE WHEN c."parent_id" IS NULL
@@ -172,8 +166,7 @@ export async function listChunks(
       AND (${kind}::text = 'all' OR ((${kind}::text = 'parent') = (c."parent_id" IS NULL)))
     ORDER BY c."chunk_index"
     LIMIT ${fetchLimit}::int OFFSET ${offset}::int
-  `)]);
-  const rows = result.rows as Row[];
+  `) as Row[];
   return toPage(
     rows.map((r) => ({
       id: String(r.id),
@@ -220,7 +213,7 @@ export async function listIngestionHistory(
   if (!header) return null;
   const fetchLimit = window.limit + 1;
   const offset = window.offset;
-  const [result] = await scoped(workspaceId).batch([db.execute(orm.sql`
+  const rows = (await scoped(workspaceId).sql`
     SELECT j."id", j."source_version_id", v."version_number", j."status", j."stage", j."attempts", j."error_code",
            j."last_error", j."next_retry_at", j."started_at", j."finished_at", j."created_at", j."updated_at"
     FROM "files" f
@@ -230,8 +223,7 @@ export async function listIngestionHistory(
       AND f."user_id" = ${userId} AND f."deleted_at" IS NULL
     ORDER BY j."created_at" DESC, j."id" DESC
     LIMIT ${fetchLimit}::int OFFSET ${offset}::int
-  `)]);
-  const rows = result.rows as Row[];
+  `) as Row[];
   return toPage(
     rows.map((r) => ({
       id: Number(r.id),
@@ -260,7 +252,7 @@ export interface OcrSummary {
 
 export async function getOcrSummary(workspaceId: string, userId: string, sourceId: number): Promise<OcrSummary | null> {
   if (!isValidSourceId(sourceId)) return null;
-  const [result] = await scoped(workspaceId).batch([db.execute(orm.sql`
+  const rows = (await scoped(workspaceId).sql`
     SELECT
       (SELECT count(*) FROM "source_version_ocr_pages" o
         WHERE o."source_version_id" = f."active_version_id" AND o."workspace_id" = f."workspace_id") AS ocr_pages_done,
@@ -271,8 +263,7 @@ export async function getOcrSummary(workspaceId: string, userId: string, sourceI
     FROM "files" f
     WHERE f."id" = ${sourceId}::int AND f."workspace_id" = ${workspaceId}::uuid
       AND f."user_id" = ${userId} AND f."deleted_at" IS NULL
-  `)]);
-  const rows = result.rows as Row[];
+  `) as Row[];
   const r = rows[0];
   if (!r) return null;
   return { pages: Math.max(Number(r.ocr_pages_done ?? 0), Number(r.ocr_block_pages ?? 0)), blocks: Number(r.ocr_blocks ?? 0) };
@@ -300,7 +291,7 @@ export async function resolveVersionBlob(
 ): Promise<ResolvedBlob | null> {
   if (!isValidSourceId(sourceId)) return null;
   if (versionNumber !== null && !isValidSourceId(versionNumber)) return null;
-  const [result] = await scoped(workspaceId).batch([db.execute(orm.sql`
+  const rows = (await scoped(workspaceId).sql`
     SELECT f."name", f."type", f."storage_url", v."version_number", v."mime_type", v."upload_state",
            b."storage_key" AS blob_key, b."version_number" AS blob_version_number
     FROM "files" f
@@ -310,8 +301,7 @@ export async function resolveVersionBlob(
     LEFT JOIN "source_versions" b ON b."id" = COALESCE(v."duplicate_of", v."id") AND b."workspace_id" = f."workspace_id"
     WHERE f."id" = ${sourceId}::int AND f."workspace_id" = ${workspaceId}::uuid
       AND f."user_id" = ${userId} AND f."deleted_at" IS NULL
-  `)]);
-  const rows = result.rows as Row[];
+  `) as Row[];
   const r = rows[0];
   if (!r || r.upload_state !== "stored" || r.blob_version_number === null || r.blob_version_number === undefined) return null;
   const key = typeof r.blob_key === "string" ? r.blob_key : "";

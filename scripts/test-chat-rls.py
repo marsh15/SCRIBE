@@ -16,6 +16,7 @@ from psycopg import sql
 SUITES = [
     ("__tests__/chat-rls-login.db.test.ts", "CHAT_RLS"),
     ("__tests__/files-rls-login.db.test.ts", "FILES_RLS"),
+    ("__tests__/files-ingestion-rls-login.db.test.ts", "INGEST_RLS"),  # versions, uploads, queue, purge, view, delete
 ]
 
 

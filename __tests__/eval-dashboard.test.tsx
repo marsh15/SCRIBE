@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const m = vi.hoisted(() => ({ sql: vi.fn(), userId: vi.fn(), notFound: vi.fn(() => { throw new Error("NEXT_NOT_FOUND"); }) }));
 vi.mock("@/lib/db-config", () => ({
-  sql: (strings: TemplateStringsArray, ...values: unknown[]) => m.sql(strings.join("?"), values),
+  adminSql: (strings: TemplateStringsArray, ...values: unknown[]) => m.sql(strings.join("?"), values),
   db: {},
 }));
 vi.mock("@/lib/auth", () => ({ getUserId: m.userId }));

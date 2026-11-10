@@ -1,6 +1,7 @@
 import { generateClientTokenFromReadWriteToken } from "@vercel/blob/client";
 import { and, eq, isNull } from "drizzle-orm";
-import { db, sql } from "@/lib/db-config";
+import { adminSql, db } from "@/lib/db-config";
+import { scoped, type RowTag } from "@/lib/scoped";
 import { documents, files, ingestionJobs, type SourceStatus } from "@/lib/db-schema";
 import { getUsageSummary, recordUsageEvent, recordUsageEventStrict } from "@/lib/billing/usage";
 import { getUserMaxUploadBytes } from "@/lib/uploads/limits";
@@ -78,18 +79,20 @@ export async function reserveSourceUpload(input: {
 
   const workspaceId = await ensurePersonalWorkspace(input.userId);
 
-  const [source] = await db
-    .insert(files)
-    .values({
-      workspaceId,
-      name: metadata.name,
-      size: metadata.size,
-      type: metadata.type,
-      userId: input.userId,
-      status: "uploading",
-      updatedAt: new Date(),
-    })
-    .returning();
+  const [[source]] = await scoped(workspaceId).batch([
+    db
+      .insert(files)
+      .values({
+        workspaceId,
+        name: metadata.name,
+        size: metadata.size,
+        type: metadata.type,
+        userId: input.userId,
+        status: "uploading",
+        updatedAt: new Date(),
+      })
+      .returning(),
+  ]);
 
   const uploadPath = sourceUploadPath(input.userId, source.id, metadata.name);
 
@@ -123,14 +126,16 @@ export async function reserveSourceUpload(input: {
       clientToken,
     };
   } catch (error) {
-    await db
-      .update(files)
-      .set({
-        status: "failed",
-        processingError: "Could not prepare private upload",
-        updatedAt: new Date(),
-      })
-      .where(eq(files.id, source.id));
+    await scoped(workspaceId).batch([
+      db
+        .update(files)
+        .set({
+          status: "failed",
+          processingError: "Could not prepare private upload",
+          updatedAt: new Date(),
+        })
+        .where(and(eq(files.id, source.id), eq(files.workspaceId, workspaceId))),
+    ]);
     throw error;
   }
 }
@@ -147,18 +152,22 @@ export async function completeSourceUpload(input: {
       blob: input.blob,
     },
     {
-      loadSource: async (sourceId, userId) =>
-        (await db.query.files.findFirst({
-          where: and(
-            eq(files.id, sourceId),
-            eq(files.userId, userId),
-            eq(files.workspaceId, workspaceId),
-            isNull(files.deletedAt)
-          ),
-        })) ?? null,
+      loadSource: async (sourceId, userId) => {
+        const [source] = await scoped(workspaceId).batch([
+          db.query.files.findFirst({
+            where: and(
+              eq(files.id, sourceId),
+              eq(files.userId, userId),
+              eq(files.workspaceId, workspaceId),
+              isNull(files.deletedAt)
+            ),
+          }),
+        ]);
+        return source ?? null;
+      },
       deleteBlob,
       transitionToQueued: async (source, blob) => {
-        const transitioned = await sql`
+        const transitioned = await scoped(workspaceId).sql`
           WITH source AS (
             UPDATE "files"
             SET
@@ -211,9 +220,14 @@ function dataUriToBuffer(dataUri: string) {
 async function processClaimedSource(job: {
   id: number;
   fileId: number;
+  workspaceId: string;
   attempts: number;
 }) {
-  const source = await db.query.files.findFirst({ where: eq(files.id, job.fileId) });
+  // The claim is the one cross-workspace step; everything about the Source itself runs inside its workspace.
+  const ws = scoped(job.workspaceId);
+  const [source] = await ws.batch([
+    db.query.files.findFirst({ where: and(eq(files.id, job.fileId), eq(files.workspaceId, job.workspaceId)) }),
+  ]);
   if (!source) {
     console.warn("[SourceIntake] claimed Source no longer exists", {
       sourceId: job.fileId,
@@ -226,7 +240,7 @@ async function processClaimedSource(job: {
     if (env.INGEST_ENGINE === "python") {
       // Python owns parse/chunk/embed/activate and has already set the Source to ready.
       const indexed = await ingestSourceViaPython(source);
-      await db.batch([
+      await ws.batch([
         db.update(files).set({ updatedAt: new Date() }).where(eq(files.id, source.id)),
         db
           .update(ingestionJobs)
@@ -302,7 +316,7 @@ async function processClaimedSource(job: {
         })
         .where(eq(ingestionJobs.id, job.id))
     );
-    await db.batch(queries as [any]);
+    await ws.batch(queries as [any]);
 
     await recordUsageEvent({
       userId: source.userId,
@@ -327,7 +341,7 @@ async function processClaimedSource(job: {
       ? new Date(Date.now() + retryDelayMinutes(job.attempts) * 60 * 1000)
       : null;
 
-    await db.batch([
+    await ws.batch([
       db
         .update(files)
         .set({
@@ -372,7 +386,14 @@ export async function runQueuedSourceIntake(
   const scopedWorkspaceId = scope.workspaceId ?? null;
   const scopedSourceId = scope.sourceId ?? null;
 
-  const staleUploads = await sql`
+  // A request from a signed-in user is confined to their workspace. The scope-less run (the cron worker) is the legacy
+  // engine's queue boundary: it claims across workspaces, so it uses the owner connection. Python-engine queueing goes
+  // through the SECURITY DEFINER functions instead (drizzle/0013).
+  const adminRows: RowTag = async <T>(strings: TemplateStringsArray, ...values: unknown[]) =>
+    (await adminSql(strings, ...values)) as unknown as T[];
+  const query: RowTag = scope.workspaceId ? scoped(scope.workspaceId).sql : adminRows;
+
+  const staleUploads = await query`
     UPDATE "files"
     SET
       "status" = 'failed',
@@ -386,7 +407,7 @@ export async function runQueuedSourceIntake(
     RETURNING "id"
   `;
 
-  const abandonedLegacySources = await sql`
+  const abandonedLegacySources = await query`
     UPDATE "files" AS source
     SET
       "status" = 'failed',
@@ -405,7 +426,7 @@ export async function runQueuedSourceIntake(
     RETURNING source."id"
   `;
 
-  const recovered = await sql`
+  const recovered = await query`
     WITH recovered_jobs AS (
       UPDATE "ingestion_jobs" AS jobs
       SET
@@ -431,7 +452,7 @@ export async function runQueuedSourceIntake(
     RETURNING "id"
   `;
 
-  const claimed = await sql`
+  const claimed = await query<{ id: number; file_id: number; workspace_id: string; attempts: number }>`
     WITH candidates AS (
       SELECT jobs."id"
       FROM "ingestion_jobs" AS jobs
@@ -455,19 +476,23 @@ export async function runQueuedSourceIntake(
       "updated_at" = now()
     FROM candidates
     WHERE jobs."id" = candidates."id"
-    RETURNING jobs."id", jobs."file_id", jobs."attempts"
-  ` as Array<{ id: number; file_id: number; attempts: number }>;
+    RETURNING jobs."id", jobs."file_id", jobs."attempts",
+      (SELECT f."workspace_id" FROM "files" AS f WHERE f."id" = jobs."file_id") AS workspace_id
+  `;
 
   const results = [];
   for (const job of claimed) {
-    await db
-      .update(files)
-      .set({ status: "processing", processingError: null, updatedAt: new Date() })
-      .where(eq(files.id, job.file_id));
+    await scoped(job.workspace_id).batch([
+      db
+        .update(files)
+        .set({ status: "processing", processingError: null, updatedAt: new Date() })
+        .where(and(eq(files.id, job.file_id), eq(files.workspaceId, job.workspace_id))),
+    ]);
     results.push(
       await processClaimedSource({
         id: job.id,
         fileId: job.file_id,
+        workspaceId: job.workspace_id,
         attempts: job.attempts,
       })
     );
@@ -510,9 +535,9 @@ export async function deleteSource(userId: string, sourceId: number) {
     if (outcome === "missing") return false;
     // blob_failed: hide it now, let the sweep finish the job
   }
-  const rows = (await sql`
+  const rows = await scoped(workspaceId).sql<{ deleted: boolean }>`
     SELECT scribe_soft_delete_source(${workspaceId}::uuid, ${userId}, ${sourceId}::int) AS deleted
-  `) as Array<{ deleted: boolean }>;
+  `;
   const deleted = rows[0]?.deleted === true;
   if (deleted) console.info("[SourceIntake] soft-deleted", { sourceId });
   return deleted;

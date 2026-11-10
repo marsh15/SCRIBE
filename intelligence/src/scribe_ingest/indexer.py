@@ -486,15 +486,19 @@ async def embed_generation(
     if embedder.dimensions != profile.embedding_dims:
         raise IndexerError("PROFILE_MISMATCH",
                            f"embedder dims {embedder.dimensions} != profile dims {profile.embedding_dims}")
-    cur = await conn.execute(
-        "select c.id, c.content, c.heading_text, c.token_count from chunks c where c.generation_id = %s and c.workspace_id = %s "
-        "and c.parent_id is not null and not exists (select 1 from chunk_embeddings_1536 e where e.chunk_id = c.id) "
-        "order by c.chunk_index", (generation_id, workspace_id))
-    todo = await cur.fetchall()
-    cur = await conn.execute(
-        "select count(*) from chunk_embeddings_1536 e join chunks c on c.id = e.chunk_id "
-        "where c.generation_id = %s and c.workspace_id = %s", (generation_id, workspace_id))
-    already = (await cur.fetchone())[0]  # batches are committed in order, so this keeps batch numbers stable on resume
+    # Read inside a transaction that sets the workspace context: as the restricted runtime role (RLS) a bare read here sees
+    # no rows, "nothing to embed", and the generation would silently stay BUILDING.
+    async with conn.transaction():
+        await _begin(conn, workspace_id)
+        cur = await conn.execute(
+            "select c.id, c.content, c.heading_text, c.token_count from chunks c where c.generation_id = %s and c.workspace_id = %s "
+            "and c.parent_id is not null and not exists (select 1 from chunk_embeddings_1536 e where e.chunk_id = c.id) "
+            "order by c.chunk_index", (generation_id, workspace_id))
+        todo = await cur.fetchall()
+        cur = await conn.execute(
+            "select count(*) from chunk_embeddings_1536 e join chunks c on c.id = e.chunk_id "
+            "where c.generation_id = %s and c.workspace_id = %s", (generation_id, workspace_id))
+        already = (await cur.fetchone())[0]  # batches are committed in order, so this keeps batch numbers stable on resume
     for i in range(0, len(todo), batch_size):
         if deadline is not None and time.monotonic() > deadline:
             raise IndexerError("TIME_BUDGET", "time budget exhausted; retry to resume", retryable=True)
@@ -645,14 +649,16 @@ async def build_generation(
     res.generation_id = gen_id
     try:
         if prior == "ACTIVE":
-            cur = await conn.execute(
-                "select expected_chunks, embedded_chunks from index_generations where id=%s and workspace_id=%s",
-                (gen_id, workspace_id))
-            res.expected, res.embedded = await cur.fetchone()
-            cur = await conn.execute(
-                "select count(*) filter (where parent_id is null), count(*) filter (where parent_id is not null) "
-                "from chunks where generation_id=%s and workspace_id=%s", (gen_id, workspace_id))
-            res.parents, res.children = await cur.fetchone()
+            async with conn.transaction():
+                await _begin(conn, workspace_id)
+                cur = await conn.execute(
+                    "select expected_chunks, embedded_chunks from index_generations where id=%s and workspace_id=%s",
+                    (gen_id, workspace_id))
+                res.expected, res.embedded = await cur.fetchone()
+                cur = await conn.execute(
+                    "select count(*) filter (where parent_id is null), count(*) filter (where parent_id is not null) "
+                    "from chunks where generation_id=%s and workspace_id=%s", (gen_id, workspace_id))
+                res.parents, res.children = await cur.fetchone()
             res.status = "ACTIVE"
             return res
         t = time.monotonic()

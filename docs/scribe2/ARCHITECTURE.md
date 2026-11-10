@@ -45,7 +45,7 @@ Eval, perf and the regression gate run from the CLI (locally or in GitHub Action
 - **Evaluation:** `eval_runs`, `eval_results` (global, read by the `/eval` dashboard for users with an eval workspace).
 - Billing tables stay keyed by user.
 
-Migrations are `drizzle/0000`-`0019`. Only `0010` onward are replayable on an empty database. `scripts/apply-migrations.sh` builds a schema from `lib/db-schema.ts` via `drizzle-kit export` and replays `0010+` (ADR-0003). The deferred, guarded, manual SQL is `drizzle/deferred/force_rls.sql`, `drizzle/deferred/retire_legacy.sql`.
+Migrations are `drizzle/0000`-`0020`. Only `0010` onward are replayable on an empty database. `scripts/apply-migrations.sh` builds a schema from `lib/db-schema.ts` via `drizzle-kit export` and replays `0010+` (ADR-0003). The deferred, guarded, manual SQL is `drizzle/deferred/force_rls.sql`, `drizzle/deferred/retire_legacy.sql`.
 
 ## 4. Ingestion step machine (Design §B3, ADR-0010, ADR-0011)
 
@@ -89,7 +89,7 @@ Chat uses `RETRIEVAL_ENGINE=python|legacy` (default `legacy`, with no silent fal
 
 - Migration `0013` enables RLS (not FORCEd) on workspace tables, creates `scribe_app` (NOBYPASSRLS) and `scribe_definer`, and the `app_*` / `scribe_*` SECURITY DEFINER functions.
 - Every query also filters by `workspace_id` explicitly, and Python sets `app.workspace_id` per transaction. Cross-tenant behavior is tested in SQL and for every route (`__tests__/security/`, `intelligence/tests/security/`).
-- **FORCE RLS is deferred** (`drizzle/deferred/force_rls.sql`): the owner role still bypasses policies, so isolation for that role rests on application filters. Chat CRUD, message persistence, legacy retrieval and trace reads/writes now use transaction-local `scoped()` batches. A local real-login integration test covers these exported functions and context cleanup on the same connection after commit/rollback. File, ingestion, eval and global admin/service paths remain before changing the runtime DSN. See `threat-model.md` R1/R2 and `HANDOVER.md` §8. **The runtime role has not been switched or verified on Neon.**
+- **FORCE RLS is deferred** (`drizzle/deferred/force_rls.sql`): the owner role still bypasses policies, so isolation for that role rests on application filters. Chat, file, ingestion, version and queue code use transaction-local `scoped()` statements (`lib/scoped.ts`), and two local real-login suites (`scripts/test-chat-rls.py` for TypeScript, `scripts/test-python-rls.py` for the Python service) cover them, including guessed ids from another workspace, revoked privileges and context cleanup on the same connection. Work that cannot run inside one workspace uses a separate owner connection (`adminSql`/`adminDb`, env `NEON_ADMIN_DATABASE_URL`, falling back to `NEON_DATABASE_URL`) and only the modules listed in `__tests__/security/db-boundary.test.ts` may import it: admin analytics, the admin migration route, runtime schema repair, eval queries, the admin backfill retry and the legacy-engine cron worker. Cross-workspace purge listing uses the existing `app_list_purgeable_sources` function. See `threat-model.md` R1/R2 and `HANDOVER.md` §8. **The runtime role has not been switched or verified on Neon.**
 
 Answer inspection uses the tool results attached to that message, including every search and its recorded query, ranks, stage timings and answerability result. `GET /api/retrieval-traces/[id]` calls Python `POST /retrieval/trace` with the dedicated `retrieval_trace_read` scope. Both boundaries enforce the authenticated workspace, bound candidate results to 100, omit document content and redact deleted/purged source identities. Stored creation time is not a retrieval snapshot cutoff. The current personal-workspace model authorizes trace reads by workspace; this is not a new chat-sharing permission model.
 
@@ -119,7 +119,7 @@ For local and CI use there are `docker-compose.yml` (pgvector pg17 on port 54329
 ## 10. Limits and known gaps
 
 - Hobby limits drive the design (Design §A2): resumable steps of at most 300 s, evaluation outside Vercel.
-- Only active versions are searched (D22); no shared workspaces or roles; no OpenTelemetry; lexical search is Postgres FTS, not BM25 (ADR-0012).
+- Only active versions are searched (D22); no shared workspaces or roles; no OpenTelemetry; lexical search is Postgres FTS, not BM25 (ADR-0005).
 - Retrieval profile choice and `tau` are not tuned (T17 is partial: profiles A-C ran on dev and validation, see `benchmarks/m1-prelim.md`; D and E need a Voyage key), and which profile is best is **not measured**. `benchmarks/final.md` is a placeholder.
 - The golden set (200 cases, 80 of them machine-drafted and unreviewed) has not been human-reviewed. The retrieval gate has no real cache or baseline and is **not armed** (`release-rules.md`).
 - Claim verification and reranking have only run against fakes or mock transports; Voyage has never been called. Live Gemini was used for the Scribe 1.0 baseline and the preliminary profile A-C run (embeddings and OCR of the scanned PDF), on a local database, not Neon.

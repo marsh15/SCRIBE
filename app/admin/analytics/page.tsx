@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { sql } from "drizzle-orm";
 import { isAdmin } from "@/lib/auth";
-import { db } from "@/lib/db-config";
+// ROLE: platform-wide counts across every workspace: owner connection (see __tests__/security/db-boundary.test.ts).
+import { adminDb as db } from "@/lib/db-config";
 import { chats, files, ingestionJobs, subscriptions } from "@/lib/db-schema";
 
 export const dynamic = "force-dynamic";

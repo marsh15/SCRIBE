@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({ rows: [] as unknown[], query: vi.fn() }));
 vi.mock("@/lib/db-config", () => ({
-  sql: (strings: TemplateStringsArray, ...values: unknown[]) => h.query(strings.join("?"), values),
+  adminSql: (strings: TemplateStringsArray, ...values: unknown[]) => h.query(strings.join("?"), values),
 }));
 
 import { requeueFailedBackfillJob } from "@/lib/ingestion/python-queue";

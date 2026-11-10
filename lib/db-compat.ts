@@ -1,4 +1,8 @@
-import { sql } from "@/lib/db-config";
+import { adminSql as sql } from "@/lib/db-config";
+
+// ROLE: this repairs the schema (ALTER TABLE / CREATE INDEX), which the runtime role scribe_app may not do, so it uses the
+// owner connection. It only acts on a legacy database that lacks documents.chunk_index; where migrations ran it is a
+// single catalog read.
 
 let documentsChunkIndexSchemaPromise: Promise<void> | null = null;
 

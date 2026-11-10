@@ -7,7 +7,7 @@ import httpx
 import jwt
 import pytest
 from _db import aconnect, doc, new_file, new_workspace
-from conftest import DATABASE_URL_TEST, SECRET, needs_db
+from conftest import DATABASE_URL_TEST, SECRET, needs_db, APP_DATABASE_URL_TEST
 
 pytestmark = needs_db
 
@@ -24,7 +24,7 @@ async def client(monkeypatch):
     from scribe_intel.app import create_app
     from scribe_intel.config import get_settings
 
-    monkeypatch.setenv("DATABASE_URL", DATABASE_URL_TEST)
+    monkeypatch.setenv("DATABASE_URL", APP_DATABASE_URL_TEST)
     monkeypatch.setenv("SCRIBE_EMBEDDER", "fake")
     monkeypatch.setenv("SCRIBE_ALLOW_FAKE_EMBEDDINGS", "1")
     get_settings.cache_clear()

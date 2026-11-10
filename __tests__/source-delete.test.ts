@@ -4,30 +4,15 @@ const mocks = vi.hoisted(() => ({
   sql: vi.fn(),
   deleteBlob: vi.fn(),
   dbDelete: vi.fn(),
+  dbExecute: vi.fn(),
   env: { INGEST_ENGINE: "python", INTERNAL_SERVICE_SECRET: "secret" } as Record<string, string | undefined>,
 }));
 
-vi.mock("@/lib/db-config", async () => {
-  const { PgDialect } = await import("drizzle-orm/pg-core");
-  const dialect = new PgDialect();
-  return {
-    sql: (strings: TemplateStringsArray, ...values: unknown[]) => mocks.sql(strings.join("?"), values),
-    db: {
-      delete: mocks.dbDelete,
-      query: { files: { findFirst: vi.fn() } },
-      execute: (q: unknown) => ({ q }),
-      // The migrated hardDeleteSource runs each statement in one scoped() batch: replay it through the same sql mock.
-      batch: async (items: Array<{ q: unknown }>) => {
-        const out: unknown[] = [];
-        for (const { q } of items) {
-          const { sql: text, params } = dialect.sqlToQuery(q as never);
-          out.push({ rows: text.includes("set_config") ? [] : await mocks.sql(text.replace(/\$\d+/g, "?"), params) });
-        }
-        return out;
-      },
-    },
-  };
-});
+vi.mock("@/lib/scoped", async () => (await import("./support/scoped-mock")).scopedFake((text, values, ws) => mocks.sql(text, values, ws)));
+vi.mock("@/lib/db-config", () => ({
+  adminSql: vi.fn(),
+  db: { delete: mocks.dbDelete, execute: mocks.dbExecute, query: { files: { findFirst: vi.fn() } } },
+}));
 vi.mock("@/lib/env", () => ({ env: mocks.env, requireEnv: () => "blob-token" }));
 vi.mock("@/lib/storage/blob", () => ({ deleteBlob: mocks.deleteBlob, downloadBlobToBuffer: vi.fn() }));
 vi.mock("@/lib/workspace", () => ({
@@ -44,6 +29,9 @@ vi.mock("@vercel/blob/client", () => ({ generateClientTokenFromReadWriteToken: v
 
 import { deleteSource } from "@/lib/ingestion/source-intake";
 import { purgeSoftDeletedSources } from "@/lib/ingestion/source-delete";
+
+const W1 = "11111111-1111-4111-8111-111111111111";
+const W2 = "33333333-3333-4333-8333-333333333333";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -134,24 +122,25 @@ describe("deleteSource, legacy engine or no internal secret (P0-3 hard delete)",
 
 describe("purgeSoftDeletedSources (cleanup of rows left by the interim soft delete)", () => {
   it("hard-purges soft-deleted rows only, in a bounded batch, and is idempotent", async () => {
+    mocks.dbExecute.mockResolvedValueOnce({ rows: [{ id: 7, workspace_id: W1 }, { id: 8, workspace_id: W2 }] });
     mocks.sql
-      .mockResolvedValueOnce([{ id: 7, workspace_id: "11111111-1111-4111-8111-111111111111" }, { id: 8, workspace_id: "22222222-2222-4222-8222-222222222222" }])
       .mockResolvedValueOnce([{ storage_url: null, storage_key: "k7", version_keys: null }])
       .mockResolvedValueOnce([{ id: 7 }])
       .mockResolvedValueOnce([]); // second row vanished concurrently: "missing", not an error
     expect(await purgeSoftDeletedSources(5)).toEqual({ listed: 2, purged: 1, blobFailed: 0 });
-    const list = mocks.sql.mock.calls[0];
-    expect(list[0]).toContain('"deleted_at" IS NOT NULL');
-    expect(list[0]).toContain("LIMIT");
-    expect(list[1]).toContain(5);
+    // the cross-workspace listing is the SECURITY DEFINER function (ids only, honours the purge backoff), bounded by the batch
+    const listing = JSON.stringify(mocks.dbExecute.mock.calls[0][0]);
+    expect(listing).toContain("app_list_purgeable_sources(0,");
+    expect(listing).toContain("5");
     expect(mocks.deleteBlob).toHaveBeenCalledWith("k7");
-    // the per-row statements only touch rows that are still soft-deleted
+    // the per-row statements only touch rows that are still soft-deleted, each inside its own row's workspace
+    expect(mocks.sql.mock.calls[0][1]).toContain(true);
     expect(mocks.sql.mock.calls[1][1]).toContain(true);
-    expect(mocks.sql.mock.calls[2][1]).toContain(true);
+    expect(mocks.sql.mock.calls.map((c) => c[2])).toEqual([W1, W1, W2]);
   });
 
   it("with nothing left it does nothing", async () => {
-    mocks.sql.mockResolvedValueOnce([]);
+    mocks.dbExecute.mockResolvedValueOnce({ rows: [] });
     expect(await purgeSoftDeletedSources()).toEqual({ listed: 0, purged: 0, blobFailed: 0 });
     expect(mocks.deleteBlob).not.toHaveBeenCalled();
   });
