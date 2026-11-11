@@ -1,0 +1,27 @@
+{
+ "version": "golden-v1",
+ "seed": 20260101,
+ "split_ratios": {
+  "dev": 0.4,
+  "validation": 0.2,
+  "test": 0.4
+ },
+ "categories": [
+  "single_fact",
+  "table_lookup",
+  "identifier_exact",
+  "numeric_reasoning",
+  "cross_document",
+  "version_conflict",
+  "exception_qualified",
+  "paraphrase_semantic",
+  "disambiguation",
+  "unanswerable"
+ ],
+ "review_status": "NOT YET HUMAN-REVIEWED (120 original cases) and NOT REVIEWED AT ALL (80 machine-drafted T28 cases, reviewed=false)",
+ "cases": 200,
+ "original_cases": 120,
+ "t28_machine_drafted_cases": 80,
+ "t28_origin": "machine-drafted-t28",
+ "t28_split_note": "The 80 T28 cases were split with scribe-eval assign-splits --only-origin machine-drafted-t28 (same seed, stratified per category); the 120 original cases kept their splits."
+}
