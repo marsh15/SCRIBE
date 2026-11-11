@@ -21,7 +21,7 @@ from scribe_eval.review.source import Corpus, locate
 from scribe_eval.review.store import ids_from_markdown, ids_from_order_file, split_first_order
 
 REPO = Path(__file__).resolve().parents[3]
-GOLDEN = REPO / "benchmarks" / "datasets" / "golden-v1"
+GOLDEN = Path(__file__).resolve().parent / "golden_v1_frozen"  # frozen pre-review copy; see FROZEN.md there
 CORPUS = REPO / "fixtures" / "corpus"
 SAMPLE = ["sf-01", "sf-02", "sf-03", "tb-05", "dm-01", "ua-01", "cd-13"]  # pdf, txt, md, docx, scanned pdf, unanswerable, T28
 

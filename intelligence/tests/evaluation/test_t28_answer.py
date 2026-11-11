@@ -18,7 +18,7 @@ from scribe_eval.splits import assign_splits
 from scribe_eval.validate import validate_dataset
 
 REPO = Path(__file__).resolve().parents[3]
-DATASET = REPO / "benchmarks" / "datasets" / "golden-v1"
+DATASET = Path(__file__).resolve().parent / "golden_v1_frozen"  # frozen pre-review copy; see FROZEN.md there
 CORPUS = REPO / "fixtures" / "corpus"
 NEW = "machine-drafted-t28"
 
