@@ -9,12 +9,12 @@ Legend: **[repo]** touches only this machine and git. **[PAID]** spends provider
 OrbStack/Docker died once when the disk reached 100%; the test database vanishes with it. Keep at least 5 GB free (`df -h /System/Volumes/Data`). Start the database with `docker compose up -d db` (OrbStack: `open -a OrbStack` first).
 Success: `docker ps` lists `scribe-db-1` as healthy.
 
-## 1. Review and merge the pull requests [repo]
+## 1. Review and merge the pull requests [repo] (DONE: #29-#38 merged by 2026-11-11)
 
 Open each PR listed in [FINISH_PLAN.md](FINISH_PLAN.md), read the description, wait for GitHub CI to be green, merge in the order listed there. PRs that add a migration are marked **HOLD**; none exists at the moment.
 Success: `main` has all of them and CI on `main` is green.
 
-## 2. Review the golden set [repo]
+## 2. Review the golden set [repo] (PARTIAL: the 38 validation cases were reviewed in PR #38; the 80 dev and 80 test cases are still unreviewed, which step 15 needs)
 
 Follow [REVIEW_CHECKLIST.md](REVIEW_CHECKLIST.md). Phase 1 (the 40 validation cases) is enough for the next steps; phases 2 and 3 can follow.
 

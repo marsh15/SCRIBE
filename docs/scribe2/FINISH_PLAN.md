@@ -4,7 +4,7 @@ Maps every remaining item to files, tests and a verification command. Reconciled
 
 ## Branch and PR map
 
-One concern per branch (`scribe2/<task>`), each a PR into `main`, none merged by the assistant. Merge in this order; none adds a migration, so none is HOLD.
+One concern per branch (`scribe2/<task>`), each a PR into `main`. **Update 2026-11-19: all of these (#29-#37) and the validation-split golden review (#38) are merged; no PR is open.** The table is kept as the record of what each PR covered. None added a migration.
 
 | # | Branch | Concern |
 |---|---|---|

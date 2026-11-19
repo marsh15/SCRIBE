@@ -31,11 +31,11 @@ Answers from a language model are only useful on private documents if the reader
 
 | Area | State |
 |---|---|
-| Code | Scribe 2.0 is merged to `main` (PRs #10 and #11, then follow-ups through #26). Remaining work is tracked in [`FINISH_PLAN.md`](docs/scribe2/FINISH_PLAN.md); what only a person can do is in [`HUMAN_TODO.md`](docs/scribe2/HUMAN_TODO.md). |
+| Code | Scribe 2.0 is merged to `main` (PRs #10 and #11, then follow-ups through #38; no pull requests are open). Remaining work is tracked in [`FINISH_PLAN.md`](docs/scribe2/FINISH_PLAN.md); what only a person can do is in [`HUMAN_TODO.md`](docs/scribe2/HUMAN_TODO.md). |
 | Production | Not promoted. Merging PR #10 auto-deployed to Vercel on 2026-10-12 and broke production, because migrations `0008` and later had never run on Neon. Production was rolled back to the pre-merge build and Vercel production auto-assign was paused. The live site at [scribe-marsh.vercel.app](https://scribe-marsh.vercel.app) is that older build. Do not promote a `main` deployment before the migration rehearsal in [`HANDOVER.md`](docs/scribe2/HANDOVER.md) section 11. |
 | Engine flags | `INGEST_ENGINE` and `RETRIEVAL_ENGINE` both default to `legacy` (the original TypeScript pipeline). The Python pipeline described below is opt-in. |
 | Providers | Gemini has been used for the Scribe 1.0 baseline and a preliminary run of three retrieval profiles on a local database. Voyage rerank has never been called (no key). Neon has never been used with the 2.0 schema. |
-| Evaluation | The 200-case golden set is not human-reviewed (80 cases are machine-drafted). Results in [`m1-prelim.md`](docs/scribe2/benchmarks/m1-prelim.md) are labelled preliminary and are not quoted here. The final milestone report is a placeholder. |
+| Evaluation | Of the 198-case golden set only the 38 validation cases are human-reviewed (reviewed 2026-11-11, PR #38); the 80 dev and 80 test cases are not. Results in [`m1-prelim.md`](docs/scribe2/benchmarks/m1-prelim.md) are labelled preliminary and are not quoted here. The final milestone report is a placeholder. |
 | CI | The `node`, `python` and `retrieval-gate` jobs pass on GitHub. The gate is not armed (no baseline is committed), so it checks nothing yet. |
 | Row-level security | Policies exist and are enabled, but not forced. The runtime connection is still the table owner, which bypasses them, so isolation in production rests on application-level workspace filters. The TypeScript chat, file, ingestion and version code and the Python endpoints are tested against a real non-owner database login locally (`scripts/test-chat-rls.py`, `scripts/test-python-rls.py`); that has not been run on Neon. |
 
@@ -293,7 +293,7 @@ The full list (D1-D22, invariants INV-1 to INV-16) is in [`docs/scribe2/DESIGN.m
 ## Known limitations
 
 - Nothing in 2.0 has run on Neon, on Vercel, or against live Voyage. Provider behaviour is covered by fakes and mock transports, apart from the local Gemini runs noted under [Status](#status).
-- The golden set is unreviewed, so no retrieval-quality figure is publishable. There is no measured claim about 2.0 versus 1.0.
+- Only the validation split of the golden set is reviewed (dev and test are not), so no retrieval-quality figure is publishable until the rest is reviewed. There is no measured claim about 2.0 versus 1.0.
 - The answerability threshold `tau` is the placeholder 0.0 and rejects nothing. Profile choice and `tau` are not tuned (task T17 is partial).
 - In the preliminary run, lexical-only retrieval returned almost nothing for natural-language questions because `websearch_to_tsquery` ANDs every term, so "hybrid" equalled dense search. Chat and the gate now use the OR-ranked profile `hybrid-rrf-rerank-v2`, and a test shows it has lexical candidates where the AND version does not. Whether it ranks better is **not measured** (needs the reviewed golden set and your keys).
 - The CI retrieval gate is not armed.
